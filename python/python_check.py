@@ -71,7 +71,7 @@ class FunctionCallGraph(object):
 class ConstVariable(object):
     '''constant variable not used at the moment'''
 
-    def __init__(cls, name):
+    def __init__(self, cls, name):
         self.cls = cls
         self.name = name
 
@@ -82,12 +82,11 @@ class ConstVariable(object):
     def __str__(self):
         return self.__repr__()
 
+    def __eq__(self, other):
+        return other.cls == self.cls and other.name == self.name
 
-class GenericVisitor(ast.NodeVisitor):
-
-    def __init__(self):
-
-
+    def __hash__(self):
+        return hash(self.cls + self.name)
 
 
 class AssignFindVisitor(ast.NodeVisitor):
@@ -291,25 +290,49 @@ class FunctionGraphVisitor(ast.NodeVisitor):
 
 
 class IfStatementVisitor(ast.NodeVisitor):
+    '''visit if statements to ID which constants are
+    used in if statements'''
 
     def __init__(self, values):
         self.to_search = values
+        self.thresh = set()
         self.in_test = False
+        self.current_function = None
+        self.current_class = 'GLOBAL_ONES'
 
+
+    def visit_ClassDef(self, node):
+        #set the classes
+        self.current_class = node.name
+        self.generic_visit(node)
+        #reset this stuff
+        self.current_class = 'GLOBAL_ONES'
+
+
+    def visit_FunctionDef(self, node):
+        self.current_function = node.name
+        self.generic_visit(node)
+        self.current_function = None
 
     def visit_Attribute(self, node):
         if self.in_test:
             #check to see if we have a comparision agains a value here
             if isinstance(node.value, ast.Name) and node.value.id == 'self':
-                print node.attr
+                val = ConstVariable(cls=self.current_class, 
+                        name=node.attr)
+                if val in self.to_search:
+                    self.thresh.add(val)
                 
-
+    def visit_Name(self, node):
+        if self.in_test:
+            val =  ConstVariable(cls='GLOBAL_ONES', name=node.id)
+            if val in self.to_search:
+                self.thresh.add(val)
 
 
 
     def visit_If(self, node):
         self.in_test = True
-        # print pprinter.dump(node.test)
         self.visit(node.test)
         self.in_test = False
         for i in node.body:
@@ -345,20 +368,25 @@ def main(fname):
             canidates = []
             for k,v in visitor.canidates.iteritems():
                 for name in v:
-                    canidates.append(FunctionInfo(cls=k, func=name))
+                    canidates.append(ConstVariable(cls=k, name=name))
+            print 'Canidates:'
             for i in  canidates:
-                print i
+                print '\t', i
 
             visitor = PublishFinderVisitor()
             visitor.visit(tree)
-            print visitor.publish_calls
+            pub_calls = visitor.publish_calls
 
             visitor = FunctionGraphVisitor()
             visitor.visit(tree)
-            print visitor.func_map.get_dict_rep()
+            func_map = visitor.func_map.get_dict_rep()
 
             visitor = IfStatementVisitor(canidates)
             visitor.visit(tree)
+            thresholds = list(visitor.thresh)
+            print 'Thresholds:'
+            for i in thresholds:
+                print '\t', i
 
     else:
         print 'error no file'
