@@ -8,6 +8,87 @@ import argparse
 
 import pprinter
 
+class FunctionInfo(object):
+    '''representation of a function here'''
+
+    def __init__(self, cls=str(), func=str()):
+        '''create a function info option'''
+        self.cls = cls 
+        self.func = func 
+
+    def __repr__(self):
+        '''make a string'''
+        return '(class: {:s} function: {:s})'.format(
+                self.cls, self.func)
+
+    def __str__(self):
+        '''make a string'''
+        return self.__repr__()
+
+    def __eq__(self, other):
+        '''check equality'''
+        val = self.cls == other.cls and self.func == other.func
+        return val 
+
+    def __hash__(self):
+        return hash(self.cls + self.func)
+        
+
+class FunctionCallGraph(object):
+    '''holds a graph of the function calls'''
+    
+
+    def __init__(self):
+        self._graph = {}
+
+    def add_call(self, func, target):
+        '''
+        Add a call to the list
+        '''
+        if func in self._graph:
+            self._graph[func].add(target)
+        else:
+            self._graph[func] = set()
+            self._graph[func].add(target)
+
+    def get_calls(self, func):
+        '''Return the calls from a function or
+        None if it doesn't exisit'''
+        if func in self._graph:
+            return list(self._graph[func])
+        else:
+            return None
+
+
+    def get_dict_rep(self):
+        '''get a dictonary representation of this map'''
+        d = dict()
+        for k,v in self._graph.iteritems():
+            d[k] = list(v)
+        return d
+
+
+class ConstVariable(object):
+    '''constant variable not used at the moment'''
+
+    def __init__(cls, name):
+        self.cls = cls
+        self.name = name
+
+    def __repr__(self):
+        return '(class: {:s} name: {:s})'.format(
+                self.cls, self.name)
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class GenericVisitor(ast.NodeVisitor):
+
+    def __init__(self):
+
+
+
 
 class AssignFindVisitor(ast.NodeVisitor):
     '''find all of the assignments and organize them
@@ -37,10 +118,7 @@ class AssignFindVisitor(ast.NodeVisitor):
     def visit_FunctionDef(self, node):
         '''visit a function definition'''
         self.current_function = node.name
-        if node.name == '__init__':
-            self.generic_visit(node)
-        else:
-            self.generic_visit(node)
+        self.generic_visit(node)
         self.current_function = None
 
 
@@ -111,7 +189,7 @@ class FindOnlyOnceVisitor(ast.NodeVisitor):
         #init we will knock it out and continue on
         if self.current_function != '__init__':
             if name in self.canidates[self.current_key] and self.current_key != 'GLOBAL_ONES':
-                print 'REMOVED: ', name
+                # print 'REMOVED: ', name
                 new_list = [i for i in self.canidates[self.current_key] if i != name]
                 self.canidates[self.current_key] = new_list
             elif self.current_key != 'GLOBAL_ONES':
@@ -128,14 +206,122 @@ class FindOnlyOnceVisitor(ast.NodeVisitor):
         #we are going to look at all of the assign values here and figure out
         #if it is a constant.  Here we are just looking at __init__ for now but
         # it could be in many other location
+
+        #get param might appear somewhere else so don't get rid of this
+        if isinstance(node.value, ast.Call):
+            func = node.value.func
+            if isinstance(func, ast.Attribute):
+                if isinstance(func.value, ast.Name) and isinstance(func.attr, str):
+                    if func.value.id == 'rospy' and func.attr == 'get_param':
+                        self.generic_visit(node)
+                        return 
+
+        #TODO: Don't get rid of constant only expressions on the assign side?
+
+        #otherwise get rid fo some stuff
         for i in node.targets:
             self.handle_target(i)
+            
 
         #GO on and visit everything else
         self.generic_visit(node)
 
 
+class PublishFinderVisitor(ast.NodeVisitor):
+    '''class to find points in code where publishing is called'''
+
+    def __init__(self):
+        self.current_class = 'GLOBAL_OBJECTS'
+        self.current_function = None
+        self.publish_calls = []
+
+    def visit_FunctionDef(self, node):
+        self.current_function = node.name
+        self.generic_visit(node)
+        self.current_function = None 
+
+    def visit_ClassDef(self, node):
+        self.current_class = node.name
+        self.generic_visit(node)
+        self.current_class = 'GLOBAL_OBJECTS' 
+
+
+    def visit_Call(self, node):
+        func = node.func
+        if isinstance(func, ast.Name):
+            #skipping for now
+            pass
+        elif isinstance(func, ast.Attribute):
+            if func.attr == 'publish':
+                self.publish_calls.append(FunctionInfo(cls=self.current_class, 
+                    func=self.current_function))
+
+
+class FunctionGraphVisitor(ast.NodeVisitor):
+    ''' Create a function'''
+
+    def __init__(self):
+        self.func_map = FunctionCallGraph() 
+        self.current_class = 'GLOBAL_OBJECTS'
+        self.current_function= None 
+        
+
+    def visit_FunctionDef(self, node):
+        self.current_function = node.name
+        self.generic_visit(node)
+        self.current_function = None 
+
+
+    def visit_ClassDef(self, node):
+        self.current_class = node.name
+        self.generic_visit(node)
+        self.current_class = 'GLOBAL_OBJECTS' 
+
+    
+    def visit_Call(self, node):
+        #See if we are calling another function in here
+        if isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name):
+                if node.func.value.id == 'self':
+                    key = FunctionInfo(cls=self.current_class,
+                            func = self.current_function)
+                    value = FunctionInfo(cls=self.current_class,
+                            func=node.func.attr)
+                    self.func_map.add_call(key,value)
+
+
+class IfStatementVisitor(ast.NodeVisitor):
+
+    def __init__(self, values):
+        self.to_search = values
+        self.in_test = False
+
+
+    def visit_Attribute(self, node):
+        if self.in_test:
+            #check to see if we have a comparision agains a value here
+            if isinstance(node.value, ast.Name) and node.value.id == 'self':
+                print node.attr
+                
+
+
+
+
+    def visit_If(self, node):
+        self.in_test = True
+        # print pprinter.dump(node.test)
+        self.visit(node.test)
+        self.in_test = False
+        for i in node.body:
+            self.visit(i)
+        for i in node.orelse:
+            self.visit(i)
+
+
+
+
 def main(fname):
+    '''main function'''
 
     if os.path.isfile(fname):
         tree = None
@@ -156,14 +342,28 @@ def main(fname):
             #assume that any function besides init can be called more than once
             visitor = FindOnlyOnceVisitor(to_search)
             visitor.visit(tree)
+            canidates = []
             for k,v in visitor.canidates.iteritems():
-                print k
                 for name in v:
-                    print '\t', name 
+                    canidates.append(FunctionInfo(cls=k, func=name))
+            for i in  canidates:
+                print i
 
+            visitor = PublishFinderVisitor()
+            visitor.visit(tree)
+            print visitor.publish_calls
+
+            visitor = FunctionGraphVisitor()
+            visitor.visit(tree)
+            print visitor.func_map.get_dict_rep()
+
+            visitor = IfStatementVisitor(canidates)
+            visitor.visit(tree)
 
     else:
         print 'error no file'
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=('This is a program to find' 
