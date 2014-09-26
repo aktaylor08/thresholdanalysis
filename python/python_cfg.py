@@ -23,11 +23,31 @@ class CFGVisitor(ast.NodeVisitor):
         self.preds = dict()
         self.current_loop = [] 
         self.next_loop_target= [] 
+        self.try_targets = []
+
 
     def add_edge(self,from_node, to_node):
         '''add an edge to the node'''
         if isinstance(from_node, ast.Return) and to_node != self.last:
             return
+        
+        #handle weird break case to make sure it doesn't go back to loop
+        nlt = list(self.next_loop_target)
+        #no next loop target. get off of the because you dont want to add yet
+        if len(nlt) == 0 and isinstance(from_node, ast.Break):
+            return
+
+        if isinstance(from_node, ast.Break) and to_node != nlt[-1]:
+            return 
+
+        #handle weird break case to make sure it doesn't go back to loop
+        nlt = list(self.current_loop)
+        #no next loop target. get off of the because you dont want to add yet
+        if len(nlt) == 0 and isinstance(from_node, ast.Continue):
+            return
+
+        if isinstance(from_node, ast.Continue) and to_node != nlt[-1]:
+            return 
 
         
         #add the nodes to the statement list
@@ -46,14 +66,29 @@ class CFGVisitor(ast.NodeVisitor):
         that the first and last nodes in this block
         are already pointed at correctly and have the correct
         targets'''
-        if len(node_list) <= 1:
+        if len(node_list) == 0:
             return
+        elif len(node_list) == 1:
+            #stupid excpetions
+            for target in self.try_targets:
+                self.add_edge(node_list[0], self.try_targets)
         else:
             from_node = node_list[0]
             for to_node in node_list[1:]:
-                if not isinstance(from_node, ast.Break) and not isinstance(from_node, ast.Continue):
+                if isinstance(from_node, ast.Break):
+                    pass
+                elif isinstance(from_node, ast.Continue):
+                    pass
+                else:
                     self.add_edge(from_node, to_node)
+
+                #stupid excpetions
+                for target in self.try_targets:
+                    self.add_edge(from_node, target)
                 from_node = to_node
+            #exception handing
+            for target in self.try_targets:
+                self.add_edge(to_node, target)
 
 
     def visit_FunctionDef(self, node):
@@ -72,8 +107,40 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_While(self, node):
         self.handle_loop(node)
 
+
     def visit_For(self, node):
         self.handle_loop(node)
+
+
+    def visit_TryFinally(self, node):
+        print node, node.lineno
+
+
+    def visit_TryExcept(self, node):
+        print pprinter.dump(node)
+        target = list(self.init_map[node])
+        if len(target) != 1:
+            print 'errororor'
+
+        target = target[0]
+        self.init_map[node].clear()
+        self.add_edge(node, node.body)
+        
+        #add them
+        to_add = len(node.handlers)
+        self.try_targets.append(node.handlers)
+
+        self.generic_visit(node)
+        #remove them
+        self.try_targets = self.try_targets[:-to_add]
+        
+
+    def visit_ExceptHandler(self, node):
+        print 'HANDLER'
+        print node, node.lineno
+        self.generic_visit(node)
+
+
 
     def handle_loop(self, node):
         #some housekeeping here to handel current loop and next loop for break
@@ -100,6 +167,7 @@ class CFGVisitor(ast.NodeVisitor):
 
 
     def visit_If(self, node):
+        print node.lineno, node
         next_node = list(self.init_map[node])
         if len(next_node) != 1:
             print 'ERRRORROROROROR'
@@ -148,7 +216,6 @@ class BuildAllCFG(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node):
-        #print pprinter.dump(node)
         func_visit = CFGVisitor(node)
         func_visit.visit(node)
         self.store[self.current_key][node.name] = func_visit
