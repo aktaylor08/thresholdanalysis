@@ -6,7 +6,7 @@ import os
 import symtable
 import argparse
 
-import cfg
+import cfg_analysis
 
 import pprinter
 
@@ -376,7 +376,7 @@ def main(fname):
 #           Hopefully a bit better way to organize and
 #               keep track of stuff here
 #
-######################################################
+########################################################
 
 
 class PublishCall(object):
@@ -384,25 +384,32 @@ class PublishCall(object):
     function call it will contain the class,
     the function, and a reference to the node'''
 
-    def __init__(self, cls, func, node):
+
+    def __init__(self, cls, func, call, expr):
         self.cls = cls
         self.func = func
-        self.node = node
+        self.expr = expr
+        self.call = call 
+
 
     def __str__(self):
         return self.__repr__()
 
+
     def __repr__(self):
-        return '(' + str(self.node.lineno) + ' ' + str(self.node) + ')'
+        return '(' + str(self.expr.lineno) + ' ' + str(self.expr) + ')'
+
 
     def __eq__(self,other):
         cls = self.cls == other.cls
         func = self.func == other.func
-        node = self.node == self.node
-        return cls and func and node
+        node = self.node == other.node
+        expr = self.expr = other.expr
+        return cls and func and node and expr
+
 
     def __hash__(self):
-        return hash(self.cls) + hash(self.func) + hash(self.node)
+        return hash(self.cls) + hash(self.func) + hash(self.node) + hash(self.expr)
 
 
 
@@ -413,10 +420,12 @@ class BasicVisitor(ast.NodeVisitor):
     the tree.  Can be extended to keep the functionality
     without having to copy a bunch of code'''
 
+
     def __init__(self):
         '''start the tracking'''
         self.current_class = None 
         self.current_function = None
+        self.current_expr = None
 
 
     def visit_Module(self, node):
@@ -442,6 +451,13 @@ class BasicVisitor(ast.NodeVisitor):
         self.current_class = old_class 
 
 
+    def visit_Expr(self, node):
+        self.current_expr = node
+        self.generic_visit(node)
+        self.current_expr = None
+
+
+
 class PublishFinderVisitor(BasicVisitor):
     '''find and store all of the rospy.publish calls 
     in this manner we can get all of the functions and 
@@ -460,7 +476,7 @@ class PublishFinderVisitor(BasicVisitor):
             if func.attr == 'publish':
                 self.publish_calls.append(
                         PublishCall(self.current_class, 
-                            self.current_function, node))
+                            self.current_function, node, self.current_expr))
 
 
 def analyze_file(fname):
@@ -471,16 +487,17 @@ def analyze_file(fname):
             code = openf.read()
             tree = ast.parse(code)  
 
-            flow_store = cfg.build_files_cfgs(tree=tree)
+            flow_store = cfg_analysis.build_files_cfgs(tree=tree)
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
             for call in calls:
-                cfg_g = flow_store[call.cls][call.func]
-                cfg.print_graph(cfg_g.preds)
-                print cfg_g.init_map
-                print call.node
+                cfg = flow_store[call.cls][call.func]
+                cfg_analysis.print_graph(cfg.preds)
+                print '-----' * 10
+                cfg_analysis.print_graph(cfg.succs)
 
+                print cfg.preds[call.expr]
                 
 
     else:
