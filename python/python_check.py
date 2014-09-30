@@ -94,7 +94,7 @@ class AssignFindVisitor(ast.NodeVisitor):
     into global and class lists'''
 
 
-    def __init__(self, sym_table):
+    def __init__(self):
         '''save symbol table and current class and 
         locations'''
         self.canidates = {} 
@@ -226,11 +226,6 @@ class FindOnlyOnceVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-
-
-
-
-
 class PublishFinderVisitor(ast.NodeVisitor):
     '''class to find points in code where publishing is called'''
 
@@ -281,6 +276,10 @@ class FunctionGraphVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         self.current_class = 'GLOBAL_OBJECTS' 
 
+    def visit_Module(self, node):
+        print node
+        self.generic_visit(node)
+
     
     def visit_Call(self, node):
         #See if we are calling another function in here
@@ -292,6 +291,8 @@ class FunctionGraphVisitor(ast.NodeVisitor):
                     value = FunctionInfo(cls=self.current_class,
                             func=node.func.attr)
                     self.func_map.add_call(key,value)
+
+
 
 
 class IfStatementVisitor(ast.NodeVisitor):
@@ -357,9 +358,8 @@ def main(fname):
             code = openf.read()
             tree = ast.parse(code)  
 
-            table = symtable.symtable(code, fname,'exec')
             #visit to find assignments to class vairables
-            visitor = AssignFindVisitor(table)
+            visitor = AssignFindVisitor()
             visitor.visit(tree)
             to_search = {}
             for k,v in visitor.canidates.iteritems():
