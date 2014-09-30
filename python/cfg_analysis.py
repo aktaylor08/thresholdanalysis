@@ -318,7 +318,6 @@ class BuildAllCFG(ast.NodeVisitor):
         self.current_key = None 
 
     def visit_Module(self, node):
-        print 'hi'
         self.current_key = node
         self.store[node] = dict() 
         self.generic_visit(node)

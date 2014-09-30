@@ -228,36 +228,6 @@ class FindOnlyOnceVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-class PublishFinderVisitor(ast.NodeVisitor):
-    '''class to find points in code where publishing is called'''
-
-    def __init__(self):
-        self.current_class = 'GLOBAL_OBJECTS'
-        self.current_function = None
-        self.publish_calls = []
-
-    def visit_FunctionDef(self, node):
-        self.current_function = node.name
-        self.generic_visit(node)
-        self.current_function = None 
-
-    def visit_ClassDef(self, node):
-        self.current_class = node.name
-        self.generic_visit(node)
-        self.current_class = 'GLOBAL_OBJECTS' 
-
-
-    def visit_Call(self, node):
-        func = node.func
-        if isinstance(func, ast.Name):
-            #skipping for now
-            pass
-        elif isinstance(func, ast.Attribute):
-            if func.attr == 'publish':
-                self.publish_calls.append(FunctionInfo(cls=self.current_class, 
-                    func=self.current_function))
-
-
 class FunctionGraphVisitor(ast.NodeVisitor):
     ''' Create a function'''
 
@@ -397,6 +367,102 @@ def main(fname):
         print 'error no file'
 
 
+
+
+
+#########################################################
+#
+#       Start of rewriteing stuff right here
+#           Hopefully a bit better way to organize and
+#               keep track of stuff here
+#
+######################################################
+
+
+class PublishCall(object):
+    '''this holds info on a ropsy.publish 
+    function call it will contain the class,
+    the function, and a reference to the node'''
+
+    def __init__(self, cls, func, node):
+        self.cls = cls
+        self.func = func
+        self.node = node
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        return '(' + str(self.node.lineno) + ' ' + str(self.node) + ')'
+
+    def __eq__(self,other):
+        cls = self.cls == other.cls
+        func = self.func == other.func
+        node = self.node == self.node
+        return cls and func and node
+
+    def __hash__(self):
+        return hash(self.cls) + hash(self.func) + hash(self.node)
+
+
+
+class BasicVisitor(ast.NodeVisitor):
+    '''this is a super simple visitor 
+    which keeps track of the current class
+    and function that you are in while traversing 
+    the tree.  Can be extended to keep the functionality
+    without having to copy a bunch of code'''
+
+    def __init__(self):
+        '''start the tracking'''
+        self.current_class = None 
+        self.current_function = None
+
+
+    def visit_Module(self, node):
+        '''we set the module level as the current class'''
+        self.current_class = node
+        self.generic_visit(node)
+        self.current_class = None
+
+
+    def visit_FunctionDef(self, node):
+        '''do some assignments'''
+        old_func = self.current_function 
+        self.current_function = node
+        self.generic_visit(node)
+        self.current_function = old_func 
+
+
+    def visit_ClassDef(self, node):
+        '''do some more assingments'''
+        old_class =  self.current_class
+        self.current_class = node
+        self.generic_visit(node)
+        self.current_class = old_class 
+
+
+class PublishFinderVisitor(BasicVisitor):
+    '''find and store all of the rospy.publish calls 
+    in this manner we can get all of the functions and 
+    stuff that they reside in  will store them in an object'''
+
+    def __init__(self):
+        BasicVisitor.__init__(self)
+        self.publish_calls = []
+
+    def visit_Call(self, node):
+        func = node.func
+        if isinstance(func, ast.Name):
+            #skipping for now
+            pass
+        elif isinstance(func, ast.Attribute):
+            if func.attr == 'publish':
+                self.publish_calls.append(
+                        PublishCall(self.current_class, 
+                            self.current_function, node))
+
+
 def analyze_file(fname):
     '''new main function...get CFG and find pubs first'''
     if os.path.isfile(fname):
@@ -404,8 +470,18 @@ def analyze_file(fname):
         with open(fname, 'r') as openf:
             code = openf.read()
             tree = ast.parse(code)  
-            flow_store = cfg.build_files_cfgs(tree=tree)
 
+            flow_store = cfg.build_files_cfgs(tree=tree)
+            publish_finder = PublishFinderVisitor()
+            publish_finder.visit(tree)
+            calls = publish_finder.publish_calls
+            for call in calls:
+                cfg_g = flow_store[call.cls][call.func]
+                cfg.print_graph(cfg_g.preds)
+                print cfg_g.init_map
+                print call.node
+
+                
 
     else:
         print 'error no file'
