@@ -10,6 +10,8 @@ import cfg_analysis
 
 import pprinter
 
+from collections import defaultdict
+
 class FunctionInfo(object):
     '''representation of a function here'''
 
@@ -89,59 +91,6 @@ class ConstVariable(object):
 
     def __hash__(self):
         return hash(self.cls + self.name)
-
-
-class AssignFindVisitor(ast.NodeVisitor):
-    '''find all of the assignments and organize them
-    into global and class lists'''
-
-
-    def __init__(self):
-        '''save symbol table and current class and 
-        locations'''
-        self.canidates = {} 
-        self.canidates = {'GLOBAL_ONES' : []}
-        self.current_key = 'GLOBAL_ONES'
-        self.current_function = None
-
-
-    def visit_ClassDef(self, node):
-        '''keep track of all of the class information'''
-        #set the classes
-        self.current_key = node.name
-        self.canidates[node.name] = []
-        #visit
-        self.generic_visit(node)
-        #reset this stuff
-        self.current_key = 'GLOBAL_ONES'
-
-
-    def visit_FunctionDef(self, node):
-        '''visit a function definition'''
-        self.current_function = node.name
-        self.generic_visit(node)
-        self.current_function = None
-
-
-    def visit_Assign(self, node):
-        '''visit an assignment definition'''
-        #we are going to look at all of the assign values here and figure out
-        #if it is a constant.  Here we are just looking at __init__ for now but
-        # it could be in many other location
-        for i in node.targets:
-            #assigning to self.asdfasfd is an attribute
-            if isinstance(i, ast.Attribute):
-                if isinstance(i.value, ast.Name):
-                    if i.value.id == 'self':
-                        #class value save it here
-                        self.canidates[self.current_key].append(i.attr)
-                    else:
-                        print 'not assigning to self'
-            elif isinstance(i, ast.Name):
-                self.canidates[self.current_key].append(i.id)
-            else:
-                print 'ERROR not implemented type'
-        self.generic_visit(node)
 
 
 class FindOnlyOnceVisitor(ast.NodeVisitor):
@@ -226,6 +175,11 @@ class FindOnlyOnceVisitor(ast.NodeVisitor):
 
         #GO on and visit everything else
         self.generic_visit(node)
+
+
+
+
+
 
 
 class FunctionGraphVisitor(ast.NodeVisitor):
@@ -413,6 +367,27 @@ class PublishCall(object):
 
 
 
+class ClassVariable(object):
+    '''holds information about a class variable'''
+
+    def __init__(self, cls, name, assign):
+        self.cls = cls
+        self.name = name
+        self.assign = assign
+
+
+class FunctionVariable(object):
+    '''holds information about a class variable'''
+
+
+    def __init__(self, func, name, assign):
+        self.func = func
+        self.name = name
+        self.assign = assign
+
+
+
+
 class BasicVisitor(ast.NodeVisitor):
     '''this is a super simple visitor 
     which keeps track of the current class
@@ -458,14 +433,54 @@ class BasicVisitor(ast.NodeVisitor):
 
 
 
+class AssignFindVisitor(BasicVisitor):
+    '''find all of the assignments and organize them
+    into global and class lists'''
+
+
+    def __init__(self):
+        '''save symbol table and current class and 
+        locations'''
+        BasicVisitor.__init__(self)
+        self.canidates =  defaultdict(list)
+
+
+    def visit_Assign(self, node):
+        '''visit an assignment definition'''
+
+        #we are going to look at all of the assign values here and figure out
+        #if it is a constant.  Here we are just looking at __init__ for now but
+        # it could be in many other location
+        for i in node.targets:
+            #assigning to self.asdfasfd is an attribute
+            if isinstance(i, ast.Attribute):
+                if isinstance(i.value, ast.Name):
+                    if i.value.id == 'self':
+                        #class value save it here
+                        self.canidates[self.current_class].append(node)
+                    else:
+                        print 'not assigning to self'
+
+            elif isinstance(i, ast.Name):
+                self.canidates[self.current_class].append(i)
+
+            else:
+                print 'ERROR not implemented type'
+
+        self.generic_visit(node)
+
+
+
 class PublishFinderVisitor(BasicVisitor):
     '''find and store all of the rospy.publish calls 
     in this manner we can get all of the functions and 
     stuff that they reside in  will store them in an object'''
 
+
     def __init__(self):
         BasicVisitor.__init__(self)
         self.publish_calls = []
+
 
     def visit_Call(self, node):
         func = node.func
@@ -487,21 +502,40 @@ def analyze_file(fname):
             code = openf.read()
             tree = ast.parse(code)  
 
+
+            a = AssignFindVisitor()
+            a.visit(tree)
+            for k,v in a.canidates.iteritems():
+                print k
+                for val in v:
+                    print '\t',val
+
             flow_store = cfg_analysis.build_files_cfgs(tree=tree)
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
+            func_with_call = set()
             for call in calls:
-                cfg = flow_store[call.cls][call.func]
-                cfg_analysis.print_graph(cfg.preds)
-                print '-----' * 10
-                cfg_analysis.print_graph(cfg.succs)
+                func_with_call.add(call.func)
 
-                print cfg.preds[call.expr]
-                
+                cfg = flow_store[call.cls][call.func]
+                visit = set()
+                close_graph(call.expr,cfg.preds, visit) 
+            #now go backwards and determine all of the ifs it requires
+
 
     else:
         print 'error no file'
+
+
+def close_graph(node, graph, visited):
+    if node in visited:
+        return
+    if node not in graph:
+        return
+    visited.add(node)
+    for target in graph[node]:
+        close_graph(target, graph, visited)
 
 
 if __name__ == '__main__':
