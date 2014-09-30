@@ -6,6 +6,8 @@ import os
 import symtable
 import argparse
 
+import cfg
+
 import pprinter
 
 class FunctionInfo(object):
@@ -347,8 +349,6 @@ class IfStatementVisitor(ast.NodeVisitor):
             self.visit(i)
 
 
-
-
 def main(fname):
     '''main function'''
 
@@ -397,10 +397,23 @@ def main(fname):
         print 'error no file'
 
 
+def analyze_file(fname):
+    '''new main function...get CFG and find pubs first'''
+    if os.path.isfile(fname):
+        tree = None
+        with open(fname, 'r') as openf:
+            code = openf.read()
+            tree = ast.parse(code)  
+            flow_store = cfg.build_files_cfgs(tree=tree)
+
+
+    else:
+        print 'error no file'
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=('This is a program to find' 
         'constant thresholds in a python program'))
     parser.add_argument('file',  help='path to file')
     args = parser.parse_args()
-    main(args.file)
+    analyze_file(args.file)

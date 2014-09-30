@@ -358,6 +358,28 @@ def print_graph(thing):
             print '\t', target.lineno, target
         
 
+def build_files_cfgs(tree=None, fname=None, verbose=False):
+    '''build a files cfg.  Either analyze a passed tree
+        or analyze a passed file name.  Verbose to print
+        as you go'''
+    if tree is not None:
+        cfgvisit = BuildAllCFG(verbose)
+        cfgvisit.visit(tree)
+        return cfgvisit.store
+    elif fname is not None:
+        with open(fname, 'r') as openf:
+            code = openf.read()
+            tree = ast.parse(code)  
+            cfgvisit = BuildAllCFG(verbose) 
+            cfgvisit.visit(tree)
+            return  cfgvisit.store
+    else:
+        print 'No tree or file name passed!'
+        return None
+
+        
+
+
 
 
 
