@@ -113,18 +113,20 @@ class CFGVisitor(ast.NodeVisitor):
 
 
     def visit_TryFinally(self, node):
-        print node, node.lineno
+        nnode = self.get_target(node)
+
+
+        self.init_map[node].clear()
+        self.add_edge(node, node.body[0])
+        self.add_edge(node.body[-1], node.finalbody[0])
+        self.add_edge(node.finalbody[-1], nnode)
+        self.handleBlock(node.body)
+        self.handleBlock(node.finalbody)
+        self.generic_visit(node)
 
 
     def visit_TryExcept(self, node):
-        target = list(self.init_map[node])
-        if len(target) != 1:
-            for i in target:
-                if not isinstance(i, ast.ExceptHandler):
-                    target = i
-                    break
-        else:
-            target = target[0]
+        target = self.get_target(node)
 
         self.init_map[node].clear()
         self.add_edge(node, node.body[0])
@@ -150,14 +152,7 @@ class CFGVisitor(ast.NodeVisitor):
         
 
     def visit_ExceptHandler(self, node):
-        target = list(self.init_map[node])
-        if len(target) != 1:
-            for i in target:
-                if not isinstance(i, ast.ExceptHandler):
-                    target = i
-                    break
-        else:
-            target = target[0]
+        target = self.get_target(node)
         self.add_edge(node, node.body[0])
         self.add_edge(node.body[-1], target)
         #pop one off before we visit some blocks
@@ -173,18 +168,9 @@ class CFGVisitor(ast.NodeVisitor):
         #some housekeeping here to handel current loop and next loop for break
         #and continue statemnts
         self.current_loop.append(node)
-
-        nnode = list(self.init_map.get(node))
-        if len(nnode) != 1:
-            #find true target
-            for i in nnode:
-                if not isinstance(i, ast.ExceptHandler):
-                    nnode = i
-                    break
-        else:
-            nnode = nnode[0]
-
+        nnode = self.get_target(node)
         self.next_loop_target.append(nnode)
+
         if len(node.orelse) > 0:
             self.add_edge(node, node.orelse[0])
             self.add_edge(node.orelse[-1], nnode)
@@ -205,15 +191,7 @@ class CFGVisitor(ast.NodeVisitor):
 
 
     def visit_If(self, node):
-        nnode = list(self.init_map[node])
-        if len(nnode) != 1:
-            #find true target
-            for i in nnode:
-                if not isinstance(i, ast.ExceptHandler):
-                    nnode = i
-                    break
-        else:
-            nnode = nnode[0] 
+        nnode = self.get_target(node)
 
         self.init_map[node].clear()
         #do stuff with the then list
@@ -247,6 +225,36 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_Break(self, node):
         self.add_edge(node, self.next_loop_target[-1])
+
+    def visit_With(self, node):
+        print pprinter.dump(node)
+        nnode = self.get_target(node)
+        self.init_map[node].clear()
+        self.add_edge(node, node.body[0])
+        self.add_edge(node.body[-1], nnode)
+        self.handleBlock(node.body)
+        self.generic_visit(node)
+
+
+
+        
+    def get_target(self, node):
+        '''get the target of a node from the init map
+        only returns non exception handlers which
+        may already be in the map.  Don't worry they will
+        get added back to the map if needed'''
+        nnode = list(self.init_map[node])
+        if len(nnode) != 1:
+            #find true target
+            for i in nnode:
+                if not isinstance(i, ast.ExceptHandler):
+                    nnode = i
+                    break
+        else:
+            nnode = nnode[0] 
+        return nnode
+
+
 
 
 
