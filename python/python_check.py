@@ -611,31 +611,13 @@ class CanidateStore(object):
                                 maybe.add(i)
                             else:
                                 elsewhere.add(i)
-        print '\ninit:'
-        for i in init:
-            print '\t',i
-
-        print '\nmaybe:'
-        for i in maybe:
-            print '\t',i
-
-        print '\nelsehwere:'
-        for i in elsewhere:
-            print '\t',i
-
-        print '\nbad:'
-        for i in bad:
-            print '\t',i
-
-        print '\nCertain:'
-        for i in for_certain:
-            print '\t', i
 
         vals = init.union(maybe).difference(elsewhere).difference(bad).union(for_certain)
-
-        print '\n\nconstants:'
         for i in vals:
-            print '\t',i
+            if i.cls in self.class_vars:
+                self.class_vars[i.cls].append(i)
+            else:
+                self.class_vars[i.cls] = [i]
 
 
 
@@ -665,9 +647,6 @@ class CanidateStore(object):
         vals = vals - bad
         for i in vals:
             self.func_vars[i.cls] = i
-
-
-                        
 
 
     def check_only_const(self, node):
@@ -715,6 +694,7 @@ class CanidateStore(object):
         return visitor.cls, visitor.func
 
 
+
 class ClassFuncVisit(BasicVisitor):
 
     def __init__(self, target):
@@ -732,13 +712,6 @@ class ClassFuncVisit(BasicVisitor):
             BasicVisitor.generic_visit(self, node)
 
 
-
-            
-
-
-
-
-
 def analyze_file(fname):
     '''new main function...get CFG and find pubs first'''
     if os.path.isfile(fname):
@@ -751,15 +724,12 @@ def analyze_file(fname):
             a = AssignFindVisitor()
             a.visit(tree)
             canidates = CanidateStore(a.canidates, tree)
-            # for k,v in a.canidates.iteritems():
-            #     print k
-            #     for val in v:
-            #         print '\t',val
 
             flow_store = cfg_analysis.build_files_cfgs(tree=tree)
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
+            print calls
             func_with_call = set()
             for call in calls:
                 func_with_call.add(call.func)
@@ -768,7 +738,7 @@ def analyze_file(fname):
                 # cfg_analysis.print_graph(cfg.succs)
                 visit = set()
                 close_graph(call.expr,cfg.preds, visit) 
-            #now go backwards and determine all of the ifs it requires
+
     else:
         print 'error no file'
 

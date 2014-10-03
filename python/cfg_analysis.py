@@ -376,12 +376,6 @@ def build_files_cfgs(tree=None, fname=None, verbose=False):
         print 'No tree or file name passed!'
         return None
 
-        
-
-
-
-
-
 
 def main(fname):
     '''main function'''
