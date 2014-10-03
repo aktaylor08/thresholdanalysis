@@ -365,10 +365,11 @@ class PublishCall(object):
 class ClassVariable(object):
     '''holds information about a class variable'''
 
-    def __init__(self, cls, name, assign):
+    def __init__(self, cls, func, name, assign):
         self.cls = cls
         self.name = name
         self.assign = assign
+        self.func = func
 
     def __repr__(self):
         return self.__str__()
@@ -379,13 +380,11 @@ class ClassVariable(object):
     def __eq__(self, other):
         cls = self.cls == other.cls
         name = self.name == other.name
-        assign = self.assign = other.assign
-        return cls and name and assign 
+        return cls and name 
 
 
     def __hash__(self):
-        return hash(self.cls) and hash(self.name) and hash(self.assign)
-
+        return hash(self.cls) and hash(self.name) 
 
 
 class FunctionVariable(object):
@@ -421,12 +420,11 @@ class FunctionVariable(object):
     def __eq__(self, other):
         func = self.func == other.func
         name = self.name == other.name
-        assign = self.assign = other.assign
-        return func and name and assign 
+        return func and name 
 
 
     def __hash__(self):
-        return hash(self.cls) and hash(self.name) and hash(self.assign)
+        return hash(self.cls) and hash(self.name) 
 
 
 
@@ -449,6 +447,7 @@ class BasicVisitor(ast.NodeVisitor):
     def visit_Module(self, node):
         '''we set the module level as the current class'''
         self.current_class = node
+        self.current_function = ast.FunctionDef('GLOBAL_FUNCTION', [], [], []) 
         self.generic_visit(node)
         self.current_class = None
 
@@ -501,7 +500,7 @@ class AssignFindVisitor(BasicVisitor):
                     if i.value.id == 'self':
                         #class value save it here
                         self.canidates[self.current_class].append(ClassVariable(
-                            self.current_class,i.attr, node ))
+                            self.current_class, self.current_function, i.attr, node ))
                     else:
                         print 'not assigning to self'
 
@@ -514,6 +513,26 @@ class AssignFindVisitor(BasicVisitor):
 
         self.generic_visit(node)
 
+
+    def visit_AugAssign(self, node):
+        i =  node.target
+        #assigning to self.asdfasfd is an attribute
+        if isinstance(i, ast.Attribute):
+            if isinstance(i.value, ast.Name):
+                if i.value.id == 'self':
+                    #class value save it here
+                    self.canidates[self.current_class].append(ClassVariable(
+                        self.current_class, self.current_function, i.attr, node ))
+                else:
+                    print 'not assigning to self'
+
+        elif isinstance(i, ast.Name):
+            self.canidates[self.current_class].append(FunctionVariable(
+                self.current_class, self.current_function, i.id, node))
+
+        else:
+            print 'ERROR not implemented type'
+        self.generic_visit(node)
 
 
 class PublishFinderVisitor(BasicVisitor):
@@ -539,6 +558,187 @@ class PublishFinderVisitor(BasicVisitor):
                             self.current_function, node, self.current_expr))
 
 
+
+class CanidateStore(object):
+    '''class to hold all of the candiates for 
+        thresholds.  Will include num literals, class variables,
+        and variables wihtin a function'''
+        
+
+
+    def __init__(self, assignments, tree):
+        '''build the list from found assignments'''
+        self.assignments = assignments
+        self.tree = tree
+        self.class_vars = {}
+        self.func_vars = {} 
+        self.compile_canidates()
+
+
+    def compile_canidates(self):
+        '''compile all of the assignments down into a list that we can check
+        to see what they really assign and how many times they are assigned'''
+        self.do_class_variables()
+        self.do_func_variables()
+
+    def do_class_variables(self):
+        '''Define all of the class variables as constants or not'''
+        #book keeping
+        for_certain = set()
+        bad = set()
+        init = set()
+        elsewhere = set()
+        maybe = set()
+        classes = self.assignments.keys()
+
+        for cls in classes:
+            variables = sorted(self.assignments[cls], key=lambda x: x.func.name)
+            for i in variables:
+                if isinstance(i, ClassVariable):
+                    if isinstance(i.assign, ast.AugAssign):
+                        bad.add(i)
+                    else:
+                        #if it makes a call to rospy.get_param it is a threshold
+                        if isinstance(i.assign.value, ast.Call):
+                            if self.is_paramcall(i.assign.value):
+                                for_certain.add(i)
+
+                        #as of right now we just increment in init but
+                        if i.func.name == '__init__':
+                            init.add(i)
+                        else:
+                            if self.check_only_const(i):
+                                maybe.add(i)
+                            else:
+                                elsewhere.add(i)
+        print '\ninit:'
+        for i in init:
+            print '\t',i
+
+        print '\nmaybe:'
+        for i in maybe:
+            print '\t',i
+
+        print '\nelsehwere:'
+        for i in elsewhere:
+            print '\t',i
+
+        print '\nbad:'
+        for i in bad:
+            print '\t',i
+
+        print '\nCertain:'
+        for i in for_certain:
+            print '\t', i
+
+        vals = init.union(maybe).difference(elsewhere).difference(bad).union(for_certain)
+
+        print '\n\nconstants:'
+        for i in vals:
+            print '\t',i
+
+
+
+    def do_func_variables(self):
+        '''Define function variables as constants or not'''
+        #TODO finish and verifiy
+        classes = self.assignments.keys()
+        canidates = {}
+        bad = bad = set()
+        for cls in classes:
+            variables = sorted(self.assignments[cls], key=lambda x: x.name)
+            for i in variables:
+                if isinstance(i, FunctionVariable):
+                    if isinstance(i.assign, ast.AugAssign):
+                        bad.add(i)
+                    else:
+                        const = self.check_only_const(i.assign.value)
+                        if const:
+                            if i in canidates:
+                                canidates[i] +=1
+                            else:
+                                canidates[i] = 1
+                        else:
+                            bad.add(i)
+        vals = [x for x in canidates.keys() if canidates[x] == 1]
+        vals = set(vals)
+        vals = vals - bad
+        for i in vals:
+            self.func_vars[i.cls] = i
+
+
+                        
+
+
+    def check_only_const(self, node):
+        if isinstance(node, ast.Num):
+            return True
+        elif isinstance(node, ast.BinOp):
+            left = self.check_only_const(node.left) 
+            right = self.check_only_const(node.right)
+            return left and right
+        elif isinstance(node, ast.Call):
+            #check to see if it is a call to what is a constant param
+            return self.is_paramcall(node)
+        elif isinstance(node, ast.Attribute):
+            return self.is_const(node)
+    
+    
+    def is_paramcall(self, node):
+        if isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name):
+                if node.func.value.id == 'rospy' and node.func.attr == 'get_param':
+                    return True
+        return False
+
+
+    def is_const(self, node):
+        '''given a node of an ast return if it is
+        a constant candidate -> looks up name and  other stuff'''
+        cls, func = self.get_class_and_func(node)
+
+        #if it is an attribute than check if it is a self call and
+        #htan check to see if it is in its class listing
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name) and node.value.id == 'self': 
+                if cls in self.class_vars:
+                    if node.attr in self.class_vars[cls]:
+                        return True
+            return False
+
+
+
+
+    def get_class_and_func(self, node):
+        visitor = ClassFuncVisit(node)
+        visitor.visit(self.tree)
+        return visitor.cls, visitor.func
+
+
+class ClassFuncVisit(BasicVisitor):
+
+    def __init__(self, target):
+        BasicVisitor.__init__(self)
+        self.target = target
+        self.cls = None
+        self.func = None
+
+
+    def generic_visit(self, node):
+        if node == self.target:
+            self.cls = self.current_class
+            self.func = self.current_function
+        else:
+            BasicVisitor.generic_visit(self, node)
+
+
+
+            
+
+
+
+
+
 def analyze_file(fname):
     '''new main function...get CFG and find pubs first'''
     if os.path.isfile(fname):
@@ -550,10 +750,11 @@ def analyze_file(fname):
 
             a = AssignFindVisitor()
             a.visit(tree)
-            for k,v in a.canidates.iteritems():
-                print k
-                for val in v:
-                    print '\t',val
+            canidates = CanidateStore(a.canidates, tree)
+            # for k,v in a.canidates.iteritems():
+            #     print k
+            #     for val in v:
+            #         print '\t',val
 
             flow_store = cfg_analysis.build_files_cfgs(tree=tree)
             publish_finder = PublishFinderVisitor()
@@ -564,12 +765,10 @@ def analyze_file(fname):
                 func_with_call.add(call.func)
 
                 cfg = flow_store[call.cls][call.func]
-                cfg_analysis.print_graph(cfg.succs)
+                # cfg_analysis.print_graph(cfg.succs)
                 visit = set()
                 close_graph(call.expr,cfg.preds, visit) 
             #now go backwards and determine all of the ifs it requires
-
-
     else:
         print 'error no file'
 
