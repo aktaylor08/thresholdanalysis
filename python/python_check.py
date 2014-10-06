@@ -93,90 +93,6 @@ class ConstVariable(object):
         return hash(self.cls + self.name)
 
 
-class FindOnlyOnceVisitor(ast.NodeVisitor):
-    '''visitor that has a list of contenders and
-    checks to see if they are assigned to outside of the init or 
-    some other function in the code'''
-
-
-    def __init__(self, canidates):
-        '''save canidates  and set the current key'''
-        self.canidates = canidates 
-        self.current_key = 'GLOBAL_ONES'
-        self.current_function = None
-
-
-    def visit_ClassDef(self, node):
-        #set the classes
-        self.current_key = node.name
-        self.generic_visit(node)
-        #reset this stuff
-        self.current_key = 'GLOBAL_ONES'
-
-
-    def visit_FunctionDef(self, node):
-        self.current_function = node.name
-        self.generic_visit(node)
-        self.current_function = None
-
-    
-    def handle_target(self, target):
-        #assigning to self.asdfasfd is an attribute
-        name = None
-        if isinstance(target, ast.Attribute):
-            if isinstance(target.value, ast.Name):
-                if target.value.id == 'self':
-                    #class value save it here
-                    name = target.attr
-                else:
-                    print 'not assigning to self'
-        elif isinstance(target, ast.Name):
-            name = target.id
-        else:
-            print 'ERROR not implemented type'
-
-        #as of right now if it is assigned to in another function besides 
-        #init we will knock it out and continue on
-        if self.current_function != '__init__':
-            if name in self.canidates[self.current_key] and self.current_key != 'GLOBAL_ONES':
-                # print 'REMOVED: ', name
-                new_list = [i for i in self.canidates[self.current_key] if i != name]
-                self.canidates[self.current_key] = new_list
-            elif self.current_key != 'GLOBAL_ONES':
-                if name in self.canidates['GLOBAL_ONES']:
-                    new_list = [i for i in self.canidates['GLOBAL_ONES'] if i != name]
-                    self.canidates['GLOBAL_ONES'] = new_list
-
-
-    def visit_AugAssign(self, node):
-        self.handle_target(node.target)
-
-
-    def visit_Assign(self, node):
-        #we are going to look at all of the assign values here and figure out
-        #if it is a constant.  Here we are just looking at __init__ for now but
-        # it could be in many other location
-
-        #get param might appear somewhere else so don't get rid of this
-        if isinstance(node.value, ast.Call):
-            func = node.value.func
-            if isinstance(func, ast.Attribute):
-                if isinstance(func.value, ast.Name) and isinstance(func.attr, str):
-                    if func.value.id == 'rospy' and func.attr == 'get_param':
-                        self.generic_visit(node)
-                        return 
-
-        #TODO: Don't get rid of constant only expressions on the assign side?
-
-        #otherwise get rid fo some stuff
-        for i in node.targets:
-            self.handle_target(i)
-            
-
-        #GO on and visit everything else
-        self.generic_visit(node)
-
-
 class FunctionGraphVisitor(ast.NodeVisitor):
     ''' Create a function'''
 
@@ -198,7 +114,6 @@ class FunctionGraphVisitor(ast.NodeVisitor):
         self.current_class = 'GLOBAL_OBJECTS' 
 
     def visit_Module(self, node):
-        print node
         self.generic_visit(node)
 
     
@@ -213,107 +128,6 @@ class FunctionGraphVisitor(ast.NodeVisitor):
                             func=node.func.attr)
                     self.func_map.add_call(key,value)
 
-
-
-
-class IfStatementVisitor(ast.NodeVisitor):
-    '''visit if statements to ID which constants are
-    used in if statements'''
-
-    def __init__(self, values):
-        self.to_search = values
-        self.thresh = set()
-        self.in_test = False
-        self.current_function = None
-        self.current_class = 'GLOBAL_ONES'
-
-
-    def visit_ClassDef(self, node):
-        #set the classes
-        self.current_class = node.name
-        self.generic_visit(node)
-        #reset this stuff
-        self.current_class = 'GLOBAL_ONES'
-
-
-    def visit_FunctionDef(self, node):
-        self.current_function = node.name
-        self.generic_visit(node)
-        self.current_function = None
-
-    def visit_Attribute(self, node):
-        if self.in_test:
-            #check to see if we have a comparision agains a value here
-            if isinstance(node.value, ast.Name) and node.value.id == 'self':
-                val = ConstVariable(cls=self.current_class, 
-                        name=node.attr)
-                if val in self.to_search:
-                    self.thresh.add(val)
-                
-    def visit_Name(self, node):
-        if self.in_test:
-            val =  ConstVariable(cls='GLOBAL_ONES', name=node.id)
-            if val in self.to_search:
-                self.thresh.add(val)
-
-
-
-    def visit_If(self, node):
-        self.in_test = True
-        self.visit(node.test)
-        self.in_test = False
-        for i in node.body:
-            self.visit(i)
-        for i in node.orelse:
-            self.visit(i)
-
-
-def main(fname):
-    '''main function'''
-
-    if os.path.isfile(fname):
-        tree = None
-        with open(fname, 'r') as openf:
-            code = openf.read()
-            tree = ast.parse(code)  
-
-            #visit to find assignments to class vairables
-            visitor = AssignFindVisitor()
-            visitor.visit(tree)
-            to_search = {}
-            for k,v in visitor.canidates.iteritems():
-                v = list(set(v))
-                to_search[k] = v
-
-            #visit to know out assignments not in constructor or from rospy.getparam or a constant number
-            #assume that any function besides init can be called more than once
-            visitor = FindOnlyOnceVisitor(to_search)
-            visitor.visit(tree)
-            canidates = []
-            for k,v in visitor.canidates.iteritems():
-                for name in v:
-                    canidates.append(ConstVariable(cls=k, name=name))
-            print 'Canidates:'
-            for i in  canidates:
-                print '\t', i
-
-            visitor = PublishFinderVisitor()
-            visitor.visit(tree)
-            pub_calls = visitor.publish_calls
-
-            visitor = FunctionGraphVisitor()
-            visitor.visit(tree)
-            func_map = visitor.func_map.get_dict_rep()
-
-            visitor = IfStatementVisitor(canidates)
-            visitor.visit(tree)
-            thresholds = list(visitor.thresh)
-            print 'Thresholds:'
-            for i in thresholds:
-                print '\t', i
-
-    else:
-        print 'error no file'
 
 
 
@@ -378,6 +192,8 @@ class ClassVariable(object):
         return '{:s} -> {:s}'.format(self.cls.name, self.name)  
 
     def __eq__(self, other):
+        if not isinstance(other, ClassVariable):
+            return False
         cls = self.cls == other.cls
         name = self.name == other.name
         return cls and name 
@@ -473,6 +289,66 @@ class BasicVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         self.current_expr = None
 
+
+class ConstantVisitor(BasicVisitor):
+
+    def __init__(self, canidates, cls, func):
+        BasicVisitor.__init__(self)
+        self.canidates = canidates
+        self.consts =  []
+        self.current_class = cls
+        self.current_function = func
+
+    def visit_Num(self, node):
+        self.consts.append(node)
+
+
+    def visit_Attribute(self, node):
+        if isinstance(node.value, ast.Name):
+            if node.value.id == 'self':
+                cv = ClassVariable(self.current_class, self.current_function, 
+                    node.attr, node)
+                if cv in self.canidates.class_vars[self.current_class]:
+                    self.consts.append(cv)
+
+    def visit_Name(self, node):
+            fv = FunctionVariable( self.current_class, 
+                    self.current_function, node.id, node)
+            if self.current_class in self.canidates.func_vars:
+                if fv in self.canidates.func_vars[self.current_class]:
+                    self.consts.append(fv)
+
+
+
+
+
+class IfStatementVisitor(BasicVisitor):
+    '''visit if statements to ID which constants are
+    used in if statements'''
+
+    def __init__(self, canidates, cfg, func_calls):
+        BasicVisitor.__init__(self)
+        self.canidates = canidates
+        self.cfg = cfg
+        self.func_calls = func_calls
+
+
+    def visit_If(self, node):
+        cv = ConstantVisitor(self.canidates, self.current_class, 
+                self.current_function)
+        cv.visit(node.test)
+        if len(cv.consts) > 0:
+            cfg = self.cfg[self.current_class][self.current_function]
+            depends = set()
+            close_graph(node, cfg.succs, depends)
+            print '\n'
+            for i in depends:
+                #check pub -> first degree
+                #check call to pub
+                #maybe assign dependent variables
+                pass
+
+            
 
 
 class AssignFindVisitor(BasicVisitor):
@@ -646,7 +522,10 @@ class CanidateStore(object):
         vals = set(vals)
         vals = vals - bad
         for i in vals:
-            self.func_vars[i.cls] = i
+            if i.cls in self.func_vars :
+                self.func_vars[i.cls].append(i)
+            else:
+                self.func_vars[i.cls] = [i]
 
 
     def check_only_const(self, node):
@@ -729,15 +608,14 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
-            print calls
             func_with_call = set()
             for call in calls:
                 func_with_call.add(call.func)
 
-                cfg = flow_store[call.cls][call.func]
-                # cfg_analysis.print_graph(cfg.succs)
-                visit = set()
-                close_graph(call.expr,cfg.preds, visit) 
+            ifvisit = IfStatementVisitor(canidates, flow_store, calls)
+            ifvisit.visit(tree)
+
+
 
     else:
         print 'error no file'
