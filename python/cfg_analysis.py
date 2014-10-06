@@ -40,6 +40,8 @@ class CFGVisitor(ast.NodeVisitor):
         self.handleBlock(node.body)
         self.generic_visit(node)
         self.buildCFG(set(), self.start)
+        #add the start node to the pred graph so we have a close one
+        self.preds[self.start] = set([node])
 
 
 

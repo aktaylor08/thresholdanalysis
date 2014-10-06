@@ -203,6 +203,32 @@ class ClassVariable(object):
         return hash(self.cls) and hash(self.name) 
 
 
+class IfStatement(object):
+
+    def __init__(self, cls, func, node, constants):
+        self.cls = cls
+        self.func = func
+        self.node = node
+        self.constants = constants
+
+
+    def __repr__(self):
+        return self.__str__()
+
+
+    def __str__(self):
+        return str(self.node.lineno) + str(self.constants)
+
+
+class CallStatement(object):
+
+    def __init__(self, cls, func, node, expr):
+        self.cls = cls
+        self.func = func
+        self.node = node
+        self.expr = expr
+
+
 class FunctionVariable(object):
     '''holds information about a class variable'''
 
@@ -331,6 +357,7 @@ class IfStatementVisitor(BasicVisitor):
         self.canidates = canidates
         self.cfg = cfg
         self.func_calls = func_calls
+        self.ifs = []
 
 
     def visit_If(self, node):
@@ -338,16 +365,9 @@ class IfStatementVisitor(BasicVisitor):
                 self.current_function)
         cv.visit(node.test)
         if len(cv.consts) > 0:
-            cfg = self.cfg[self.current_class][self.current_function]
-            depends = set()
-            close_graph(node, cfg.succs, depends)
-            print '\n'
-            for i in depends:
-                #check pub -> first degree
-                #check call to pub
-                #maybe assign dependent variables
-                pass
-
+            self.ifs.append(IfStatement(self.current_class,
+                self.current_function, node, cv.consts
+             ))
             
 
 
@@ -391,6 +411,7 @@ class AssignFindVisitor(BasicVisitor):
 
 
     def visit_AugAssign(self, node):
+
         i =  node.target
         #assigning to self.asdfasfd is an attribute
         if isinstance(i, ast.Attribute):
@@ -439,7 +460,6 @@ class CanidateStore(object):
     '''class to hold all of the candiates for 
         thresholds.  Will include num literals, class variables,
         and variables wihtin a function'''
-        
 
 
     def __init__(self, assignments, tree):
@@ -565,8 +585,6 @@ class CanidateStore(object):
             return False
 
 
-
-
     def get_class_and_func(self, node):
         visitor = ClassFuncVisit(node)
         visitor.visit(self.tree)
@@ -591,6 +609,48 @@ class ClassFuncVisit(BasicVisitor):
             BasicVisitor.generic_visit(self, node)
 
 
+
+class  FindCallVisitor(BasicVisitor):
+
+    def __init__(self, target_class, target_func):
+        BasicVisitor.__init__(self)
+        self.target_class = target_class
+        self.target_func = target_func
+        self.calls = []
+
+
+    def visit_Call(self, node):
+        if self.current_class == self.target_class:
+            if isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name):
+                    if node.func.value.id == 'self' and node.func.attr == self.target_func.name:
+                        #save this for use
+                        self.calls.append(CallStatement(self.current_class, 
+                                self.current_function, node, self.current_expr))
+
+
+class ClassVarVisit(ast.NodeVisitor):
+
+
+    def __init__(self, cls, func):
+        self.current_class = cls
+        self.current_function = func
+        self.possibilites = []
+
+    def visit_Call(self, node):
+        '''we want to ignore calls to other functions for now'''
+        return 
+
+    def visit_Attribute(self, node):
+        if isinstance(node.value, ast.Name):
+            if node.value.id == 'self':
+                self.possibilites.append( ClassVariable(self.current_class, self.current_function,
+                    node.attr, node))
+
+
+
+
+
 def analyze_file(fname):
     '''new main function...get CFG and find pubs first'''
     if os.path.isfile(fname):
@@ -598,7 +658,6 @@ def analyze_file(fname):
         with open(fname, 'r') as openf:
             code = openf.read()
             tree = ast.parse(code)  
-
 
             a = AssignFindVisitor()
             a.visit(tree)
@@ -608,12 +667,69 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
-            func_with_call = set()
-            for call in calls:
-                func_with_call.add(call.func)
-
             ifvisit = IfStatementVisitor(canidates, flow_store, calls)
             ifvisit.visit(tree)
+            for call in calls:
+                vars_to_check = []
+
+                preds = flow_store[call.cls][call.func].preds
+                #check for direct ifs
+                visited = set()
+                close_graph(call.expr,preds, visited)
+                print '\nDirect reliance for', call, ':'
+                for i in visited:
+                    if isinstance(i, ast.If):
+                        for if_statement in ifvisit.ifs:
+                            if if_statement.node == i:
+                                print '\treliant on:', if_statement 
+                            else:
+                                #TODO compile class variables it depends on
+                                cls_var_visit = ClassVarVisit(call.cls, call.func)
+                                cls_var_visit.visit(if_statement.node)
+                                vars_to_check = vars_to_check + cls_var_visit.possibilites
+                                # print cls_var_visit.possibilites
+                                # print a.canidates[call.cls]
+                                #check values here
+                print '------------------------\n\n'
+
+
+                #check for function calls on below an if statement  
+                print 'Function call reliate on threshold', call, ':'
+                fcv = FindCallVisitor(call.cls, call.func)
+                fcv.visit(tree)
+                for outside_call in fcv.calls:
+                    preds  = flow_store[outside_call.cls][outside_call.func].preds
+                    visited = set()
+                    close_graph(outside_call.expr, preds, visited)
+                    for i in visited:
+                        if isinstance(i, ast.If):
+                            for if_statement in ifvisit.ifs:
+                                if if_statement.node == i:
+                                    print '\treliant on:', if_statement 
+                print '----------------------------\n\n'
+
+
+                print 'Class variables that effect it:'
+                print vars_to_check
+                for var in vars_to_check:
+                    for can in a.canidates[var.cls]:
+                        if var == can:
+                            preds  = flow_store[can.cls][can.func].preds
+                            visited = set()
+                            close_graph(can.assign, preds, visited)
+                            for i in visited:
+                                if isinstance(i, ast.If):
+                                    for if_statement in ifvisit.ifs:
+                                        if if_statement.node == i:
+                                            print '\treliant on:', if_statement 
+                            
+
+
+
+
+                 
+
+
 
 
 
