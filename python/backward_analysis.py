@@ -10,128 +10,7 @@ import cfg_analysis
 
 import pprinter
 
-from collections import defaultdict
-
-class FunctionInfo(object):
-    '''representation of a function here'''
-
-    def __init__(self, cls=str(), func=str()):
-        '''create a function info option'''
-        self.cls = cls 
-        self.func = func 
-
-    def __repr__(self):
-        '''make a string'''
-        return '(class: {:s} function: {:s})'.format(
-                self.cls, self.func)
-
-    def __str__(self):
-        '''make a string'''
-        return self.__repr__()
-
-    def __eq__(self, other):
-        '''check equality'''
-        val = self.cls == other.cls and self.func == other.func
-        return val 
-
-    def __hash__(self):
-        return hash(self.cls + self.func)
-        
-
-class FunctionCallGraph(object):
-    '''holds a graph of the function calls'''
-    
-
-    def __init__(self):
-        self._graph = {}
-
-    def add_call(self, func, target):
-        '''
-        Add a call to the list
-        '''
-        if func in self._graph:
-            self._graph[func].add(target)
-        else:
-            self._graph[func] = set()
-            self._graph[func].add(target)
-
-    def get_calls(self, func):
-        '''Return the calls from a function or
-        None if it doesn't exisit'''
-        if func in self._graph:
-            return list(self._graph[func])
-        else:
-            return None
-
-
-    def get_dict_rep(self):
-        '''get a dictonary representation of this map'''
-        d = dict()
-        for k,v in self._graph.iteritems():
-            d[k] = list(v)
-        return d
-
-
-class ConstVariable(object):
-    '''constant variable not used at the moment'''
-
-    def __init__(self, cls, name):
-        self.cls = cls
-        self.name = name
-
-    def __repr__(self):
-        return '(class: {:s} name: {:s})'.format(
-                self.cls, self.name)
-
-    def __str__(self):
-        return self.__repr__()
-
-    def __eq__(self, other):
-        return other.cls == self.cls and other.name == self.name
-
-    def __hash__(self):
-        return hash(self.cls + self.name)
-
-
-class FunctionGraphVisitor(ast.NodeVisitor):
-    ''' Create a function'''
-
-    def __init__(self):
-        self.func_map = FunctionCallGraph() 
-        self.current_class = 'GLOBAL_OBJECTS'
-        self.current_function= None 
-        
-
-    def visit_FunctionDef(self, node):
-        self.current_function = node.name
-        self.generic_visit(node)
-        self.current_function = None 
-
-
-    def visit_ClassDef(self, node):
-        self.current_class = node.name
-        self.generic_visit(node)
-        self.current_class = 'GLOBAL_OBJECTS' 
-
-    def visit_Module(self, node):
-        self.generic_visit(node)
-
-    
-    def visit_Call(self, node):
-        #See if we are calling another function in here
-        if isinstance(node.func, ast.Attribute):
-            if isinstance(node.func.value, ast.Name):
-                if node.func.value.id == 'self':
-                    key = FunctionInfo(cls=self.current_class,
-                            func = self.current_function)
-                    value = FunctionInfo(cls=self.current_class,
-                            func=node.func.attr)
-                    self.func_map.add_call(key,value)
-
-
-
-
-
+from collections import defaultdict, deque
 
 #########################################################
 #
@@ -141,27 +20,21 @@ class FunctionGraphVisitor(ast.NodeVisitor):
 #
 ########################################################
 
+class TreeObject(object):
+    ''''hold all of the information needed 
+    about a cfg node in this stuff'''
 
-class PublishCall(object):
-    '''this holds info on a ropsy.publish 
-    function call it will contain the class,
-    the function, and a reference to the node'''
-
-
-    def __init__(self, cls, func, call, expr):
+    def __init__(self, cls, func, expr, node):
         self.cls = cls
         self.func = func
         self.expr = expr
-        self.call = call 
-
-
+        self.node = node
+        
     def __str__(self):
         return self.__repr__()
 
-
     def __repr__(self):
-        return '(' + str(self.expr.lineno) + ' ' + str(self.expr) + ')'
-
+        return str(self.node.lineno) + ': ' + str(self.node) 
 
     def __eq__(self,other):
         cls = self.cls == other.cls
@@ -173,7 +46,6 @@ class PublishCall(object):
 
     def __hash__(self):
         return hash(self.cls) + hash(self.func) + hash(self.node) + hash(self.expr)
-
 
 
 class ClassVariable(object):
@@ -203,34 +75,9 @@ class ClassVariable(object):
         return hash(self.cls) and hash(self.name) 
 
 
-class IfStatement(object):
-
-    def __init__(self, cls, func, node, constants):
-        self.cls = cls
-        self.func = func
-        self.node = node
-        self.constants = constants
-
-
-    def __repr__(self):
-        return self.__str__()
-
-
-    def __str__(self):
-        return str(self.node.lineno) + str(self.constants)
-
-
-class CallStatement(object):
-
-    def __init__(self, cls, func, node, expr):
-        self.cls = cls
-        self.func = func
-        self.node = node
-        self.expr = expr
-
 
 class FunctionVariable(object):
-    '''holds information about a class variable'''
+    '''holds information about a Function variable'''
 
 
     def __init__(self, cls, func, name, assign):
@@ -268,6 +115,165 @@ class FunctionVariable(object):
     def __hash__(self):
         return hash(self.cls) and hash(self.name) 
 
+
+class SearchStruct(object):
+    '''data structure that holds information for the search/backward
+    analysis'''
+
+
+    def __init__(self, statement, publisher, child, distance):
+        self.statement = statement
+        self.publisher = publisher 
+        self.child = child
+        self.distance = distance
+        self.parent = None
+
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        return str(self.distance) + ' ' +  str(self.statement)
+
+    def __eq__(self, other):
+        return self.statement == other.statement
+
+    def __hash__(self):
+        return hash(self.statement)
+
+
+class CanidateStore(object):
+    '''class to hold all of the candiates for 
+        thresholds.  Will include num literals, class variables,
+        and variables wihtin a function'''
+
+
+    def __init__(self, assignments, tree):
+        '''build the list from found assignments'''
+        self.assignments = assignments
+        self.tree = tree
+        self.class_vars = {}
+        self.func_vars = {} 
+        self.compile_canidates()
+
+
+    def compile_canidates(self):
+        '''compile all of the assignments down into a list that we can check
+        to see what they really assign and how many times they are assigned'''
+        self.do_class_variables()
+        self.do_func_variables()
+
+    def do_class_variables(self):
+        '''Define all of the class variables as constants or not'''
+        #book keeping
+        for_certain = set()
+        bad = set()
+        init = set()
+        elsewhere = set()
+        maybe = set()
+        classes = self.assignments.keys()
+
+        for cls in classes:
+            variables = sorted(self.assignments[cls], key=lambda x: x.func.name)
+            for i in variables:
+                if isinstance(i, ClassVariable):
+                    if isinstance(i.assign, ast.AugAssign):
+                        bad.add(i)
+                    else:
+                        #if it makes a call to rospy.get_param it is a threshold
+                        if isinstance(i.assign.value, ast.Call):
+                            if self.is_paramcall(i.assign.value):
+                                for_certain.add(i)
+
+                        #as of right now we just increment in init but
+                        if i.func.name == '__init__':
+                            init.add(i)
+                        else:
+                            if self.check_only_const(i):
+                                maybe.add(i)
+                            else:
+                                elsewhere.add(i)
+
+        vals = init.union(maybe).difference(elsewhere).difference(bad).union(for_certain)
+        for i in vals:
+            if i.cls in self.class_vars:
+                self.class_vars[i.cls].append(i)
+            else:
+                self.class_vars[i.cls] = [i]
+
+
+
+    def do_func_variables(self):
+        '''Define function variables as constants or not'''
+        classes = self.assignments.keys()
+        canidates = {}
+        bad = bad = set()
+        for cls in classes:
+            variables = sorted(self.assignments[cls], key=lambda x: x.name)
+            for i in variables:
+                if isinstance(i, FunctionVariable):
+                    if isinstance(i.assign, ast.AugAssign):
+                        bad.add(i)
+                    else:
+                        const = self.check_only_const(i.assign.value)
+                        if const:
+                            if i in canidates:
+                                canidates[i] +=1
+                            else:
+                                canidates[i] = 1
+                        else:
+                            bad.add(i)
+        vals = [x for x in canidates.keys() if canidates[x] == 1]
+        vals = set(vals)
+        vals = vals - bad
+        for i in vals:
+            if i.cls in self.func_vars :
+                self.func_vars[i.cls].append(i)
+            else:
+                self.func_vars[i.cls] = [i]
+
+
+    def check_only_const(self, node):
+        if isinstance(node, ast.Num):
+            return True
+        elif isinstance(node, ast.BinOp):
+            left = self.check_only_const(node.left) 
+            right = self.check_only_const(node.right)
+            return left and right
+        elif isinstance(node, ast.Call):
+            #check to see if it is a call to what is a constant param
+            return self.is_paramcall(node)
+        elif isinstance(node, ast.Attribute):
+            return self.is_const(node)
+    
+    
+    def is_paramcall(self, node):
+        if isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name):
+                if node.func.value.id == 'rospy' and node.func.attr == 'get_param':
+                    return True
+        return False
+
+
+    def is_const(self, node):
+        '''given a node of an ast return if it is
+        a constant candidate -> looks up name and  other stuff'''
+        cls, func = self.get_class_and_func(node)
+
+        #if it is an attribute than check if it is a self call and
+        #htan check to see if it is in its class listing
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name) and node.value.id == 'self': 
+                if cls in self.class_vars:
+                    if node.attr in self.class_vars[cls]:
+                        return True
+            return False
+
+
+    def get_class_and_func(self, node):
+        visitor = ClassFuncVisit(node)
+        visitor.visit(self.tree)
+        return visitor.cls, visitor.func
 
 
 
@@ -345,32 +351,6 @@ class ConstantVisitor(BasicVisitor):
                     self.consts.append(fv)
 
 
-
-
-
-class IfStatementVisitor(BasicVisitor):
-    '''visit if statements to ID which constants are
-    used in if statements'''
-
-    def __init__(self, canidates, cfg, func_calls):
-        BasicVisitor.__init__(self)
-        self.canidates = canidates
-        self.cfg = cfg
-        self.func_calls = func_calls
-        self.ifs = []
-
-
-    def visit_If(self, node):
-        cv = ConstantVisitor(self.canidates, self.current_class, 
-                self.current_function)
-        cv.visit(node.test)
-        if len(cv.consts) > 0:
-            self.ifs.append(IfStatement(self.current_class,
-                self.current_function, node, cv.consts
-             ))
-            
-
-
 class AssignFindVisitor(BasicVisitor):
     '''find all of the assignments and organize them
     into global and class lists'''
@@ -432,6 +412,47 @@ class AssignFindVisitor(BasicVisitor):
         self.generic_visit(node)
 
 
+
+class IfOrFuncVisitor(BasicVisitor):
+    '''finds if the program is part of an if statement'''
+
+    def __init__(self, target):
+        BasicVisitor.__init__(self)
+        self.target = target
+        self.canidates = deque()
+        self.res = None
+
+    def visit_FunctionDef(self, node):
+        self.canidates.appendleft(node)
+        BasicVisitor.visit_FunctionDef(self, node)
+        self.canidates.popleft()
+
+
+    def visit_If(self, node):
+        self.canidates.appendleft(node)
+        self.generic_visit(node)
+        self.canidates.popleft()
+
+    def generic_visit(self, node):
+        popped = []
+        if node == self.target:
+            found = False
+            while not found:
+                temp = self.canidates.popleft()
+                popped.append(temp)
+                if temp == node:
+                    continue
+                else:
+                    found = True
+                    self.res = TreeObject(self.current_class, self.current_function, 
+                            self.current_expr, temp)
+                    break
+            for i in reversed(popped):
+                self.canidates.append(popped)
+        else:
+            BasicVisitor.generic_visit(self, node)
+
+
 class PublishFinderVisitor(BasicVisitor):
     '''find and store all of the rospy.publish calls 
     in this manner we can get all of the functions and 
@@ -451,145 +472,8 @@ class PublishFinderVisitor(BasicVisitor):
         elif isinstance(func, ast.Attribute):
             if func.attr == 'publish':
                 self.publish_calls.append(
-                        PublishCall(self.current_class, 
-                            self.current_function, node, self.current_expr))
-
-
-
-class CanidateStore(object):
-    '''class to hold all of the candiates for 
-        thresholds.  Will include num literals, class variables,
-        and variables wihtin a function'''
-
-
-    def __init__(self, assignments, tree):
-        '''build the list from found assignments'''
-        self.assignments = assignments
-        self.tree = tree
-        self.class_vars = {}
-        self.func_vars = {} 
-        self.compile_canidates()
-
-
-    def compile_canidates(self):
-        '''compile all of the assignments down into a list that we can check
-        to see what they really assign and how many times they are assigned'''
-        self.do_class_variables()
-        self.do_func_variables()
-
-    def do_class_variables(self):
-        '''Define all of the class variables as constants or not'''
-        #book keeping
-        for_certain = set()
-        bad = set()
-        init = set()
-        elsewhere = set()
-        maybe = set()
-        classes = self.assignments.keys()
-
-        for cls in classes:
-            variables = sorted(self.assignments[cls], key=lambda x: x.func.name)
-            for i in variables:
-                if isinstance(i, ClassVariable):
-                    if isinstance(i.assign, ast.AugAssign):
-                        bad.add(i)
-                    else:
-                        #if it makes a call to rospy.get_param it is a threshold
-                        if isinstance(i.assign.value, ast.Call):
-                            if self.is_paramcall(i.assign.value):
-                                for_certain.add(i)
-
-                        #as of right now we just increment in init but
-                        if i.func.name == '__init__':
-                            init.add(i)
-                        else:
-                            if self.check_only_const(i):
-                                maybe.add(i)
-                            else:
-                                elsewhere.add(i)
-
-        vals = init.union(maybe).difference(elsewhere).difference(bad).union(for_certain)
-        for i in vals:
-            if i.cls in self.class_vars:
-                self.class_vars[i.cls].append(i)
-            else:
-                self.class_vars[i.cls] = [i]
-
-
-
-    def do_func_variables(self):
-        '''Define function variables as constants or not'''
-        #TODO finish and verifiy
-        classes = self.assignments.keys()
-        canidates = {}
-        bad = bad = set()
-        for cls in classes:
-            variables = sorted(self.assignments[cls], key=lambda x: x.name)
-            for i in variables:
-                if isinstance(i, FunctionVariable):
-                    if isinstance(i.assign, ast.AugAssign):
-                        bad.add(i)
-                    else:
-                        const = self.check_only_const(i.assign.value)
-                        if const:
-                            if i in canidates:
-                                canidates[i] +=1
-                            else:
-                                canidates[i] = 1
-                        else:
-                            bad.add(i)
-        vals = [x for x in canidates.keys() if canidates[x] == 1]
-        vals = set(vals)
-        vals = vals - bad
-        for i in vals:
-            if i.cls in self.func_vars :
-                self.func_vars[i.cls].append(i)
-            else:
-                self.func_vars[i.cls] = [i]
-
-
-    def check_only_const(self, node):
-        if isinstance(node, ast.Num):
-            return True
-        elif isinstance(node, ast.BinOp):
-            left = self.check_only_const(node.left) 
-            right = self.check_only_const(node.right)
-            return left and right
-        elif isinstance(node, ast.Call):
-            #check to see if it is a call to what is a constant param
-            return self.is_paramcall(node)
-        elif isinstance(node, ast.Attribute):
-            return self.is_const(node)
-    
-    
-    def is_paramcall(self, node):
-        if isinstance(node.func, ast.Attribute):
-            if isinstance(node.func.value, ast.Name):
-                if node.func.value.id == 'rospy' and node.func.attr == 'get_param':
-                    return True
-        return False
-
-
-    def is_const(self, node):
-        '''given a node of an ast return if it is
-        a constant candidate -> looks up name and  other stuff'''
-        cls, func = self.get_class_and_func(node)
-
-        #if it is an attribute than check if it is a self call and
-        #htan check to see if it is in its class listing
-        if isinstance(node, ast.Attribute):
-            if isinstance(node.value, ast.Name) and node.value.id == 'self': 
-                if cls in self.class_vars:
-                    if node.attr in self.class_vars[cls]:
-                        return True
-            return False
-
-
-    def get_class_and_func(self, node):
-        visitor = ClassFuncVisit(node)
-        visitor.visit(self.tree)
-        return visitor.cls, visitor.func
-
+                        TreeObject(self.current_class, 
+                            self.current_function, self.current_expr, node))
 
 
 class ClassFuncVisit(BasicVisitor):
@@ -609,6 +493,102 @@ class ClassFuncVisit(BasicVisitor):
             BasicVisitor.generic_visit(self, node)
 
 
+class BackwardAnalysis(object):
+    '''class to perform the backward analysis needed on all of the files'''
+
+    def __init__(self, canidates, calls, flow_store, tree):
+        self.canidates = canidates
+        self.calls = calls
+        self.flow_store = flow_store
+        self.tree = tree
+        self.if_visitor = IfConstantVisitor(self.canidates)
+        self.if_visitor.visit(tree)
+
+
+    def compute(self):
+        searched = set()
+        to_search = deque()
+        thresh = {} 
+        for call in self.calls:
+            obj = SearchStruct(call,call, None, 0)
+            to_search.append(obj)
+
+        while len(to_search) > 0:
+            current = to_search.popleft()
+            #find some thresholds
+            new_thresholds = self.find_thresholds(current)
+            if len(new_thresholds) > 0:
+                thresh[current] = new_thresholds
+            #get data flows from here
+            new_data = self.find_data_dependiences(current)
+            #get new flow dependinces here
+            new_flow = self.find_flow_dependencies(current)
+
+            for can in new_data:
+                if can in searched:
+                    #do some math here to make sure its not less
+                    print 'already searched?'
+                else:
+                    print 'adding canidate'
+                    to_search.append(can)
+
+            for can in new_flow:
+                if can in searched:
+                    #do some math here to make sure its not less
+                    print 'already searched?:', can
+                else:
+                    to_search.append(can)
+            searched.add(current)
+        to_print = sorted(list(searched), key=lambda x: x.distance)
+        for i in to_print:
+            if i in thresh:
+                print '\n'
+                print 'Thresholds: ', thresh[i]
+                full_print(i)
+    
+    def find_thresholds(self, current):
+        '''find any thresholds in the current statement and 
+        return them if we find any'''
+        if current.statement.node in self.if_visitor.ifs:
+            return self.if_visitor.ifs[current.statement.node] 
+        else:
+            return [] 
+
+
+    def find_data_dependiences(self, current):
+        '''find any thresholds in the current statement and 
+        return them if we find any'''
+        #TODO Implement
+        return []
+
+
+    def find_flow_dependencies(self, current):
+        '''find flow dependencies'''
+        visitor = IfOrFuncVisitor(current.statement.node)
+        visitor.visit(self.tree)
+        to_return = []
+        if isinstance(visitor.res.node, ast.If):
+            obj = SearchStruct(visitor.res, current.publisher, current, current.distance + 1)
+            to_return.append(obj)
+        else:
+            #otherwise search for function calls here?
+            for call in self.search_function_calls(visitor.res):
+                obj = SearchStruct(call, current.publisher, current, current.distance + 1)
+                to_return.append(obj)
+
+        return to_return 
+
+    def search_function_calls(self, tree_thing):
+        fcv = FindCallVisitor(tree_thing.cls, tree_thing.func)
+        fcv.visit(self.tree)
+        return fcv.calls
+
+
+def full_print(obj, tabs=0):
+    print '\t' * tabs, obj
+    if obj.child is not None:
+        full_print(obj.child, tabs+1)
+
 
 class  FindCallVisitor(BasicVisitor):
 
@@ -625,31 +605,74 @@ class  FindCallVisitor(BasicVisitor):
                 if isinstance(node.func.value, ast.Name):
                     if node.func.value.id == 'self' and node.func.attr == self.target_func.name:
                         #save this for use
-                        self.calls.append(CallStatement(self.current_class, 
+                        self.calls.append(TreeObject(self.current_class, 
                                 self.current_function, node, self.current_expr))
 
 
-class ClassVarVisit(ast.NodeVisitor):
+class IfConstantVisitor(BasicVisitor):
+    '''visit if statements to ID which constants are
+    used in if statements'''
+
+    def __init__(self, canidates):
+        BasicVisitor.__init__(self)
+        self.canidates = canidates
+        self.ifs = {}
 
 
-    def __init__(self, cls, func):
+    def visit_If(self, node):
+        cv = ConstantVisitor(self.canidates, self.current_class, 
+                self.current_function)
+        cv.visit(node.test)
+        if len(cv.consts) > 0:
+            self.ifs[node] =  cv.consts
+        self.generic_visit(node)
+
+    def __repr__(self):
+        return self.__str__()
+
+
+    def __str__(self):
+        string = ''
+        for i in self.ifs:
+            string += str(i.lineno) + ' ' + str(i) + ':\n'
+            for const in self.ifs[i]:
+                string += '\t' + str(const) + '\n'
+
+        return string
+
+
+        
+        
+
+
+class ConstantVisitor(BasicVisitor):
+    '''IDs constants from candidates and also numberical constants'''
+
+    def __init__(self, canidates, cls, func):
+        BasicVisitor.__init__(self)
+        self.canidates = canidates
+        self.consts =  []
         self.current_class = cls
         self.current_function = func
-        self.possibilites = []
 
-    def visit_Call(self, node):
-        '''we want to ignore calls to other functions for now'''
-        return 
+    def visit_Num(self, node):
+        self.consts.append(node)
+
 
     def visit_Attribute(self, node):
         if isinstance(node.value, ast.Name):
             if node.value.id == 'self':
-                self.possibilites.append( ClassVariable(self.current_class, self.current_function,
-                    node.attr, node))
+                cv = ClassVariable(self.current_class, self.current_function, 
+                    node.attr, node)
+                if cv in self.canidates.class_vars[self.current_class]:
+                    self.consts.append(cv)
 
-
-
-
+    def visit_Name(self, node):
+            fv = FunctionVariable( self.current_class, 
+                    self.current_function, node.id, node)
+            if self.current_class in self.canidates.func_vars:
+                if fv in self.canidates.func_vars[self.current_class]:
+                    self.consts.append(fv)
 
 def analyze_file(fname):
     '''new main function...get CFG and find pubs first'''
@@ -667,70 +690,8 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
-            ifvisit = IfStatementVisitor(canidates, flow_store, calls)
-            ifvisit.visit(tree)
-            for call in calls:
-                vars_to_check = []
-
-                preds = flow_store[call.cls][call.func].preds
-                #check for direct ifs
-                visited = set()
-                close_graph(call.expr,preds, visited)
-                print '\nDirect reliance for', call, ':'
-                for i in visited:
-                    if isinstance(i, ast.If):
-                        for if_statement in ifvisit.ifs:
-                            if if_statement.node == i:
-                                print '\treliant on:', if_statement 
-                            else:
-                                #TODO compile class variables it depends on
-                                cls_var_visit = ClassVarVisit(call.cls, call.func)
-                                cls_var_visit.visit(if_statement.node)
-                                vars_to_check = vars_to_check + cls_var_visit.possibilites
-                                # print cls_var_visit.possibilites
-                                # print a.canidates[call.cls]
-                                #check values here
-                print '------------------------\n\n'
-
-
-                #check for function calls on below an if statement  
-                print 'Function call reliate on threshold', call, ':'
-                fcv = FindCallVisitor(call.cls, call.func)
-                fcv.visit(tree)
-                for outside_call in fcv.calls:
-                    preds  = flow_store[outside_call.cls][outside_call.func].preds
-                    visited = set()
-                    close_graph(outside_call.expr, preds, visited)
-                    for i in visited:
-                        if isinstance(i, ast.If):
-                            for if_statement in ifvisit.ifs:
-                                if if_statement.node == i:
-                                    print '\treliant on:', if_statement 
-                print '----------------------------\n\n'
-
-
-                print 'Class variables that effect it:'
-                print vars_to_check
-                for var in vars_to_check:
-                    for can in a.canidates[var.cls]:
-                        if var == can:
-                            preds  = flow_store[can.cls][can.func].preds
-                            visited = set()
-                            close_graph(can.assign, preds, visited)
-                            for i in visited:
-                                if isinstance(i, ast.If):
-                                    for if_statement in ifvisit.ifs:
-                                        if if_statement.node == i:
-                                            print '\treliant on:', if_statement 
-                            
-
-
-
-
-                 
-
-
-
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree)
+            ba.compute()
 
 
     else:
