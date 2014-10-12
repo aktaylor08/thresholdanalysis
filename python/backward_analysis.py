@@ -136,10 +136,10 @@ class SearchStruct(object):
         return str(self.distance) + ' ' +  str(self.statement)
 
     def __eq__(self, other):
-        return self.statement == other.statement
+        return self.statement.node == other.statement.node
 
     def __hash__(self):
-        return hash(self.statement)
+        return hash(self.statement.node)
 
 
 class CanidateStore(object):
@@ -492,11 +492,70 @@ class ClassFuncVisit(BasicVisitor):
         else:
             BasicVisitor.generic_visit(self, node)
 
+class GetVarsVisit(ast.NodeVisitor):
+
+    def __init__(self, statement):
+        self.statement = statement
+        self.class_vars = set()
+        self.func_vars = set()
+
+    def visit_Name(self, node):
+        # print ast.dump(node)
+        pass
+
+    def visit_Attribute(self, node):
+        # print ast.dump(node)
+        if isinstance(node.value, ast.Name):
+            if node.value.id == 'self':
+                #we have a class variable so check it out
+                cv = ClassVariable(self.statement.cls, self.statement.func,
+                        node.attr, node)
+                self.class_vars.add(cv)
+
+class FindAssigns(BasicVisitor):
+
+    def __init__(self, var):
+        BasicVisitor.__init__(self)
+        self.var = var
+        self.assignments = [] 
+
+
+    def visit_Assign(self, node):
+        '''visit an assignment definition'''
+
+        #we are going to look at all of the assign values here and figure out
+        #if it is a constant.  Here we are just looking at __init__ for now but
+        # it could be in many other location
+        for i in node.targets:
+            #assigning to self.asdfasfd is an attribute
+            if isinstance(i, ast.Attribute):
+                if isinstance(i.value, ast.Name):
+                    if i.value.id == 'self':
+                        if i.attr == self.var.name and self.current_class == self.var.cls and self.current_function != self.var.func:
+                            self.assignments.append(TreeObject(self.current_class, 
+                                self.current_function, self.current_expr, node))
+
+
+    def visit_AugAssign(self, node):
+
+        i =  node.target
+        #assigning to self.asdfasfd is an attribute
+        if isinstance(i, ast.Attribute):
+            if isinstance(i.value, ast.Name):
+                if i.value.id == 'self':
+                    if i.attr == self.var.name and self.current_class == self.var.cls and self.current_function != self.var.func:
+                        self.assignments.append(TreeObject(self.current_class, 
+                            self.current_function, self.current_expr, node))
+
+
+
+
 
 class BackwardAnalysis(object):
     '''class to perform the backward analysis needed on all of the files'''
 
     def __init__(self, canidates, calls, flow_store, tree):
+        print '\n\n\n'
         self.canidates = canidates
         self.calls = calls
         self.flow_store = flow_store
@@ -521,10 +580,13 @@ class BackwardAnalysis(object):
                 thresh[current] = new_thresholds
             #get data flows from here
             new_data = self.find_data_dependiences(current)
+            print new_data
             #get new flow dependinces here
             new_flow = self.find_flow_dependencies(current)
 
             for can in new_data:
+                print len(searched)
+                print searched
                 if can in searched:
                     #do some math here to make sure its not less
                     print 'already searched?'
@@ -546,9 +608,11 @@ class BackwardAnalysis(object):
                 print 'Thresholds: ', thresh[i]
                 full_print(i)
     
+
     def find_thresholds(self, current):
         '''find any thresholds in the current statement and 
         return them if we find any'''
+        #TODO: Currently only if statements
         if current.statement.node in self.if_visitor.ifs:
             return self.if_visitor.ifs[current.statement.node] 
         else:
@@ -559,7 +623,24 @@ class BackwardAnalysis(object):
         '''find any thresholds in the current statement and 
         return them if we find any'''
         #TODO Implement
-        return []
+        to_return = []
+        if isinstance(current.statement.node, ast.If):
+            vv = GetVarsVisit(current.statement)
+            vv.visit(current.statement.node)
+            for var in vv.class_vars:
+                fa = FindAssigns(var)
+                fa.visit(self.tree)
+                for i in fa.assignments:
+                    obj = SearchStruct(i, current.publisher, current, current.distance + 1)
+                    to_return.append(obj)
+        elif isinstance(current.statement.node, ast.Call):
+            # print 'its a call'
+            pass
+        else:
+            # print type(current.statement.node), ast.dump(current.statement.node),
+            # print current.statement.node.lineno
+            pass
+        return to_return
 
 
     def find_flow_dependencies(self, current):
