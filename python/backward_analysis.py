@@ -277,6 +277,159 @@ class CanidateStore(object):
 
 
 
+class ReachingDefinition(object):
+
+
+
+    def __init__(self, tree, cfg_store):
+        self.tree = tree
+        self.cfg_store = cfg_store
+        self.rds_in = {}
+        self.rds_out = {}
+
+    def compute(self):
+        for i in self.cfg_store:
+            self.rds_out[i] = {}
+            for func in self.cfg_store[i]:
+                val = self.do_function(self.cfg_store[i][func])
+                print val
+                self.rds_out[i][func] = val
+                
+                
+
+
+    def do_function(self, cfg):
+        outs = {}
+        for i in cfg.preds:
+            outs[i] = set() 
+        func = list(cfg.preds[cfg.start])[0]
+        arguments = func.args.args
+        for arg in arguments:
+            if isinstance(arg, ast.Name):
+                if arg.id == 'self':
+                    pass
+                else:
+                    outs[cfg.start].add((arg.id, arg))
+            else:
+                print 'ERROROROR line 314ish'
+
+        #now we will iterate until something changes
+        changed = True 
+        while changed:
+            seen = set()
+            node = cfg.start
+            changed = self.iterate(seen, node, outs, cfg)
+        return outs
+
+
+
+
+    def iterate(self, seen, node, outs, cfg):
+        if node in seen:
+            return False
+        changed = False
+        vals = cfg.preds[node]
+        ins = set()
+        for  val in vals:
+            for to_add in outs[val]:
+                ins.add(to_add)
+
+        gen = self.get_gen(node)
+        kill = self.get_kill(node, ins)
+        temp = (ins - kill)
+        for one_gen in gen:
+            temp.add(one_gen)
+        if temp !=  outs[node]:
+            changed = True
+            outs[node] = temp
+        seen.add(node)
+        if node in cfg.succs:
+            for i in cfg.succs[node]:
+                changed = self.iterate(seen, i, outs, cfg) or changed
+        return changed
+
+
+        
+
+            
+    def get_kill(self, node, current):
+        to_return = set()
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance( target, ast.Name):
+                    name = target.id
+                elif isinstance(target, ast.Attribute):
+                    if isinstance(target.value, ast.Name):
+                        if target.value.id == 'self':
+                           name = 'self.' + target.attr
+                        else:
+                            name = target.value.id
+                    else:
+                        name = self.get_name(target.value)
+                else:
+                    print 'crap!!!1'
+
+        elif isinstance(node, ast.AugAssign):
+            target = node.target
+            if isinstance( target, ast.Name):
+                name = target.id
+            elif isinstance(target, ast.Attribute):
+                name = self.get_name(target.value)
+            else:
+                print 'crap!!!2'
+        else:
+            return set()
+
+        for val in current:
+            if val[0] == name:
+                to_return.add(val)
+        return to_return
+
+
+    def get_name(self, attr):
+        if isinstance(attr, ast.Name):
+            name = attr.id
+        elif isinstance(attr.value, ast.Name):
+            if attr.value.id == 'self':
+                name = 'self.' + attr.attr
+            else:
+                name = attr.value.id
+        elif isinstance(attr.value, ast.Attribute):
+            name = get_name(attr.value)
+        return name
+
+
+    def get_gen(self, node):
+        to_return = set()
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance( target, ast.Name):
+                    to_return.add((target.id, node))
+                elif isinstance(target, ast.Attribute):
+                    if isinstance(target.value, ast.Name):
+                        if target.value.id == 'self':
+                            to_return.add(('self.' + target.attr, node))
+                        else:
+                            to_return.add((target.value.id, node))
+
+
+
+        elif isinstance(node, ast.AugAssign):
+            target = node.target
+            if isinstance( target, ast.Name):
+                to_return.add((target.id, node))
+            elif isinstance(target, ast.Attribute):
+                if isinstance(target.value, ast.Name):
+                    if target.value.id == 'self':
+                        to_return.add(('self' + target.value.id, node))
+                    else:
+                        to_return.add((target.value.id, node))
+        return to_return
+
+
+
+
+
 class BasicVisitor(ast.NodeVisitor):
     '''this is a super simple visitor 
     which keeps track of the current class
@@ -555,7 +708,6 @@ class BackwardAnalysis(object):
     '''class to perform the backward analysis needed on all of the files'''
 
     def __init__(self, canidates, calls, flow_store, tree):
-        print '\n\n\n'
         self.canidates = canidates
         self.calls = calls
         self.flow_store = flow_store
@@ -580,13 +732,13 @@ class BackwardAnalysis(object):
                 thresh[current] = new_thresholds
             #get data flows from here
             new_data = self.find_data_dependiences(current)
-            print new_data
+            # print new_data
             #get new flow dependinces here
             new_flow = self.find_flow_dependencies(current)
 
             for can in new_data:
-                print len(searched)
-                print searched
+                # print len(searched)
+                # print searched
                 if can in searched:
                     #do some math here to make sure its not less
                     print 'already searched?'
@@ -768,11 +920,15 @@ def analyze_file(fname):
             canidates = CanidateStore(a.canidates, tree)
 
             flow_store = cfg_analysis.build_files_cfgs(tree=tree)
-            publish_finder = PublishFinderVisitor()
-            publish_finder.visit(tree)
-            calls = publish_finder.publish_calls
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree)
-            ba.compute()
+
+            rd = ReachingDefinition(tree, flow_store)
+            rd.compute()
+
+            # publish_finder = PublishFinderVisitor()
+            # publish_finder.visit(tree)
+            # calls = publish_finder.publish_calls
+            # ba = BackwardAnalysis(canidates, calls, flow_store, tree)
+            # ba.compute()
 
 
     else:
