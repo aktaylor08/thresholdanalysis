@@ -645,15 +645,16 @@ class GetVarsVisit(ast.NodeVisitor):
                 
 
     def visit_Attribute(self, node):
+        name = get_name(node)
+        self.func_vars.add(name)
         if isinstance(node.value, ast.Name):
             if node.value.id == 'self':
                 #we have a class variable so check it out
                 cv = ClassVariable(self.statement.cls, self.statement.func,
-                        node.attr, node)
+                        name, node)
                 self.class_vars.add(cv)
-            else:
-                name =get_name(node)
-                self.func_vars.add(name)
+            
+
 
 
 class FindAssigns(BasicVisitor):
@@ -816,7 +817,6 @@ class BackwardAnalysis(object):
 
         elif isinstance(current.statement.node, ast.Assign):
             cv, fv = self.get_vars(current.statement, current.statement.node.value)
-            print cv, fv
             for i in cv:
                 class_vars.add(i)
             for i in fv:
