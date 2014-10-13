@@ -279,15 +279,20 @@ class CanidateStore(object):
 
 class ReachingDefinition(object):
 
+    '''class to compute reaching definitions on all functions within
+    a file.  Will compute both exit and enter values for all of them'''
+
 
 
     def __init__(self, tree, cfg_store):
+        '''build'''
         self.tree = tree
         self.cfg_store = cfg_store
         self.rds_in = {}
         self.rds_out = {}
 
     def compute(self):
+        '''compute RD for each funciton'''
         for i in self.cfg_store:
             self.rds_out[i] = {}
             self.rds_in[i] = {}
@@ -300,11 +305,15 @@ class ReachingDefinition(object):
 
 
     def do_function(self, cfg):
+        '''compute ins and outs for a function
+        start off with any params that are not self in the function
+        and than do some iteration until you reach a fix point'''
         outs = {}
         ins = {}
         for i in cfg.preds:
             outs[i] = set() 
         func = list(cfg.preds[cfg.start])[0]
+        #handle the arguments
         arguments = func.args.args
         for arg in arguments:
             if isinstance(arg, ast.Name):
@@ -313,7 +322,7 @@ class ReachingDefinition(object):
                 else:
                     outs[func].add((arg.id, arg))
             else:
-                print 'ERROROROR line 314ish'
+                print 'ERROROROR line 325ish'
 
         #now we will iterate until something changes
         changed = True 
@@ -322,34 +331,38 @@ class ReachingDefinition(object):
             node = cfg.start
             changed = self.iterate(seen, node, outs, cfg)
 
+        #ins are just the union of the preceeding outs.  
         for i in outs:
+            if isinstance(i, ast.FunctionDef):
+                continue
             preds = cfg.preds[i]
             vals = set()
             for p in preds:
                for o in outs[p]:
                    vals.add(o)
             ins[i] = vals
-
-
-
-
         return ins, outs
 
 
 
 
     def iterate(self, seen, node, outs, cfg):
+        '''this is the main function that computs gens
+        and kills and than does the union on the entering data'''
         if node in seen:
             return False
         if isinstance(node, ast.FunctionDef):
             return False
+
         changed = False
+        #add intials
         vals = cfg.preds[node]
         ins = set()
         for  val in vals:
             for to_add in outs[val]:
                 ins.add(to_add)
 
+        #gen kill set operations
         gen = self.get_gen(node)
         kill = self.get_kill(node, ins)
         temp = (ins - kill)
@@ -358,41 +371,26 @@ class ReachingDefinition(object):
         if temp !=  outs[node]:
             changed = True
             outs[node] = temp
+
+        #keep track
         seen.add(node)
+        #visit all the successors
         if node in cfg.succs:
             for i in cfg.succs[node]:
                 changed = self.iterate(seen, i, outs, cfg) or changed
         return changed
 
 
-        
-
-            
     def get_kill(self, node, current):
+        '''kill set -> here its any assignment'''
         to_return = set()
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance( target, ast.Name):
-                    name = target.id
-                elif isinstance(target, ast.Attribute):
-                    if isinstance(target.value, ast.Name):
-                        if target.value.id == 'self':
-                           name = 'self.' + target.attr
-                        else:
-                            name = target.value.id
-                    else:
-                        name = self.get_name(target.value)
-                else:
-                    print 'crap!!!1'
+                name = get_name(target, '')
 
         elif isinstance(node, ast.AugAssign):
             target = node.target
-            if isinstance( target, ast.Name):
-                name = target.id
-            elif isinstance(target, ast.Attribute):
-                name = self.get_name(target.value)
-            else:
-                print 'crap!!!2'
+            name = get_name(target, '')
         else:
             return set()
 
@@ -402,54 +400,28 @@ class ReachingDefinition(object):
         return to_return
 
 
-    def get_name(self, attr):
-        if isinstance(attr, ast.Name):
-            name = attr.id
-        elif isinstance(attr.value, ast.Name):
-            if attr.value.id == 'self':
-                name = 'self.' + attr.attr
-            else:
-                name = attr.value.id
-        elif isinstance(attr.value, ast.Attribute):
-            name = get_name(attr.value)
-        return name
-
-
     def get_gen(self, node):
+        '''gen set -> any assignment'''
         to_return = set()
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance( target, ast.Name):
-                    to_return.add((target.id, node))
-                elif isinstance(target, ast.Attribute):
-                    if isinstance(target.value, ast.Name):
-                        if target.value.id == 'self':
-                            to_return.add(('self.' + target.attr, node))
-                        else:
-                            to_return.add((target.value.id, node))
-                    else:
-                        name = self.get_name(target.value)
-                        to_return.add((name, node))
-
-
-
+                to_return.add((get_name(target),node))
         elif isinstance(node, ast.AugAssign):
             target = node.target
-            if isinstance( target, ast.Name):
-                to_return.add((target.id, node))
-            elif isinstance(target, ast.Attribute):
-                if isinstance(target.value, ast.Name):
-                    if target.value.id == 'self':
-                        to_return.add(('self' + target.value.id, node))
-                    else:
-                        to_return.add((target.value.id, node))
-                else:
-                    name = self.get_name(target.value)
-                    to_return.add((name, node))
+            to_return.add((get_name(target),node))
         return to_return
 
 
 
+def get_name(attr, start=str()):
+    '''get the name recursivley defined'''
+    if isinstance(attr, ast.Name):
+        name = attr.id
+    elif isinstance(attr, ast.Attribute):
+        name = get_name(attr.value, start) +'.' +  get_name(attr.attr, start)
+    elif isinstance(attr, str):
+        name =  attr 
+    return name
 
 
 class BasicVisitor(ast.NodeVisitor):
