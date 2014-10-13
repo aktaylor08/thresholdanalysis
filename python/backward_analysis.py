@@ -746,7 +746,7 @@ class BackwardAnalysis(object):
                     print '\t', can
                     pass
                 else:
-                    print '\t', can
+                    print '\tdata:', can
                     to_search.append(can)
 
             for can in new_flow:
@@ -760,7 +760,7 @@ class BackwardAnalysis(object):
                     print '\t', can
                     pass
                 else:
-                    print '\t', can
+                    print '\tstructure', can
                     to_search.append(can)
             searched.add(current)
         to_print = sorted(list(searched), key=lambda x: x.distance)
