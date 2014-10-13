@@ -12,13 +12,6 @@ import pprinter
 
 from collections import defaultdict, deque
 
-#########################################################
-#
-#       Start of rewriteing stuff right here
-#           Hopefully a bit better way to organize and
-#               keep track of stuff here
-#
-########################################################
 
 class TreeObject(object):
     ''''hold all of the information needed 
@@ -648,7 +641,9 @@ class GetVarsVisit(ast.NodeVisitor):
 
     def visit_Name(self, node):
         # print ast.dump(node)
-        pass
+        self.func_vars.add(node.id)
+
+                
 
     def visit_Attribute(self, node):
         # print ast.dump(node)
@@ -658,6 +653,10 @@ class GetVarsVisit(ast.NodeVisitor):
                 cv = ClassVariable(self.statement.cls, self.statement.func,
                         node.attr, node)
                 self.class_vars.add(cv)
+            else:
+                name =get_name(node)
+                self.func_vars.add(name)
+
 
 class FindAssigns(BasicVisitor):
 
@@ -738,7 +737,8 @@ class BackwardAnalysis(object):
                     #do some math here to make sure its not less
                     print 'already searched?'
                 else:
-                    print 'adding canidate'
+                    # print current.statement.node.lineno, current.statement.node
+                    # print '\t->', can.statement.node.lineno, can.statement.node
                     to_search.append(can)
 
             for can in new_flow:
@@ -769,23 +769,45 @@ class BackwardAnalysis(object):
     def find_data_dependiences(self, current):
         '''find any thresholds in the current statement and 
         return them if we find any'''
-        #TODO Implement
         to_return = []
+        rd = self.reaching_defs[current.statement.cls][current.statement.func]
+        if current.statement.node in rd:
+            rd = rd[current.statement.node]
+        else:
+            rd = rd[current.statement.expr]
+
         if isinstance(current.statement.node, ast.If):
             vv = GetVarsVisit(current.statement)
-            vv.visit(current.statement.node)
+            vv.visit(current.statement.node.test)
             for var in vv.class_vars:
                 fa = FindAssigns(var)
                 fa.visit(self.tree)
                 for i in fa.assignments:
                     obj = SearchStruct(i, current.publisher, current, current.distance + 1)
                     to_return.append(obj)
+            #TODO FANCIER NAME MATCHING -> msg.x -> publish(msg)
+            print current.statement.node.lineno, current.statement.node
+            for fv in vv.func_vars:
+                for d in rd:
+                    if d[0] == fv:
+                        print '\t->', d[1].lineno, d[1]
+                        state = TreeObject(current.statement.cls, current.statement.func, d[1],d[1])
+                        obj = SearchStruct(state, current.publisher, current, current.distance + 1)
+                        to_return.append(obj)
+
         elif isinstance(current.statement.node, ast.Call):
+            #TODO Implement
             # print 'its a call'
+            print 'call!!!'
             pass
-        else:
+        elif isinstance(current.statement.node, ast.Assign):
             # print type(current.statement.node), ast.dump(current.statement.node),
             # print current.statement.node.lineno
+            pass
+        else:
+            # print '\nwhy are you here'
+            # print ast.dump(current.statement.node)
+            # print '\n'
             pass
         return to_return
 
@@ -922,16 +944,16 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
-            for i in rd.rds_in:
-                keys =rd.rds_in[i]
-                for key, values in keys.iteritems():
-                    print key.lineno, key
-                    vals = sorted(values.keys(), key=lambda x: x.lineno)
-                    for i in vals:
-                        print '\t', i.lineno, '->',
-                        for k in values[i]:
-                            print k[0], k[1].lineno,',',
-                        print 
+            # for i in rd.rds_in:
+            #     keys =rd.rds_in[i]
+            #     for key, values in keys.iteritems():
+            #         print key.lineno, key
+            #         vals = sorted(values.keys(), key=lambda x: x.lineno)
+            #         for i in vals:
+            #             print '\t', i.lineno, '->',
+            #             for k in values[i]:
+            #                 print k[0], k[1].lineno,',',
+            #             print 
 
 
             ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in)
