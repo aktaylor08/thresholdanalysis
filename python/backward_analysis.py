@@ -290,16 +290,18 @@ class ReachingDefinition(object):
     def compute(self):
         for i in self.cfg_store:
             self.rds_out[i] = {}
+            self.rds_in[i] = {}
             for func in self.cfg_store[i]:
-                val = self.do_function(self.cfg_store[i][func])
-                print val
-                self.rds_out[i][func] = val
-                
-                
+                ins, outs= self.do_function(self.cfg_store[i][func])
+                self.rds_out[i][func] = outs 
+                self.rds_in[i][func] = ins 
+
+
 
 
     def do_function(self, cfg):
         outs = {}
+        ins = {}
         for i in cfg.preds:
             outs[i] = set() 
         func = list(cfg.preds[cfg.start])[0]
@@ -309,7 +311,7 @@ class ReachingDefinition(object):
                 if arg.id == 'self':
                     pass
                 else:
-                    outs[cfg.start].add((arg.id, arg))
+                    outs[func].add((arg.id, arg))
             else:
                 print 'ERROROROR line 314ish'
 
@@ -319,13 +321,27 @@ class ReachingDefinition(object):
             seen = set()
             node = cfg.start
             changed = self.iterate(seen, node, outs, cfg)
-        return outs
+
+        for i in outs:
+            preds = cfg.preds[i]
+            vals = set()
+            for p in preds:
+               for o in outs[p]:
+                   vals.add(o)
+            ins[i] = vals
+
+
+
+
+        return ins, outs
 
 
 
 
     def iterate(self, seen, node, outs, cfg):
         if node in seen:
+            return False
+        if isinstance(node, ast.FunctionDef):
             return False
         changed = False
         vals = cfg.preds[node]
@@ -411,6 +427,9 @@ class ReachingDefinition(object):
                             to_return.add(('self.' + target.attr, node))
                         else:
                             to_return.add((target.value.id, node))
+                    else:
+                        name = self.get_name(target.value)
+                        to_return.add((name, node))
 
 
 
@@ -424,6 +443,9 @@ class ReachingDefinition(object):
                         to_return.add(('self' + target.value.id, node))
                     else:
                         to_return.add((target.value.id, node))
+                else:
+                    name = self.get_name(target.value)
+                    to_return.add((name, node))
         return to_return
 
 
@@ -707,13 +729,14 @@ class FindAssigns(BasicVisitor):
 class BackwardAnalysis(object):
     '''class to perform the backward analysis needed on all of the files'''
 
-    def __init__(self, canidates, calls, flow_store, tree):
+    def __init__(self, canidates, calls, flow_store, tree, reaching_defs):
         self.canidates = canidates
         self.calls = calls
         self.flow_store = flow_store
         self.tree = tree
         self.if_visitor = IfConstantVisitor(self.canidates)
         self.if_visitor.visit(tree)
+        self.reaching_defs = reaching_defs
 
 
     def compute(self):
@@ -749,7 +772,7 @@ class BackwardAnalysis(object):
             for can in new_flow:
                 if can in searched:
                     #do some math here to make sure its not less
-                    print 'already searched?:', can
+                    print 'already searched?:'
                 else:
                     to_search.append(can)
             searched.add(current)
@@ -924,11 +947,23 @@ def analyze_file(fname):
             rd = ReachingDefinition(tree, flow_store)
             rd.compute()
 
-            # publish_finder = PublishFinderVisitor()
-            # publish_finder.visit(tree)
-            # calls = publish_finder.publish_calls
-            # ba = BackwardAnalysis(canidates, calls, flow_store, tree)
-            # ba.compute()
+            publish_finder = PublishFinderVisitor()
+            publish_finder.visit(tree)
+            calls = publish_finder.publish_calls
+            for i in rd.rds_in:
+                keys =rd.rds_in[i]
+                for key, values in keys.iteritems():
+                    print key.lineno, key
+                    vals = sorted(values.keys(), key=lambda x: x.lineno)
+                    for i in vals:
+                        print '\t', i.lineno, '->',
+                        for k in values[i]:
+                            print k[0], k[1].lineno,',',
+                        print 
+
+
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in)
+            ba.compute()
 
 
     else:
