@@ -847,11 +847,14 @@ class BackwardAnalysis(object):
 
         #do function variables
         printed = False
+        print '------'
         for fv in func_vars:
             for d in rd:
-                v = fv.split('.')[0]
-                d1 = d[0].split('.')[0]
-                if v == d1:
+                v = fv.split('.')
+                d1 = d[0].split('.')
+                # print v
+                # print d1
+                if v == d1[:len(v)]:
                     # if not printed:
                     #     print current.statement.node.lineno, current.statement.node
                     #     printed = True
@@ -859,7 +862,8 @@ class BackwardAnalysis(object):
                     state = TreeObject(current.statement.cls, current.statement.func, d[1],d[1])
                     obj = SearchStruct(state, current.publisher, current, current.distance + 1)
                     to_return.append(obj)
-
+                    
+        print '======='
         return to_return
 
 
@@ -995,20 +999,18 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in)
+            ba.compute()
             # for i in rd.rds_in:
             #     keys =rd.rds_in[i]
             #     for key, values in keys.iteritems():
             #         print key.lineno, key
             #         vals = sorted(values.keys(), key=lambda x: x.lineno)
             #         for i in vals:
-            #             print '\t', i.lineno, '->',
+            #             print '\t', i.lineno, i, '->'
             #             for k in values[i]:
-            #                 print k[0], k[1].lineno,',',
+            #                 print '\t\t', k[0], k[1].lineno
             #             print 
-
-
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in)
-            ba.compute()
 
 
     else:
