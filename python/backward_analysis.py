@@ -640,13 +640,11 @@ class GetVarsVisit(ast.NodeVisitor):
         self.func_vars = set()
 
     def visit_Name(self, node):
-        # print ast.dump(node)
         self.func_vars.add(node.id)
 
                 
 
     def visit_Attribute(self, node):
-        # print ast.dump(node)
         if isinstance(node.value, ast.Name):
             if node.value.id == 'self':
                 #we have a class variable so check it out
@@ -720,32 +718,48 @@ class BackwardAnalysis(object):
 
         while len(to_search) > 0:
             current = to_search.popleft()
+            print '\n'
+            print current
             #find some thresholds
             new_thresholds = self.find_thresholds(current)
             if len(new_thresholds) > 0:
                 thresh[current] = new_thresholds
+                print '\tFOUND THRESHOLD!:',
+                for i in new_thresholds:
+                    pass
+                    print   i,
+                    print 
             #get data flows from here
             new_data = self.find_data_dependiences(current)
-            # print new_data
             #get new flow dependinces here
             new_flow = self.find_flow_dependencies(current)
 
             for can in new_data:
-                # print len(searched)
-                # print searched
                 if can in searched:
                     #do some math here to make sure its not less
-                    print 'already searched?'
+                    print '\talready searched:',
+                    print '\t', can
+                    pass
+                elif can in to_search:
+                    print '\tin queue:',
+                    print '\t', can
+                    pass
                 else:
-                    # print current.statement.node.lineno, current.statement.node
-                    # print '\t->', can.statement.node.lineno, can.statement.node
+                    print '\t', can
                     to_search.append(can)
 
             for can in new_flow:
                 if can in searched:
                     #do some math here to make sure its not less
-                    print 'already searched?:'
+                    print '\talready searched:',
+                    print can
+                    pass
+                elif can in to_search:
+                    print '\tin queue:',
+                    print '\t', can
+                    pass
                 else:
+                    print '\t', can
                     to_search.append(can)
             searched.add(current)
         to_print = sorted(list(searched), key=lambda x: x.distance)
@@ -765,50 +779,87 @@ class BackwardAnalysis(object):
         else:
             return [] 
 
+    def get_vars(self, statement, node):
+        vv = GetVarsVisit(statement)
+        vv.visit(node)
+        return vv.class_vars, vv.func_vars
+
 
     def find_data_dependiences(self, current):
         '''find any thresholds in the current statement and 
         return them if we find any'''
         to_return = []
+        class_vars = set() 
+        func_vars = set() 
+
         rd = self.reaching_defs[current.statement.cls][current.statement.func]
         if current.statement.node in rd:
             rd = rd[current.statement.node]
         else:
-            rd = rd[current.statement.expr]
+            if isinstance(current.statement.node, ast.Name):
+                return []
+            else:
+                rd = rd[current.statement.expr]
 
         if isinstance(current.statement.node, ast.If):
-            vv = GetVarsVisit(current.statement)
-            vv.visit(current.statement.node.test)
-            for var in vv.class_vars:
-                fa = FindAssigns(var)
-                fa.visit(self.tree)
-                for i in fa.assignments:
-                    obj = SearchStruct(i, current.publisher, current, current.distance + 1)
-                    to_return.append(obj)
-            #TODO FANCIER NAME MATCHING -> msg.x -> publish(msg)
-            print current.statement.node.lineno, current.statement.node
-            for fv in vv.func_vars:
-                for d in rd:
-                    if d[0] == fv:
-                        print '\t->', d[1].lineno, d[1]
-                        state = TreeObject(current.statement.cls, current.statement.func, d[1],d[1])
-                        obj = SearchStruct(state, current.publisher, current, current.distance + 1)
-                        to_return.append(obj)
+            cv, fv = self.get_vars(current.statement, current.statement.node.test)
+            class_vars = cv
+            func_vars = fv
 
         elif isinstance(current.statement.node, ast.Call):
-            #TODO Implement
-            # print 'its a call'
-            print 'call!!!'
-            pass
+            for arg in current.statement.node.args:
+                cv, fv = self.get_vars(current.statement, arg)
+                for i in cv:
+                    class_vars.add(i)
+                for i in fv:
+                    func_vars.add(i)
+
         elif isinstance(current.statement.node, ast.Assign):
-            # print type(current.statement.node), ast.dump(current.statement.node),
-            # print current.statement.node.lineno
-            pass
+            cv, fv = self.get_vars(current.statement, current.statement.node.value)
+            print cv, fv
+            for i in cv:
+                class_vars.add(i)
+            for i in fv:
+                func_vars.add(i)
+
+        elif isinstance(current.statement.node, ast.Expr):
+            if isinstance(current.statement.node.value, ast.Call):
+                for arg in current.statement.node.value.args:
+                    cv, fv = self.get_vars(current.statement, arg)
+                    for i in cv:
+                        class_vars.add(i)
+                    for i in fv:
+                        func_vars.add(i)
+            else:
+                print 'Weird you shouldn"t be here'
         else:
-            # print '\nwhy are you here'
-            # print ast.dump(current.statement.node)
-            # print '\n'
-            pass
+            print '\nwhy are you here'
+            print ast.dump(current.statement.node)
+            print '\n'
+
+        #find class statements and reachind definitions to examine next!
+        for var in class_vars:
+            fa = FindAssigns(var)
+            fa.visit(self.tree)
+            for i in fa.assignments:
+                obj = SearchStruct(i, current.publisher, current, current.distance + 1)
+                to_return.append(obj)
+
+        #do function variables
+        printed = False
+        for fv in func_vars:
+            for d in rd:
+                v = fv.split('.')[0]
+                d1 = d[0].split('.')[0]
+                if v == d1:
+                    # if not printed:
+                    #     print current.statement.node.lineno, current.statement.node
+                    #     printed = True
+                    # print '\t->', d[1].lineno, d[0], d[1]
+                    state = TreeObject(current.statement.cls, current.statement.func, d[1],d[1])
+                    obj = SearchStruct(state, current.publisher, current, current.distance + 1)
+                    to_return.append(obj)
+
         return to_return
 
 
