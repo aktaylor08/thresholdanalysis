@@ -414,6 +414,10 @@ def get_name(attr, start=str()):
         name = get_name(attr.value, start) +'.' +  get_name(attr.attr, start)
     elif isinstance(attr, str):
         name =  attr 
+    else:
+        print start
+        print ast.dump(attr)
+        name = ''
     return name
 
 
