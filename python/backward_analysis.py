@@ -836,6 +836,13 @@ class BackwardAnalysis(object):
                         func_vars.add(i)
             else:
                 print 'Weird you shouldn"t be here'
+        elif isinstance(current.statement.node, ast.AugAssign):
+            cv, fv = self.get_vars(current.statement, current.statement.node.value)
+            for i in cv:
+                class_vars.add(i)
+            for i in fv:
+                func_vars.add(i)
+
         else:
             print '\nwhy are you here'
             print ast.dump(current.statement.node)
