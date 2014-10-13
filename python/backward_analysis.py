@@ -640,19 +640,20 @@ class GetVarsVisit(ast.NodeVisitor):
         self.func_vars = set()
 
     def visit_Name(self, node):
+        '''add it to the function variables'''
         self.func_vars.add(node.id)
 
-                
 
     def visit_Attribute(self, node):
+        '''if it is an attribute check the name
+        to see if it starts with self'''
         name = get_name(node)
         self.func_vars.add(name)
-        if isinstance(node.value, ast.Name):
-            if node.value.id == 'self':
-                #we have a class variable so check it out
-                cv = ClassVariable(self.statement.cls, self.statement.func,
-                        name, node)
-                self.class_vars.add(cv)
+        if name.startswith('self.'):
+           #we have a class variable so check it out
+           cv = ClassVariable(self.statement.cls, self.statement.func,
+                name, node)
+           self.class_vars.add(cv)
             
 
 
@@ -673,24 +674,26 @@ class FindAssigns(BasicVisitor):
         # it could be in many other location
         for i in node.targets:
             #assigning to self.asdfasfd is an attribute
-            if isinstance(i, ast.Attribute):
-                if isinstance(i.value, ast.Name):
-                    if i.value.id == 'self':
-                        if i.attr == self.var.name and self.current_class == self.var.cls and self.current_function != self.var.func:
-                            self.assignments.append(TreeObject(self.current_class, 
-                                self.current_function, self.current_expr, node))
+            name = get_name(i)
+            names = name.split('.')
+            varsplit = self.var.name.split('.')
+            if name.startswith('self.') and names ==varsplit[:len(names)]:
+                if self.current_function != self.var.func:
+                    self.assignments.append(TreeObject(self.current_class, 
+                       self.current_function, self.current_expr, node))
 
 
     def visit_AugAssign(self, node):
 
         i =  node.target
         #assigning to self.asdfasfd is an attribute
-        if isinstance(i, ast.Attribute):
-            if isinstance(i.value, ast.Name):
-                if i.value.id == 'self':
-                    if i.attr == self.var.name and self.current_class == self.var.cls and self.current_function != self.var.func:
-                        self.assignments.append(TreeObject(self.current_class, 
-                            self.current_function, self.current_expr, node))
+        name = get_name(i)
+        names = name.split('.')
+        varsplit = self.var.name.split('.')
+        if name.startswith('self.') and names ==varsplit[:len(names)]:
+            if self.current_function != self.var.func:
+                self.assignments.append(TreeObject(self.current_class, 
+                        self.current_function, self.current_expr, node))
 
 
 
@@ -769,6 +772,7 @@ class BackwardAnalysis(object):
                 print '\n'
                 print 'Thresholds: ', thresh[i]
                 full_print(i)
+            
     
 
     def find_thresholds(self, current):
@@ -847,7 +851,6 @@ class BackwardAnalysis(object):
 
         #do function variables
         printed = False
-        print '------'
         for fv in func_vars:
             for d in rd:
                 v = fv.split('.')
@@ -863,7 +866,6 @@ class BackwardAnalysis(object):
                     obj = SearchStruct(state, current.publisher, current, current.distance + 1)
                     to_return.append(obj)
                     
-        print '======='
         return to_return
 
 
