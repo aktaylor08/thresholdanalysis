@@ -808,6 +808,7 @@ class BackwardAnalysis(object):
             if isinstance(current.statement.node, ast.Name):
                 return []
             else:
+                print current.statement.expr.lineno
                 rd = rd[current.statement.expr]
 
         if isinstance(current.statement.node, ast.If):
@@ -898,6 +899,7 @@ class BackwardAnalysis(object):
 
     def search_function_calls(self, tree_thing):
         fcv = FindCallVisitor(tree_thing.cls, tree_thing.func)
+        # print pprinter.dump(self.tree)
         fcv.visit(self.tree)
         return fcv.calls
 
@@ -918,13 +920,21 @@ class  FindCallVisitor(BasicVisitor):
 
 
     def visit_Call(self, node):
+        print node.lineno, self.current_class, self.current_function, self.current_expr
         if self.current_class == self.target_class:
             if isinstance(node.func, ast.Attribute):
                 if isinstance(node.func.value, ast.Name):
                     if node.func.value.id == 'self' and node.func.attr == self.target_func.name:
                         #save this for use
-                        self.calls.append(TreeObject(self.current_class, 
-                                self.current_function, node, self.current_expr))
+                        if self.current_expr is None:
+                            self.calls.append(TreeObject(self.current_class, 
+                                self.current_function, node, node))
+                        else:
+                            self.calls.append(TreeObject(self.current_class, 
+                                self.current_function, self.current_expr, node))
+        self.generic_visit(node)
+
+    
 
 
 class IfConstantVisitor(BasicVisitor):
