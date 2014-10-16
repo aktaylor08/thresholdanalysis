@@ -530,7 +530,9 @@ class AssignFindVisitor(BasicVisitor):
                         self.canidates[self.current_class].append(ClassVariable(
                             self.current_class, self.current_function, i.attr, node ))
                     else:
-                        print 'not assigning to self'
+                        # print ast.dump(node)
+                        #TODO Do we need to worry about anyting else?
+                        pass
 
             elif isinstance(i, ast.Name):
                 self.canidates[self.current_class].append(FunctionVariable(
@@ -714,7 +716,7 @@ class FindAssigns(BasicVisitor):
 class BackwardAnalysis(object):
     '''class to perform the backward analysis needed on all of the files'''
 
-    def __init__(self, canidates, calls, flow_store, tree, reaching_defs):
+    def __init__(self, canidates, calls, flow_store, tree, reaching_defs, verbose=False):
         self.canidates = canidates
         self.calls = calls
         self.flow_store = flow_store
@@ -722,6 +724,7 @@ class BackwardAnalysis(object):
         self.if_visitor = IfConstantVisitor(self.canidates)
         self.if_visitor.visit(tree)
         self.reaching_defs = reaching_defs
+        self.verbose = verbose
 
 
     def compute(self):
@@ -734,17 +737,20 @@ class BackwardAnalysis(object):
 
         while len(to_search) > 0:
             current = to_search.popleft()
-            print '\n'
-            print current
+            if self.verbose:
+                print '\n'
+                print current
             #find some thresholds
             new_thresholds = self.find_thresholds(current)
             if len(new_thresholds) > 0:
                 thresh[current] = new_thresholds
-                print '\tFOUND THRESHOLD!:',
+                if self.verbose:
+                    print '\tFOUND THRESHOLD!:',
                 for i in new_thresholds:
                     pass
-                    print   i,
-                    print 
+                    if self.verbose:
+                        print   i,
+                        print 
             #get data flows from here
             new_data = self.find_data_dependiences(current)
             #get new flow dependinces here
@@ -753,37 +759,47 @@ class BackwardAnalysis(object):
             for can in new_data:
                 if can in searched:
                     #do some math here to make sure its not less
-                    print '\talready searched:',
-                    print '\t', can
+                    if self.verbose:
+                        print '\talready searched:',
+                        print '\t', can
                     pass
                 elif can in to_search:
-                    print '\tin queue:',
-                    print '\t', can
+                    if self.verbose:
+                        print '\tin queue:',
+                        print '\t', can
                     pass
                 else:
-                    print '\tdata:', can
+                    if self.verbose:
+                        print '\tdata:', can
                     to_search.append(can)
 
             for can in new_flow:
                 if can in searched:
                     #do some math here to make sure its not less
-                    print '\talready searched:',
-                    print can
+                    if self.verbose:
+                        print '\talready searched:',
+                        print can
                     pass
                 elif can in to_search:
-                    print '\tin queue:',
-                    print '\t', can
+                    if self.verbose:
+                        print '\tin queue:',
+                        print '\t', can
                     pass
                 else:
-                    print '\tstructure', can
+                    if self.verbose:
+                        print '\tstructure', can
                     to_search.append(can)
             searched.add(current)
         to_print = sorted(list(searched), key=lambda x: x.distance)
+        count = 0
         for i in to_print:
             if i in thresh:
-                print '\n'
-                print 'Thresholds: ', thresh[i]
-                full_print(i)
+                if self.verbose:
+                    print '\n'
+                    print 'Thresholds: ', thresh[i]
+                    full_print(i)
+                count += 1
+        print 'total thresholds {:d}'.format(count)
             
     
 
