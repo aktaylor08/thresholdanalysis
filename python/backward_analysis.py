@@ -539,7 +539,7 @@ class AssignFindVisitor(BasicVisitor):
                     self.current_class, self.current_function, i.id, node))
 
             else:
-                print 'ERROR not implemented type'
+                print 'ERROR not implemented type:', node.lineno, type(node)
 
         self.generic_visit(node)
 
@@ -794,10 +794,9 @@ class BackwardAnalysis(object):
         count = 0
         for i in to_print:
             if i in thresh:
-                if self.verbose:
-                    print '\n'
-                    print 'Thresholds: ', thresh[i]
-                    full_print(i)
+                print '\n'
+                print 'Thresholds: ', thresh[i]
+                full_print(i)
                 count += 1
         print 'total thresholds {:d}'.format(count)
             
@@ -1021,6 +1020,7 @@ class ConstantVisitor(BasicVisitor):
 
 def analyze_file(fname):
     '''new main function...get CFG and find pubs first'''
+    print '\n\n', fname, ':'
     if os.path.isfile(fname):
         tree = None
         with open(fname, 'r') as openf:
@@ -1039,7 +1039,7 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in)
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, True)
             ba.compute()
             # for i in rd.rds_in:
             #     keys =rd.rds_in[i]
