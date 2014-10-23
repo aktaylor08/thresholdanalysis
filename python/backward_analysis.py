@@ -722,7 +722,7 @@ class FindAssigns(BasicVisitor):
 class BackwardAnalysis(object):
     '''class to perform the backward analysis needed on all of the files'''
 
-    def __init__(self, canidates, calls, flow_store, tree, reaching_defs, verbose=False):
+    def __init__(self, canidates, calls, flow_store, tree, reaching_defs, verbose=False, web=False):
         self.canidates = canidates
         self.calls = calls
         self.flow_store = flow_store
@@ -731,6 +731,7 @@ class BackwardAnalysis(object):
         self.if_visitor.visit(tree)
         self.reaching_defs = reaching_defs
         self.verbose = verbose
+        self.web_style = web
 
 
     def compute(self):
@@ -802,44 +803,43 @@ class BackwardAnalysis(object):
         if canidate not in collection:
             return True
         else:
-            col = list(collection)
-            mem = col[col.index(canidate)]
-            print 'We have one already in there'
-            # full_print(mem)
-            # full_print(canidate)
-            mem_calls = get_base_calls(mem)
-            can_calls = get_base_calls(canidate)
-            #if they are different method calls we need to combined them.
-            if set(mem_calls) != set(can_calls):
-                full_print(mem)
-                full_print(canidate)
-                for i in canidate.children:
-                    if i not in mem.children:
-                        mem.children.append(i)
-            # otherwise we need to check distances to determine what to do
-            elif canidate.distance < mem.distance:
-                print "ERROR distance violation!!!"
+            if self.verbose:
+                print 'Already visited:', canidate
+            if self.web_style:
+                col = list(collection)
+                mem = col[col.index(canidate)]
+                mem_calls = get_base_calls(mem)
+                can_calls = get_base_calls(canidate)
+                #if they are different method calls we need to combined them.
+                if set(mem_calls) != set(can_calls):
+                    if self.verbose:
+                        print '\tdifferent calls adding to candiates'
+                    for i in canidate.children:
+                        if i not in mem.children:
+                            if self.verbose:
+                                print '\t\tAdding', mem, '<-', i
+                            mem.children.append(i)
+                # otherwise we need to check distances to determine what to do
+                elif canidate.distance < mem.distance:
+                    print "\tERROR distance violation!!!"
 
-            elif canidate.distance == mem.distance:
-                print '\tsame distance'
-                full_print(mem)
-                full_print(canidate)
-                for i in mem_calls:
-                    print i.distance
-                for i in can_calls:
-                    print i.distance
-                for i in canidate.children:
-                    if i not in mem.children:
-                        mem.children.append(i)
+                elif canidate.distance == mem.distance:
+                    if self.verbose:
+                        print '\tsame distance'
+                    for i in canidate.children:
+                        if i not in mem.children:
+                            mem.children.append(i)
+                            if self.verbose:
+                                print '\t\tAdding', mem, '<-', i
 
-            else:
-                pass
+                else:
+                    pass
 
-            # for i in canidate.children:
-            #         if i not in mem.children:
-            #             print 'combining children'
-            #             print '\t', mem.children, '<-', i
-            #             mem.children.append(i)
+                # for i in canidate.children:
+                #         if i not in mem.children:
+                #             print 'combining children'
+                #             print '\t', mem.children, '<-', i
+                #             mem.children.append(i)
             return False
 
             
@@ -976,6 +976,7 @@ def full_print(obj, tabs=0, visited=None):
     for child in obj.children:
         if not child in visited:
             full_print(child, tabs+1, visited)
+    visited.remove(obj)
 
 def check_important(obj, visited=None):
     if visited is None:
@@ -1116,7 +1117,7 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, False)
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, True, True)
             ba.compute()
             # for i in rd.rds_in:
             #     keys =rd.rds_in[i]
