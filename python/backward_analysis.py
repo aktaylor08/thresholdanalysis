@@ -114,12 +114,18 @@ class SearchStruct(object):
     analysis'''
 
 
-    def __init__(self, statement, publisher, child, distance):
+    def __init__(self, statement, publisher, children, distance, important=False, distance_cost=1):
         self.statement = statement
         self.publisher = publisher 
-        self.child = child
+        if children is None:
+            self.children = []
+        elif not isinstance(children, list):
+            self.children = [children]
+        else:
+            self.children= children
         self.distance = distance
         self.parent = None
+        self.important = important
 
 
     def __str__(self):
@@ -731,10 +737,10 @@ class BackwardAnalysis(object):
         searched = set()
         to_search = deque()
         thresh = {} 
+        #add important statements
         for call in self.calls:
-            obj = SearchStruct(call,call, None, 0)
+            obj = SearchStruct(call,call, None, 0, important=True, distance_cost=0)
             to_search.append(obj)
-
         while len(to_search) > 0:
             current = to_search.popleft()
             if self.verbose:
@@ -757,39 +763,26 @@ class BackwardAnalysis(object):
             new_flow = self.find_flow_dependencies(current)
 
             for can in new_data:
-                if can in searched:
-                    #do some math here to make sure its not less
+                ok = True
+                ok = ok and self.check_member(can, to_search)
+                ok = ok and self.check_member(can, searched)
+                if ok:
                     if self.verbose:
-                        print '\talready searched:',
-                        print '\t', can
-                    pass
-                elif can in to_search:
-                    if self.verbose:
-                        print '\tin queue:',
-                        print '\t', can
-                    pass
-                else:
-                    if self.verbose:
-                        print '\tdata:', can
+                        print '\tstructure', can
                     to_search.append(can)
 
             for can in new_flow:
-                if can in searched:
-                    #do some math here to make sure its not less
-                    if self.verbose:
-                        print '\talready searched:',
-                        print can
-                    pass
-                elif can in to_search:
-                    if self.verbose:
-                        print '\tin queue:',
-                        print '\t', can
-                    pass
-                else:
+                ok = True
+                ok = ok and self.check_member(can, to_search)
+                ok = ok and self.check_member(can, searched)
+                if ok:
                     if self.verbose:
                         print '\tstructure', can
                     to_search.append(can)
             searched.add(current)
+
+
+
         to_print = sorted(list(searched), key=lambda x: x.distance)
         count = 0
         for i in to_print:
@@ -799,6 +792,56 @@ class BackwardAnalysis(object):
                 full_print(i)
                 count += 1
         print 'total thresholds {:d}'.format(count)
+     
+
+
+    def check_member(self, canidate, collection):
+        '''check if it is a memeber and if it is
+            then add it to the children  return true if
+            it is not'''
+        if canidate not in collection:
+            return True
+        else:
+            col = list(collection)
+            mem = col[col.index(canidate)]
+            print 'We have one already in there'
+            # full_print(mem)
+            # full_print(canidate)
+            mem_calls = get_base_calls(mem)
+            can_calls = get_base_calls(canidate)
+            #if they are different method calls we need to combined them.
+            if set(mem_calls) != set(can_calls):
+                full_print(mem)
+                full_print(canidate)
+                for i in canidate.children:
+                    if i not in mem.children:
+                        mem.children.append(i)
+            # otherwise we need to check distances to determine what to do
+            elif canidate.distance < mem.distance:
+                print "ERROR distance violation!!!"
+
+            elif canidate.distance == mem.distance:
+                print '\tsame distance'
+                full_print(mem)
+                full_print(canidate)
+                for i in mem_calls:
+                    print i.distance
+                for i in can_calls:
+                    print i.distance
+                for i in canidate.children:
+                    if i not in mem.children:
+                        mem.children.append(i)
+
+            else:
+                pass
+
+            # for i in canidate.children:
+            #         if i not in mem.children:
+            #             print 'combining children'
+            #             print '\t', mem.children, '<-', i
+            #             mem.children.append(i)
+            return False
+
             
     
 
@@ -925,10 +968,44 @@ class BackwardAnalysis(object):
         return fcv.calls
 
 
-def full_print(obj, tabs=0):
+def full_print(obj, tabs=0, visited=None):
     print '\t' * tabs, obj
-    if obj.child is not None:
-        full_print(obj.child, tabs+1)
+    if visited is None:
+        visited = set()
+    visited.add(obj)
+    for child in obj.children:
+        if not child in visited:
+            full_print(child, tabs+1, visited)
+
+def check_important(obj, visited=None):
+    if visited is None:
+        visited = set()
+    if obj in visited:
+        return False
+    if len(obj.children) == 0:
+        return obj.important
+    else:
+        important = False
+        for child in obj.children:
+            important = check_important(child, visited)
+        return important
+
+def get_base_calls(thing):
+    values = []
+    if len(thing.children) == 0:
+        values.append(thing)
+    else:
+        for i in thing.children:
+            ret = get_base_calls(i) 
+            for v in ret:
+                values.append(v)
+    return values
+    
+
+
+    
+
+
 
 
 class  FindCallVisitor(BasicVisitor):
@@ -1039,7 +1116,7 @@ def analyze_file(fname):
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
             calls = publish_finder.publish_calls
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, True)
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, False)
             ba.compute()
             # for i in rd.rds_in:
             #     keys =rd.rds_in[i]
