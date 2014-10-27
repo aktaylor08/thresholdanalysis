@@ -1106,12 +1106,52 @@ class ConstantVisitor(BasicVisitor):
                 if fv in self.canidates.func_vars[self.current_class]:
                     self.consts.append(fv)
 
-def replace_values(tree, back_analysis):
-    for i in back_analysis.thresholds:
-        print i
-    print back_analysis.thresholds
-    print dir(tree)
-    print tree.body[0]
+class AddImportStatement(ast.NodeTransformer):
+
+
+    def visit_Module(self, node):
+        new_node = ast.Import(names=[ast.alias(name='reporting', asname=None)])
+        new_node = ast.copy_location(new_node, node.body[0])
+        ast.increment_lineno(node.body[0],1)
+        node.body = [new_node] + node.body
+        return node
+
+class ModCalls(ast.NodeTransformer):
+
+
+    def __init__(self, ba, fname):
+        self.ba = ba
+        self.fname = fname
+        self.tmap = {}
+        for i in ba.thresholds:
+            self.tmap[i[0].statement.node] = i
+
+
+    def visit_If(self, node):
+        if node in self.tmap:
+            name = ast.Name(id='reporting', ctx=ast.Load())
+            attr = ast.Attribute(value=name, attr='report', ctx=ast.Load())
+            args = [node.test, ast.Str(s=str(node.lineno)), ast.Str(s=self.fname)]
+            call = ast.Call(func=attr, args=args, keywords=[],starargs=None, kwargs=None)
+            node.test = call 
+            print 'replacing'
+        return node
+
+
+
+
+
+def replace_values(tree, back_analysis, fname):
+
+    tree = ModCalls(back_analysis, fname).visit(tree)
+    tree = AddImportStatement().visit(tree)
+    ast.fix_missing_locations(tree)
+
+    code =compile(tree,fname ,mode='exec')
+    print dir(code)
+    ns = {'__name__' : '__main__'}
+    exec(code, ns)
+
 
 def analyze_file(fname, execute=False):
     '''new main function...get CFG and find pubs first'''
@@ -1142,7 +1182,7 @@ def analyze_file(fname, execute=False):
 
             if execute:
                 print 'working on execution'
-                tree = replace_values(tree, ba) 
+                tree = replace_values(tree, ba, fname) 
             
 
             # for i in rd.rds_in:
