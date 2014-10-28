@@ -5,6 +5,7 @@ import ast
 import os
 import symtable
 import argparse
+import copy
 
 import cfg_analysis
 
@@ -1129,15 +1130,44 @@ class ModCalls(ast.NodeTransformer):
 
     def visit_If(self, node):
         if node in self.tmap:
+            print '\n'
+            print ast.dump(node.test)
+            print '\n'
+            nav = NameAttrVisitor()
+            nav.visit(node.test)
+            for i in nav.things:
+                print i.arg
+                print i.value.lineno
+                ast.fix_missing_locations(i.value)
+
             name = ast.Name(id='reporting', ctx=ast.Load())
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load())
             args = [node.test, ast.Str(s=str(node.lineno)), ast.Str(s=self.fname)]
-            call = ast.Call(func=attr, args=args, keywords=[],starargs=None, kwargs=None)
+
+            call = ast.Call(func=attr, args=args, keywords=nav.things,starargs=None, kwargs=None)#nav.things)
             node.test = call 
-            print 'replacing'
         return node
 
 
+
+
+class NameAttrVisitor(ast.NodeVisitor):
+
+    def __init__(self):
+        self.things = [] 
+
+
+    def visit_Name(self, node):
+        name = get_name(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+        # self.things[name] = copy.deepcopy(node)
+
+    def visit_Attribute(self, node):
+        name = get_name(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+        # self.things[name] = copy.deepcopy(node)
 
 
 
@@ -1148,7 +1178,6 @@ def replace_values(tree, back_analysis, fname):
     ast.fix_missing_locations(tree)
 
     code =compile(tree,fname ,mode='exec')
-    print dir(code)
     ns = {'__name__' : '__main__'}
     exec(code, ns)
 
