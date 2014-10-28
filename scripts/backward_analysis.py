@@ -1244,5 +1244,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=('This is a program to find' 
         'constant thresholds in a python program'))
     parser.add_argument('file',  help='path to file')
+    parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
+    print 'rest of args:', args.rest  
     analyze_file(args.file, True)
