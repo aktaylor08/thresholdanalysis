@@ -9,7 +9,7 @@ import copy
 
 import cfg_analysis
 
-import pprinter
+import rospy
 
 from collections import defaultdict, deque
 
@@ -614,6 +614,53 @@ class IfOrFuncVisitor(BasicVisitor):
             BasicVisitor.generic_visit(self, node)
 
 
+class ServiceFinderVisitor(BasicVisitor):
+
+    def __init__(self):
+        BasicVisitor.__init__(self)
+        self.proxies = []
+
+    def visit_Assign(self, node):
+
+        if isinstance(node.value, ast.Call):
+            if isinstance(node.value.func, ast.Attribute):
+                if isinstance(node.value.func.value, ast.Name):
+                    if node.value.func.value.id == 'rospy' and node.value.func.attr == 'ServiceProxy':
+                        for i in node.targets:
+                            name = get_name(i)
+                            if name.startswith('self'):
+                                cv = ClassVariable(self.current_class, self.current_function, name,node) 
+                                self.proxies.append(cv)
+                            else:
+                                fv = FunctionVariable(self.current_class, self.current_function, name,node)
+                                self.proxies.append(cv)
+
+class ServiceCallFinder(BasicVisitor):
+
+    def __init__(self, proxies):
+        BasicVisitor.__init__(self)
+        self.proxies = proxies 
+        self.calls = [] 
+
+    def visit_Call(self, node):
+        func = node.func
+        name = get_name(func)
+        if name.startswith('self'):
+            #check function variable:w
+            cv = ClassVariable(self.current_class, self.current_function, name, node)
+            if cv in self.proxies:
+                self.calls.append(
+                        TreeObject(self.current_class, 
+                            self.current_function, self.current_expr, node))
+
+        else:
+            fv = FunctionVariable(self.current_class, self.current_function, name, node)
+            if fv in self.proxies:
+                self.calls.append(
+                        TreeObject(self.current_class, 
+                            self.current_function, self.current_expr, node))
+
+
 class PublishFinderVisitor(BasicVisitor):
     '''find and store all of the rospy.publish calls 
     in this manner we can get all of the functions and 
@@ -1130,14 +1177,9 @@ class ModCalls(ast.NodeTransformer):
 
     def visit_If(self, node):
         if node in self.tmap:
-            print '\n'
-            print ast.dump(node.test)
-            print '\n'
             nav = NameAttrVisitor()
             nav.visit(node.test)
             for i in nav.things:
-                print i.arg
-                print i.value.lineno
                 ast.fix_missing_locations(i.value)
 
             name = ast.Name(id='reporting', ctx=ast.Load())
@@ -1181,8 +1223,27 @@ def replace_values(tree, back_analysis, fname):
     ns = {'__name__' : '__main__'}
     exec(code, ns)
 
+def find_services(tree):
+    service_finder = ServiceFinderVisitor()
+    service_finder.visit(tree)
+    call_finder = ServiceCallFinder(service_finder.proxies)
+    call_finder.visit(tree)
+    return call_finder.calls
 
-def analyze_file(fname, execute=False):
+
+
+
+def close_graph(node, graph, visited):
+    if node in visited:
+        return
+    if node not in graph:
+        return
+    visited.add(node)
+    for target in graph[node]:
+        close_graph(target, graph, visited)
+
+
+def analyze_file(fname, verbose=False, execute=False):
     '''new main function...get CFG and find pubs first'''
     print '\n\n', fname, ':'
     if os.path.isfile(fname):
@@ -1202,43 +1263,27 @@ def analyze_file(fname, execute=False):
 
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
-            calls = publish_finder.publish_calls
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, False, True)
+
+            services = find_services(tree)
+
+            calls = publish_finder.publish_calls + services
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=True)
             ba.compute()
-            print len(ba.thresholds)
+            print 'file: ', fname, 'thresholds:', len(ba.thresholds)
             for i in ba.thresholds:
-                full_print(i[0])
+                print i[0], i[1]
+
+            if verbose:
+                for i in ba.thresholds:
+                    full_print(i[0])
 
             if execute:
-                print 'working on execution'
                 tree = replace_values(tree, ba, fname) 
             
-
-            # for i in rd.rds_in:
-            #     keys =rd.rds_in[i]
-            #     for key, values in keys.iteritems():
-            #         print key.lineno, key
-            #         vals = sorted(values.keys(), key=lambda x: x.lineno)
-            #         for i in vals:
-            #             print '\t', i.lineno, i, '->'
-            #             for k in values[i]:
-            #                 print '\t\t', k[0], k[1].lineno
-            #             print 
 
 
     else:
         print 'error no file'
-
-
-def close_graph(node, graph, visited):
-    if node in visited:
-        return
-    if node not in graph:
-        return
-    visited.add(node)
-    for target in graph[node]:
-        close_graph(target, graph, visited)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=('This is a program to find' 
@@ -1247,4 +1292,4 @@ if __name__ == '__main__':
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
     print 'rest of args:', args.rest  
-    analyze_file(args.file, True)
+    analyze_file(args.file, verbose=False, execute=True)
