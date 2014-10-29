@@ -5,12 +5,11 @@ import rospy
 import datetime
 from std_msgs.msg import String
 
-def report(expr, line, f_name, *args,  **kwargs):
+def report(expr, f_name, line,check, *args,  **kwargs):
 
-    vals = [datetime.datetime.now().isoformat() ,str(f_name), str(line), str(expr)]
-
-    for name, val in enumerate(kwargs):
-        vals.append(str(name) + ':' + str(val))
+    vals = [datetime.datetime.now().isoformat() ,str(f_name), str(line),str(check),str(expr)]
+    for key in kwargs:
+        vals.append(str(key) + ':' + str(kwargs[key]))
     vals =','.join(vals)
     Reporter.Instance().publish(vals)
     return expr 
