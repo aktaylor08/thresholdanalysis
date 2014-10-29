@@ -1167,10 +1167,11 @@ class AddImportStatement(ast.NodeTransformer):
 class ModCalls(ast.NodeTransformer):
 
 
-    def __init__(self, ba, fname):
+    def __init__(self, ba, fname, code):
         self.ba = ba
         self.fname = fname
         self.tmap = {}
+        self.code = code
         for i in ba.thresholds:
             self.tmap[i[0].statement.node] = i
 
@@ -1184,7 +1185,8 @@ class ModCalls(ast.NodeTransformer):
 
             name = ast.Name(id='reporting', ctx=ast.Load())
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load())
-            args = [node.test, ast.Str(s=str(node.lineno)), ast.Str(s=self.fname)]
+            code = self.code.split('\n')[node.lineno-1].lstrip().strip()
+            args = [node.test, ast.Str(s=self.fname), ast.Str(s=str(node.lineno)),ast.Str(s=code)]
 
             call = ast.Call(func=attr, args=args, keywords=nav.things,starargs=None, kwargs=None)#nav.things)
             node.test = call 
@@ -1202,6 +1204,7 @@ class NameAttrVisitor(ast.NodeVisitor):
     def visit_Name(self, node):
         name = get_name(node)
         keyword = ast.keyword(arg=name, value=node)
+        print keyword
         self.things.append(keyword)
         # self.things[name] = copy.deepcopy(node)
 
@@ -1213,15 +1216,16 @@ class NameAttrVisitor(ast.NodeVisitor):
 
 
 
-def replace_values(tree, back_analysis, fname):
+def replace_values(tree, back_analysis, fname, code):
 
-    tree = ModCalls(back_analysis, fname).visit(tree)
+    tree = ModCalls(back_analysis, fname, code).visit(tree)
     tree = AddImportStatement().visit(tree)
     ast.fix_missing_locations(tree)
 
     code =compile(tree,fname ,mode='exec')
     ns = {'__name__' : '__main__'}
     exec(code, ns)
+
 
 def find_services(tree):
     service_finder = ServiceFinderVisitor()
@@ -1278,7 +1282,7 @@ def analyze_file(fname, verbose=False, execute=False):
                     full_print(i[0])
 
             if execute:
-                tree = replace_values(tree, ba, fname) 
+                tree = replace_values(tree, ba, fname, code) 
             
 
 
