@@ -8,8 +8,6 @@ from std_msgs.msg import String
 def report(expr, line, f_name, *args,  **kwargs):
 
     vals = [datetime.datetime.now().isoformat() ,str(f_name), str(line), str(expr)]
-    print vals
-
 
     for name, val in enumerate(kwargs):
         vals.append(str(name) + ':' + str(val))
@@ -64,7 +62,7 @@ class Reporter:
 
     def __init__(self):
         print rospy.get_name()
-        self.pub = rospy.Publisher('threshold_information', String)
+        self.pub = rospy.Publisher('threshold_information', String, queue_size=100)
 
     def publish(self, msg):
         self.pub.publish(msg)
