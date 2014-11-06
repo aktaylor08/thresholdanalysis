@@ -1271,7 +1271,7 @@ def analyze_file(fname, verbose=False, execute=False):
             services = find_services(tree)
 
             calls = publish_finder.publish_calls + services
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=True)
+            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=False)
             ba.compute()
             print 'file: ', fname, 'thresholds:', len(ba.thresholds)
             for i in ba.thresholds:
@@ -1293,7 +1293,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=('This is a program to find' 
         'constant thresholds in a python program'))
     parser.add_argument('file',  help='path to file')
+    parser.add_argument('--no_execute',  help='Set execution to false', 
+            action='store_true', )
+    parser.add_argument('--verbose',  help='Verbose mode', 
+            action='store_true', )
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
+    print args.no_execute
     print 'rest of args:', args.rest  
-    analyze_file(args.file, verbose=False, execute=True)
+    analyze_file(args.file, verbose=args.verbose, execute=not args.no_execute)
