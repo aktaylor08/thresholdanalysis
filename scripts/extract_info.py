@@ -127,8 +127,20 @@ def get_thresh_percents(df):
     return total, percent
 
 
+def get_bads_time(df):
+    to_ret = []
+    idx = df.mark_bad__data_nsecs.dropna().index
+    vals = df.loc[idx,['mark_bad__data_secs',  'mark_bad__data_nsecs']]
+    for _, data in vals.iterrows():
+        s = data['mark_bad__data_secs']
+        ns = data['mark_bad__data_nsecs']
+        time = s + ns / 1000000000.0
+        to_ret.append(pd.to_datetime(time, unit='s'))
+    return to_ret
+
 def check_bad_vs_good(df, thresh):
     bads, goods =  get_goods_bads(df)
+    # bads =get_bads_time(df)
     fstring = '{:s}\t\t{:.2%}\t{:f}'
     total, percent = get_thresh_percents(thresh)
     for name in thresh['id'].unique():
@@ -146,7 +158,8 @@ def check_bad_vs_good(df, thresh):
 def last_flop(df, thresh, cutoff=.1):
     print len(df)
     print len(thresh)
-    bads, goods = get_goods_bads(df)
+    # bads, goods = get_goods_bads(df)
+    bads = get_bads_time(df)
     lows = []
     highs = []
     totals, percents = get_thresh_percents(thresh)
@@ -166,25 +179,11 @@ def last_flop(df, thresh, cutoff=.1):
         elif tid in highs:
             opposite = group[group.result == 'False']
             flops[tid] = opposite.index
-    
-    for name in flops.keys():
-        arr = np.empty(len(thresh))
-        arr.fill(np.NAN)
-        thresh[name] = arr
 
     for name in flops.keys():
-        print name
-        points = flops[name]
-        points2 = points[1:].tolist()
-        points2.append(thresh.index[-1])
+        thresh[name] = pd.Series(flops[name], flops[name])
+        thresh[name] = (thresh.index - thresh[name].ffill()) / np.timedelta64(1, 's')
 
-        # points2 = np.array(points2.tolist().append(thresh.index[-1]))
-        for s,e in zip(points, points2):
-            print '\t', s, e
-            vals = thresh.between_time(s,e)[name]
-            for time,_ in vals.iteritems():
-                diff = (time - s).total_seconds()
-                thresh.at[time, name] = diff
 
     cols = [x for x in thresh.columns if x.startswith('/')]
     for time in bads:
