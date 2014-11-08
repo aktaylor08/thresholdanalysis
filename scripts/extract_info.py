@@ -2,12 +2,21 @@
 # encoding: utf-8
 
 import rosbag_pandas as rbp
+import datetime
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import sys
 
+from IPython import embed
+
+
 
 def add_to_store(store, key, idx, value, length):
+    try:
+        value = float(value)
+    except:
+        pass
     if key in store:
         store[key][idx] = value
     else:
@@ -20,20 +29,23 @@ def add_to_store(store, key, idx, value, length):
         store[key] = arr
 
 
-def to_dataframe(iterable):
-    length = len(iterable)
+def to_dataframe(series):
+    length = len(series)
     datastore = {}
     index = np.array([None] * length)
     idx = 0
-    for i in iterable:
+    for bag_time, i in series.iteritems():
         vals = i.split(',')
         time = vals[0]
-        index[idx] = pd.to_datetime(time)
+        index[idx] = pd.to_datetime(float(time), unit='s')
 
         fname = vals[1]
-        add_to_store(datastore, 'file_name', idx, fname, length)
         lineno = vals[2]
+        thresh_id = fname + str(lineno) 
+        add_to_store(datastore, 'id', idx, thresh_id, length)
+        add_to_store(datastore, 'file_name', idx, fname, length)
         add_to_store(datastore, 'line_number', idx, lineno, length)
+
         line = vals[3]
         add_to_store(datastore, 'line', idx, line, length)
         truth = vals[4]
@@ -58,11 +70,135 @@ def to_dataframe(iterable):
 
 def from_file(fname, return_both=False):
     df = rbp.bag_to_dataframe(fname)
-    thresh = to_dataframe(df.threshold_information__data.dropna().values)
+    thresh = to_dataframe(df.threshold_information__data.dropna())
     if return_both:
         return thresh, df
     else:
         return thresh
+
+
+def get_time_window(df, et, length):
+        st = et - datetime.timedelta(0,2.0)
+        return df.between_time(st, et)
+
+
+def get_goods_bads(df):
+    '''get the good and bad markers'''
+    try:
+        bads = df.mark_bad__data_nsecs.dropna().index
+    except Exception as e:
+        print e
+        bads = []
+    try:
+        goods = df.mark_good__data_nsecs.dropna().index
+    except Exception as e:
+        print e
+        goods = []
+
+    return bads, goods
+
+
+def get_total_and_percentage_result(group):
+    '''get the total and percentage for a number of groups'''
+    vc = group['result'].value_counts()
+    try:
+        trues = vc['True']
+    except:
+        trues = 0
+
+    try:
+        falses = vc['False']
+    except:
+        falses = 0
+
+    total = trues + falses
+    percent = float(trues) / total
+    return total, percent
+
+
+def get_thresh_percents(df):
+    '''get percentages and totals for all of the thresholds
+    as a dictonary returned'''
+    total = {}
+    percent = {}
+    all_groups = df.groupby('id') 
+    for name, group in all_groups:
+        total[name], percent[name] = get_total_and_percentage_result(group)
+    return total, percent
+
+
+def check_bad_vs_good(df, thresh):
+    bads, goods =  get_goods_bads(df)
+    fstring = '{:s}\t\t{:.2%}\t{:f}'
+    total, percent = get_thresh_percents(thresh)
+    for name in thresh['id'].unique():
+        print fstring.format(name, percent[name],  total[name])
+    print '\n\n'
+
+    for et in bads:
+        print et
+        checks = get_time_window(thresh, et, 1) 
+        t, p = get_thresh_percents(checks)
+        for name in t.keys():
+            print '\t', fstring.format(name, p[name], t[name])
+
+
+def last_flop(df, thresh, cutoff=.1):
+    print len(df)
+    print len(thresh)
+    bads, goods = get_goods_bads(df)
+    lows = []
+    highs = []
+    totals, percents = get_thresh_percents(thresh)
+    for i in percents:
+        if percents[i] < cutoff:
+            lows.append(i)
+        elif percents[i] > 1.0 - cutoff:
+            highs.append(i)
+
+         
+    flops = {}
+    #store the flops
+    for tid, group in thresh.groupby('id'):
+        if tid in lows:
+            opposite = group[group.result == 'True']
+            flops[tid] = opposite.index
+        elif tid in highs:
+            opposite = group[group.result == 'False']
+            flops[tid] = opposite.index
+    
+    for name in flops.keys():
+        arr = np.empty(len(thresh))
+        arr.fill(np.NAN)
+        thresh[name] = arr
+
+    for name in flops.keys():
+        print name
+        points = flops[name]
+        points2 = points[1:].tolist()
+        points2.append(thresh.index[-1])
+
+        # points2 = np.array(points2.tolist().append(thresh.index[-1]))
+        for s,e in zip(points, points2):
+            print '\t', s, e
+            vals = thresh.between_time(s,e)[name]
+            for time,_ in vals.iteritems():
+                diff = (time - s).total_seconds()
+                thresh.at[time, name] = diff
+
+    cols = [x for x in thresh.columns if x.startswith('/')]
+    for time in bads:
+        t = thresh.index.asof(time)
+        data = thresh.loc[t, cols]
+        data.sort()
+        for k,v in data.iteritems():
+            print k, v
+
+        
+
+    embed()
+
+
 
 
 
@@ -75,7 +211,9 @@ if __name__ == '__main__':
     f = sys.argv[1]
     df = rbp.bag_to_dataframe(f)
     data = df.threshold_information__data
-    to_dataframe(data.dropna().values)
+    thresh = to_dataframe(data.dropna())
+    check_bad_vs_good(df,thresh)
+    last_flop(df, thresh)
 
 
 

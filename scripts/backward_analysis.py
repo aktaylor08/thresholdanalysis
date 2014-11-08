@@ -1167,17 +1167,20 @@ class AddImportStatement(ast.NodeTransformer):
 class ModCalls(ast.NodeTransformer):
 
 
-    def __init__(self, ba, fname, code):
+    def __init__(self, ba, fname, code, verbose):
         self.ba = ba
         self.fname = fname
         self.tmap = {}
         self.code = code
+        self.verbose = verbose
         for i in ba.thresholds:
             self.tmap[i[0].statement.node] = i
 
 
     def visit_If(self, node):
         if node in self.tmap:
+            if self.verbose:
+                print 'modifying:', node.lineno, node
             nav = NameAttrVisitor()
             nav.visit(node.test)
             for i in nav.things:
@@ -1190,6 +1193,7 @@ class ModCalls(ast.NodeTransformer):
 
             call = ast.Call(func=attr, args=args, keywords=nav.things,starargs=None, kwargs=None)#nav.things)
             node.test = call 
+        self.generic_visit(node)
         return node
 
 
@@ -1216,9 +1220,10 @@ class NameAttrVisitor(ast.NodeVisitor):
 
 
 
-def replace_values(tree, back_analysis, fname, code):
+def replace_values(tree, back_analysis, fname, code, verbose):
 
-    tree = ModCalls(back_analysis, fname, code).visit(tree)
+
+    tree = ModCalls(back_analysis, fname, code, verbose).visit(tree)
     tree = AddImportStatement().visit(tree)
     ast.fix_missing_locations(tree)
 
@@ -1282,7 +1287,9 @@ def analyze_file(fname, verbose=False, execute=False):
                     full_print(i[0])
 
             if execute:
-                tree = replace_values(tree, ba, fname, code) 
+                if verbose:
+                    print '\n\n\nnow modifying source code\n\n\n'
+                tree = replace_values(tree, ba, fname, code, verbose) 
             
 
 

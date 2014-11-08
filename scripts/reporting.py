@@ -2,14 +2,18 @@
 # encoding: utf-8
 
 import rospy
+import binascii
 import datetime
 from std_msgs.msg import String
 
 def report(expr, f_name, line,check, *args,  **kwargs):
 
-    vals = [datetime.datetime.now().isoformat() ,str(f_name), str(line),str(check),str(expr)]
+    vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), str(f_name), str(line),str(check),str(expr)]
     for key in kwargs:
-        vals.append(str(key) + ':' + str(kwargs[key]))
+        if type(kwargs[key]) is bytes:
+            vals.append(str(key) + ':' + binascii.hexlify(kwargs[key]))
+        else:
+            vals.append(str(key) + ':' + str(kwargs[key]))
     vals =','.join(vals)
     Reporter.Instance().publish(vals)
     return expr 
