@@ -154,6 +154,13 @@ def check_bad_vs_good(df, thresh):
         for name in t.keys():
             print '\t', fstring.format(name, p[name], t[name])
 
+def ts_to_sec(ts):
+    epoch = datetime.datetime.utcfromtimestamp(0)
+    delta = ts - epoch
+    try:
+        return delta.total_seconds()
+    except:
+        return np.NaN
 
 def last_flop(df, thresh, cutoff=.1):
     print len(df)
@@ -180,9 +187,12 @@ def last_flop(df, thresh, cutoff=.1):
             opposite = group[group.result == 'False']
             flops[tid] = opposite.index
 
+    cur_time = thresh.index.to_series().apply(ts_to_sec)
     for name in flops.keys():
         thresh[name] = pd.Series(flops[name], flops[name])
-        thresh[name] = (thresh.index - thresh[name].ffill()) / np.timedelta64(1, 's')
+        thresh[name] = thresh[name].apply(func=lambda x: pd.Timestamp(x))
+        thresh[name] = thresh[name].apply(ts_to_sec)
+        thresh[name] = cur_time - thresh[name].ffill() 
 
 
     cols = [x for x in thresh.columns if x.startswith('/')]
