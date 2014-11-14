@@ -6,6 +6,7 @@ import os
 import symtable
 import argparse
 import copy
+import pprinter
 
 import cfg_analysis
 
@@ -1184,6 +1185,7 @@ class ModCalls(ast.NodeTransformer):
             nav = NameAttrVisitor()
             nav.visit(node.test)
             for i in nav.things:
+                print i.arg
                 ast.fix_missing_locations(i.value)
 
             name = ast.Name(id='reporting', ctx=ast.Load())
@@ -1204,20 +1206,66 @@ class NameAttrVisitor(ast.NodeVisitor):
     def __init__(self):
         self.things = [] 
 
+    #AT the moment I'm skipping expressions. Not sure if they need to visited or not
+    def visit_UnaryOp(self, node):
+        name = str(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+
+        self.visit(node.operand)
+
+
+    def visit_BinOp(self, node):
+        name = str(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+
+        self.visit(node.left)
+        self.visit(node.right)
+
+
+    def visit_BoolOp(self, node):
+        name = str(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+
+        for i in node.values:
+            self.visit(i)
+
+    def visit_Compare(self, node):
+        name = str(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+
+        self.visit(node.left)
+        for i in node.comparators:
+            self.visit(i)
+
+
+    def visit_Call(self, node):
+        name =str(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+
+        for i in node.args:
+            self.visit(i)
+
+        for i in node.keywords:
+            self.visit(i)
+
+        #TODO Ignoring starargs and kwargs for now
+
+        
+    def visit_Attribute(self, node):
+        name = str(node)
+        keyword = ast.keyword(arg=name, value=node)
+        self.things.append(keyword)
+
 
     def visit_Name(self, node):
-        name = get_name(node)
-        keyword = ast.keyword(arg=name, value=node)
-        print keyword
-        self.things.append(keyword)
-        # self.things[name] = copy.deepcopy(node)
-
-    def visit_Attribute(self, node):
-        name = get_name(node)
+        name = str(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
-        # self.things[name] = copy.deepcopy(node)
-
 
 
 def replace_values(tree, back_analysis, fname, code, verbose):
