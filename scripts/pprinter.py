@@ -21,6 +21,7 @@ def dump(node, annotate_fields=True, include_attributes=False, indent='  '):
     numbers and column offsets are not dumped by default.  If this is wanted,
     *include_attributes* can be set to True.
     """
+    #test
     def _format(node, level=0):
         if isinstance(node, AST):
             fields = [(a, _format(b, level)) for a, b in iter_fields(node)]
