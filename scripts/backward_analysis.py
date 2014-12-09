@@ -1439,7 +1439,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=('This is a program to find' 
         'constant thresholds in a python program'))
     parser.add_argument('file',  help='path to file')
-    parser.add_argument('--no_execute',  help='Set execution to false', 
+    parser.add_argument('-n', '--no_execute',  help='Set execution to false', 
             action='store_true', )
     parser.add_argument('--verbose',  help='Verbose mode', 
             action='store_true', )
