@@ -547,7 +547,7 @@ class AssignFindVisitor(BasicVisitor):
                     self.current_class, self.current_function, i.id, node))
 
             else:
-                print 'ERROR not implemented type:', node.lineno, type(node)
+                print 'ERROR not implemented type:', node.lineno, type(i)
 
         self.generic_visit(node)
 
@@ -1182,17 +1182,17 @@ class ModCalls(ast.NodeTransformer):
         if node in self.tmap:
             if self.verbose:
                 print 'modifying:', node.lineno, node
-            nav = NameAttrVisitor()
+            code = self.code.split('\n')[node.lineno-1].lstrip().strip()
+            nav = NameAttrVisitor(self.fname)
             nav.visit(node.test)
             for i in nav.things:
-                print i.arg
                 ast.fix_missing_locations(i.value)
 
             name = ast.Name(id='reporting', ctx=ast.Load())
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load())
-            code = self.code.split('\n')[node.lineno-1].lstrip().strip()
             args = [node.test, ast.Str(s=self.fname), ast.Str(s=str(node.lineno)),ast.Str(s=code)]
 
+            # print nav.things
             call = ast.Call(func=attr, args=args, keywords=nav.things,starargs=None, kwargs=None)#nav.things)
             node.test = call 
         self.generic_visit(node)
@@ -1203,12 +1203,17 @@ class ModCalls(ast.NodeTransformer):
 
 class NameAttrVisitor(ast.NodeVisitor):
 
-    def __init__(self):
+    def __init__(self, name_pre):
         self.things = [] 
+        self.name_pre = name_pre
+
+    def visit(self, node):
+        print node
+        ast.NodeVisitor.visit(self, node)
 
     #AT the moment I'm skipping expressions. Not sure if they need to visited or not
     def visit_UnaryOp(self, node):
-        name = str(node)
+        name = self.name_pre + str(node.lineno) +  ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1216,7 +1221,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
 
     def visit_BinOp(self, node):
-        name = str(node)
+        name = self.name_pre + str(node.lineno) + ' value->'  + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1225,7 +1230,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
 
     def visit_BoolOp(self, node):
-        name = str(node)
+        name = self.name_pre + str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1233,7 +1238,7 @@ class NameAttrVisitor(ast.NodeVisitor):
             self.visit(i)
 
     def visit_Compare(self, node):
-        name = str(node)
+        name = self.name_pre + str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1243,7 +1248,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
 
     def visit_Call(self, node):
-        name =str(node)
+        name = self.name_pre + str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1252,20 +1257,106 @@ class NameAttrVisitor(ast.NodeVisitor):
 
         for i in node.keywords:
             self.visit(i)
-
         #TODO Ignoring starargs and kwargs for now
 
         
     def visit_Attribute(self, node):
-        name = str(node)
+        name = self.name_pre + str(node.lineno) +  ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
 
     def visit_Name(self, node):
-        name = str(node)
+        name = self.name_pre + str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
+
+def get_string_repr(node, cur_name=''):
+    if isinstance(node, ast.Name):
+        return get_name(node)
+    if isinstance(node, ast.Attribute): return get_name(node)
+    if isinstance(node, ast.UnaryOp):
+        op = node.op
+        if isinstance(op, ast.UAdd):
+            return '+ ' + get_string_repr(node.operand)
+        if isinstance(op, ast.USub):
+            return '- ' + get_string_repr(node.operand)
+        if isinstance(op, ast.Not):
+            return 'not ' + get_string_repr(node.operand)
+        if isinstance(op, ast.Invert):
+            return '~ ' + get_string_repr(node.operand)
+
+    if isinstance(node, ast.BinOp):
+        op = node.op
+        left = node.left
+        right = node.right
+        if isinstance(op, ast.Add):
+            return get_string_repr(left) + ' + ' + get_string_repr(right)
+        if isinstance(op, ast.Sub):
+            return get_string_repr(left) + ' - ' + get_string_repr(right)
+        if isinstance(op, ast.Mult):
+            return get_string_repr(left) + ' * ' + get_string_repr(right)
+        if isinstance(op, ast.Div):
+            return get_string_repr(left) + ' / ' + get_string_repr(right)
+        if isinstance(op, ast.FloorDiv):
+            return get_string_repr(left) + ' // ' + get_string_repr(right)
+        if isinstance(op, ast.Mod):
+            return get_string_repr(left) + ' % ' + get_string_repr(right)
+        if isinstance(op, ast.Pow):
+            return get_string_repr(left) + ' ** ' + get_string_repr(right)
+        if isinstance(op, ast.LShift):
+            return get_string_repr(left) + ' << ' + get_string_repr(right)
+        if isinstance(op, ast.RShift):
+            return get_string_repr(left) + ' >> ' + get_string_repr(right)
+        if isinstance(op, ast.BitOr):
+            return get_string_repr(left) + ' | ' + get_string_repr(right)
+        if isinstance(op, ast.BitXor):
+            return get_string_repr(left) + ' ^ ' + get_string_repr(right)
+        if isinstance(op, ast.BitAnd):
+            return get_string_repr(left) + ' & ' + get_string_repr(right)
+
+    if isinstance(node, ast.BoolOp):
+        op = node.op
+        if isinstance(op, ast.Or):
+            return ' or '.join([get_string_repr(x) for x in node.values])
+        if isinstance(op, ast.And):
+            return ' and '.join([get_string_repr(x) for x in node.values])
+
+    if isinstance(node, ast.Compare):
+        string = get_string_repr(node.left)
+        for op, val in zip(node.ops, node.comparators):
+            print op
+            print val
+            string += ' ' + get_string_repr(op) + ' ' + get_string_repr(val)
+        return string
+
+    if isinstance(node, ast.Call):
+        string = get_string_repr(node.func)
+        return string + '( )'
+
+    if isinstance(node, ast.Eq):
+        return ' == '
+    if isinstance(node, ast.NotEq):
+        return ' != '
+    if isinstance(node, ast.Lt):
+        return ' < '
+    if isinstance(node, ast.LtE):
+        return ' <= '
+    if isinstance(node, ast.Gt):
+        return ' > '
+    if isinstance(node, ast.GtE):
+        return ' >= '
+    if isinstance(node, ast.Is):
+        return ' is ' 
+    if isinstance(node, ast.IsNot):
+        return ' is not ' 
+    if isinstance(node, ast.In):
+        return ' in ' 
+    if isinstance(node, ast.NotIn):
+        return ' not in ' 
+
+    if isinstance(node, ast.Num):
+        return str(node.n)
 
 
 def replace_values(tree, back_analysis, fname, code, verbose):

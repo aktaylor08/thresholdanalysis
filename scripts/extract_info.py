@@ -38,8 +38,8 @@ def to_dataframe(series):
         duplicate = False
         vals = i.split(',')
         time = pd.to_datetime(float(vals[0]), unit='s')
-        loc = np.where(index == time)
 
+        loc = np.where(index == time)
         if len(loc[0]) > 0:
             print 'duplicate index', loc[0][0]
             new_idx = loc[0][0]
@@ -242,7 +242,54 @@ def find_close(df, thresh, cutoff=.25):
         for val in flops[name]:
             thresh.loc[val, 'flop'] = name 
 
-    flop_df = thresh[thresh.flop.notnull()]
+    
+    val_cols = [x for x in thresh.columns if x.find('value->') > 0]  
+    for v in val_cols:  
+        try:
+            print v, len(thresh[v].value_counts())
+        except:
+            print '\n\n\n\n'
+            print 'error ', v
+            print '\n\n\n\n'
+    # grouped = thresh.groupby('flop')
+    # means =pd.DataFrame()
+    # stds = pd.DataFrame()
+    # for g,d in grouped:
+    #     for col in val_cols:
+    #         try:
+    #             mean = d[col].mean()
+    #             std = d[col].std()
+    #             if pd.notnull(mean) and std != 0 and pd.notnull(std):
+    #                 print g
+    #                 print col
+    #                 print mean
+    #                 print std
+    #                 print ''
+    #                 means.loc[g, col] = mean
+    #                 stds.loc[g, col] = std
+    #         except Exception as e:
+    #            # print d[col]
+    #             print e
+
+    # filled = thresh.ffill()
+    # idx = []
+    # for i in df.mark_bad__data_secs.dropna().index:
+    #     idx.append(filled.index.asof(i))
+    # points =  filled.loc[idx, val_cols] 
+
+
+    # for mark, row in points.iterrows():
+    #     print mark
+    #     for pos_thresh, vals in means.iterrows():
+    #         print '\t', pos_thresh, np.abs((row - vals).dropna()).sum()
+    
+    
+    
+
+    # flop_df = thresh[thresh.flop.notnull()]
+
+
+
     embed()
 
     
@@ -272,8 +319,8 @@ if __name__ == '__main__':
         data = df[ns + '_threshold_information__data']
 
     thresh = to_dataframe(data.dropna())
-    check_bad_vs_good(df,thresh)
-    last_flop(df, thresh)
+    # check_bad_vs_good(df,thresh)
+    # last_flop(df, thresh)
     find_close(df, thresh)
 
 
