@@ -541,13 +541,31 @@ class AssignFindVisitor(BasicVisitor):
                         # print ast.dump(node)
                         #TODO Do we need to worry about anyting else?
                         pass
+                        print 'not sure what to do here'
 
             elif isinstance(i, ast.Name):
                 self.canidates[self.current_class].append(FunctionVariable(
                     self.current_class, self.current_function, i.id, node))
 
+            elif isinstance(i, ast.Subscript):
+                print 'subscript', node.lineno
+                if isinstance(i.value, ast.Attribute):
+                    if isinstance(i.value.value, ast.Name):
+                        if i.value.value.id == 'self':
+                            #class value save it here
+                            self.canidates[self.current_class].append(ClassVariable(
+                                self.current_class, self.current_function, i.value.attr, node ))
+                        else:
+                            print 'not a self assignment skipping'
+                    else:
+                        print 'Attribute not named value line 559', node.lineno, type(i.value.value)
+                else:
+                    print  'not and attribute in slice call', pprinter.dump(i)
+
             else:
-                print 'ERROR not implemented type:', node.lineno, type(i)
+                print '\nERROR not implemented type:', node.lineno, type(i)
+                print  pprinter.dump(i)
+
 
         self.generic_visit(node)
 
