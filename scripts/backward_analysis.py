@@ -471,6 +471,14 @@ class BasicVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         self.current_expr = None
 
+    def visit_Assign(self, node):
+        self.current_expr = node
+        self.generic_visit(node)
+        self.current_expr = None
+
+
+
+
     def generic_visit(self, node):
         if isinstance(node, ast.If):
             self.current_expr = node
@@ -685,6 +693,11 @@ class ServiceCallFinder(BasicVisitor):
         else:
             fv = FunctionVariable(self.current_class, self.current_function, name, node)
             if fv in self.proxies:
+                if self.current_expr is None:
+                    print node
+                    print node.lineno
+                    print pprinter.dump(node)
+                    print '\n\n'
                 self.calls.append(
                         TreeObject(self.current_class, 
                             self.current_function, self.current_expr, node))
@@ -835,7 +848,6 @@ class BackwardAnalysis(object):
                     pass
                     if self.verbose:
                         print   i,
-                        print 
             #get data flows from here
             new_data = self.find_data_dependiences(current)
             #get new flow dependinces here
@@ -956,11 +968,11 @@ class BackwardAnalysis(object):
             if isinstance(current.statement.node, ast.Name):
                 return []
             else:
-                print current
-                print current.statement 
-                print current.statement.expr
-                print current.statement.lineno
-                rd = rd[current.statement.expr]
+                try:
+                    rd = rd[current.statement.expr]
+                except:
+                    print 'reachind definition exceptions'
+                    return []
 
         if isinstance(current.statement.node, ast.If):
             cv, fv = self.get_vars(current.statement, current.statement.node.test)
@@ -1240,7 +1252,7 @@ class NameAttrVisitor(ast.NodeVisitor):
         self.name_pre = name_pre
 
     def visit(self, node):
-        print node
+        # print node
         ast.NodeVisitor.visit(self, node)
 
     #AT the moment I'm skipping expressions. Not sure if they need to visited or not
@@ -1318,6 +1330,28 @@ def get_string_repr(node, cur_name=''):
         if isinstance(op, ast.Invert):
             return '~ ' + get_string_repr(node.operand)
 
+    if isinstance(node, ast.Subscript):
+        print node
+        val = get_string_repr(node.value)
+        slc = get_string_repr(node.slice)
+        return  val + '[' + slc + ']'
+
+    if isinstance(node, ast.Index):
+        return get_string_repr(node.value)
+
+    if isinstance(node, ast.Slice):
+        val = get_string_repr(node.lower) + ":" + get_string_repr(node.upper)
+        if node.step is not None:
+            val = val + ":" + get_string_repr(node.step)
+        return val
+
+    if isinstance(node, ast.ExtSlice):
+        vals = ', '.join([get_string_repr(x) for x in node.dims])
+        return vals
+        
+
+
+
     if isinstance(node, ast.BinOp):
         op = node.op
         left = node.left
@@ -1357,8 +1391,6 @@ def get_string_repr(node, cur_name=''):
     if isinstance(node, ast.Compare):
         string = get_string_repr(node.left)
         for op, val in zip(node.ops, node.comparators):
-            print op
-            print val
             string += ' ' + get_string_repr(op) + ' ' + get_string_repr(val)
         return string
 
@@ -1476,9 +1508,9 @@ def analyze_file(fname, verbose=False, execute=False):
                 for i in ba.thresholds:
                     full_print(i[0])
 
+            
             if execute:
-                if verbose:
-                    print '\n\n\nnow modifying source code\n\n\n'
+                print '\nnnow modifying source code\n'
                 tree = replace_values(tree, ba, fname, code, verbose) 
             
 
