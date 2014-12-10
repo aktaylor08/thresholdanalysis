@@ -522,6 +522,55 @@ class AssignFindVisitor(BasicVisitor):
         BasicVisitor.__init__(self)
         self.canidates =  defaultdict(list)
 
+    def handle_attribute(self, attr, node):
+        if isinstance(attr.value, ast.Name):
+                    if attr.value.id == 'self':
+                        #class value save it here
+                        self.canidates[self.current_class].append(ClassVariable(
+                            self.current_class, self.current_function, attr.attr, node ))
+                    else:
+                        # print ast.dump(node)
+                        #TODO Do we need to worry about anyting else?
+                        print 'ignoring attribute that is not part of a self'
+                        pass
+        else:
+            print 'ignoring a value that is not a name in an attribute' 
+
+    def handle_name(self, name, node):
+            self.canidates[self.current_class].append(FunctionVariable(
+                self.current_class, self.current_function, name.id, node))
+
+
+    def handle_subscript(self, sub, node):
+        if isinstance(sub.value, ast.Attribute):
+            self.handle_attribute(sub.value, node)
+        elif isinstance(sub.value, ast.Name):
+            self.handle_name(sub.value, node)
+
+
+    def visit_assign_things(self, queue, node):
+        for i in queue:
+            #assigning to self.asdfasfd is an attribute
+            if isinstance(i, ast.Attribute):
+                self.handle_attribute(i, node)
+            elif isinstance(i, ast.Name):
+                self.handle_name(i, node)
+            elif isinstance(i, ast.Subscript):
+                self.handle_subscript(i, node)
+            else:
+                print '\nERROR unimplemented AST Type:', node.lineno, type(i)
+                print  pprinter.dump(i)
+
+    def get_tuple_elements(self, tup):
+        vals = []
+        for i in tup.elts:
+            if isinstance(i, ast.Tuple):
+                v = self.get_tuple_elements(i)
+                for x in v:
+                    vals.append(x)
+            else:
+                vals.append(i)
+        return vals
 
     def visit_Assign(self, node):
         '''visit an assignment definition'''
@@ -529,66 +578,27 @@ class AssignFindVisitor(BasicVisitor):
         #we are going to look at all of the assign values here and figure out
         #if it is a constant.  Here we are just looking at __init__ for now but
         # it could be in many other location
+        queue = []
         for i in node.targets:
-            #assigning to self.asdfasfd is an attribute
-            if isinstance(i, ast.Attribute):
-                if isinstance(i.value, ast.Name):
-                    if i.value.id == 'self':
-                        #class value save it here
-                        self.canidates[self.current_class].append(ClassVariable(
-                            self.current_class, self.current_function, i.attr, node ))
-                    else:
-                        # print ast.dump(node)
-                        #TODO Do we need to worry about anyting else?
-                        pass
-                        print 'not sure what to do here'
-
-            elif isinstance(i, ast.Name):
-                self.canidates[self.current_class].append(FunctionVariable(
-                    self.current_class, self.current_function, i.id, node))
-
-            elif isinstance(i, ast.Subscript):
-                print 'subscript', node.lineno
-                if isinstance(i.value, ast.Attribute):
-                    if isinstance(i.value.value, ast.Name):
-                        if i.value.value.id == 'self':
-                            #class value save it here
-                            self.canidates[self.current_class].append(ClassVariable(
-                                self.current_class, self.current_function, i.value.attr, node ))
-                        else:
-                            print 'not a self assignment skipping'
-                    else:
-                        print 'Attribute not named value line 559', node.lineno, type(i.value.value)
-                else:
-                    print  'not and attribute in slice call', pprinter.dump(i)
-
+            if isinstance(i, ast.Tuple):
+                vals = self.get_tuple_elements(i)
+                for x in vals:
+                    queue.append(x)
             else:
-                print '\nERROR not implemented type:', node.lineno, type(i)
-                print  pprinter.dump(i)
-
-
+                queue.append(i)
+        self.visit_assign_things(queue, node)
         self.generic_visit(node)
 
 
     def visit_AugAssign(self, node):
-
-        i =  node.target
-        #assigning to self.asdfasfd is an attribute
-        if isinstance(i, ast.Attribute):
-            if isinstance(i.value, ast.Name):
-                if i.value.id == 'self':
-                    #class value save it here
-                    self.canidates[self.current_class].append(ClassVariable(
-                        self.current_class, self.current_function, i.attr, node ))
-                else:
-                    print 'not assigning to self'
-
-        elif isinstance(i, ast.Name):
-            self.canidates[self.current_class].append(FunctionVariable(
-                self.current_class, self.current_function, i.id, node))
-
+        '''visit augmented assignments'''
+        if isinstance(node.target, ast.Tuple):
+            vals = self.get_tuple_elements(node.target)
+            for x in vals:
+                queue.append(x)
         else:
-            print 'ERROR not implemented type'
+            queue  = [node.target]
+        self.visit_assign_things(queue, node)
         self.generic_visit(node)
 
 
@@ -652,7 +662,7 @@ class ServiceFinderVisitor(BasicVisitor):
                                 self.proxies.append(cv)
                             else:
                                 fv = FunctionVariable(self.current_class, self.current_function, name,node)
-                                self.proxies.append(cv)
+                                self.proxies.append(fv)
 
 class ServiceCallFinder(BasicVisitor):
 
@@ -946,6 +956,10 @@ class BackwardAnalysis(object):
             if isinstance(current.statement.node, ast.Name):
                 return []
             else:
+                print current
+                print current.statement 
+                print current.statement.expr
+                print current.statement.lineno
                 rd = rd[current.statement.expr]
 
         if isinstance(current.statement.node, ast.If):
@@ -1415,24 +1429,43 @@ def analyze_file(fname, verbose=False, execute=False):
     if os.path.isfile(fname):
         tree = None
         with open(fname, 'r') as openf:
+            if verbose:
+                print 'parsing file'
             code = openf.read()
             tree = ast.parse(code)  
 
+            if verbose:
+                print 'finding assinments'
             a = AssignFindVisitor()
             a.visit(tree)
+            if verbose:
+                print 'done finding assignments'
+
+            if verbose:
+                print 'Pruning to canidate set'
             canidates = CanidateStore(a.canidates, tree)
 
+            if verbose:
+                print 'Bulding control flow graph'
             flow_store = cfg_analysis.build_files_cfgs(tree=tree)
 
+            if verbose:
+                print 'Computing reaching definition'
             rd = ReachingDefinition(tree, flow_store)
             rd.compute()
 
+            if verbose:
+                print 'Finding publishers'
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
 
+            if verbose:
+                print 'Finding Services'
             services = find_services(tree)
 
             calls = publish_finder.publish_calls + services
+            if verbose:
+                print 'finding thresholds based on computed data'
             ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=False)
             ba.compute()
             print 'file: ', fname, 'thresholds:', len(ba.thresholds)
