@@ -12,7 +12,7 @@ import sys
 import cfg_analysis
 
 from collections import defaultdict, deque
-from ast_tools import get_name, get_string_repr
+from ast_tools import get_name, get_string_repr, get_node_code
 
 
 class TreeObject(object):
@@ -24,6 +24,12 @@ class TreeObject(object):
         self.func = func
         self.expr = expr
         self.node = node
+
+    def print_repr(self, code):
+        print(get_string_repr(code))
+
+    def get_repr(self, code):
+        return str(self.node.lineno) + ': ' + get_node_code(self.node, code)
 
     def __str__(self):
         return self.__repr__()
@@ -71,7 +77,6 @@ class ClassVariable(object):
 
 class FunctionVariable(object):
     """holds information about a Function variable"""
-
 
     def __init__(self, cls, func, name, assign):
         self.cls = cls
@@ -124,6 +129,12 @@ class SearchStruct(object):
         self.distance = distance
         self.parent = None
         self.important = important
+
+    def print_repr(self, code):
+        print(get_string_repr(code))
+
+    def get_repr(self, code):
+        return str(self.distance) + ' ' + self.statement.get_repr(code)
 
     def __str__(self):
         return self.__repr__()
@@ -764,17 +775,16 @@ class FindAssigns(BasicVisitor):
 class BackwardAnalysis(object):
     '''class to perform the backward analysis needed on all of the files'''
 
-    def __init__(self, canidates, calls, flow_store, tree, reaching_defs, verbose=False, web=False):
-        self.canidates = canidates
+    def __init__(self, if_visitor, calls, flow_store, tree, reaching_defs, verbose=False, web=False, src_code=None):
         self.calls = calls
         self.flow_store = flow_store
         self.tree = tree
-        self.if_visitor = IfConstantVisitor(self.canidates)
-        self.if_visitor.visit(tree)
+        self.if_visitor = if_visitor#IfConstantVisitor(self.canidates)
         self.reaching_defs = reaching_defs
         self.verbose = verbose
         self.web_style = web
         self.thresholds = []
+        self.src_code = src_code
 
 
     def compute(self):
@@ -789,7 +799,7 @@ class BackwardAnalysis(object):
             current = to_search.popleft()
             if self.verbose:
                 print ('\n')
-                print (current)
+                print (current.get_repr(self.src_code))
             # find some thresholds
             new_thresholds = self.find_thresholds(current)
             if len(new_thresholds) > 0:
@@ -811,7 +821,7 @@ class BackwardAnalysis(object):
                 ok = ok and self.check_member(can, searched)
                 if ok:
                     if self.verbose:
-                        print ('\tstructure', can)
+                        print ('\tdata:', can.get_repr(self.src_code))
                     to_search.append(can)
 
             for can in new_flow:
@@ -820,7 +830,7 @@ class BackwardAnalysis(object):
                 ok = ok and self.check_member(can, searched)
                 if ok:
                     if self.verbose:
-                        print( '\tstructure', can)
+                        print( '\tstructure:', can.get_repr(self.src_code))
                     to_search.append(can)
             searched.add(current)
 
@@ -919,7 +929,7 @@ class BackwardAnalysis(object):
                     rd = rd[current.statement.expr]
                 except Exception as e:
                     print (e, file=sys.stderr)
-                    print( current.statement, file=sys.stderr)
+                    print( current.statement.get_repr(self.src_code), file=sys.stderr)
                     print (current.statement.expr, file=sys.stderr)
                     print ('reaching definition exceptions', file=sys.stderr)
                     return []
@@ -1016,14 +1026,18 @@ class BackwardAnalysis(object):
         return fcv.calls
 
 
-def full_print(obj, tabs=0, visited=None):
-    print ('\t' * tabs, obj)
+def full_print(obj, tabs=0, visited=None, code=None):
+    if code is not None:
+        print ('\t' * tabs, obj.get_repr(code))
+    else:
+        print ('\t' * tabs, obj)
     if visited is None:
         visited = set()
     visited.add(obj)
+
     for child in obj.children:
         if not child in visited:
-            full_print(child, tabs + 1, visited)
+            full_print(child, tabs + 1, visited, code)
     visited.remove(obj)
 
 
@@ -1285,6 +1299,7 @@ def analyze_file(fname, verbose=False, execute=False):
     if os.path.isfile(fname):
         tree = None
         with open(fname, 'r') as openf:
+            print ('file: ', fname)
             if verbose:
                 print ('parsing file')
             code = openf.read()
@@ -1322,25 +1337,42 @@ def analyze_file(fname, verbose=False, execute=False):
 
             calls = publish_finder.publish_calls + services
             if verbose:
-                print ('finding thresholds based on computed data')
-            ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=False)
+                print('\nPub and service calls: ')
+                for i in calls:
+                    print ('\t', i.get_repr(spcode))
+
+
+            if verbose:
+                print('\nFinding if statemetns with constant values')
+            if_visit = IfConstantVisitor(canidates)
+            if_visit.visit(tree)
+
+            if verbose:
+                print("Following if statements have conastants: ")
+                for i in if_visit.ifs:
+                    print (get_node_code(i, spcode))
+
+
+
+            if_visit.visit_Assign(tree)
+            if verbose:
+                print ('\nfinding thresholds in file')
+            ba = BackwardAnalysis(if_visit, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=False, src_code=spcode)
             ba.compute()
-            print ('file: ', fname, 'thresholds:', len(ba.thresholds))
+            print ('thresholds:', len(ba.thresholds))
             for i in ba.thresholds:
                 print (i[0], i[1])
 
             if verbose:
                 for i in ba.thresholds:
-                    full_print(i[0])
+                    full_print(i[0], code=spcode)
 
             if execute:
                 print ('\nnow modifying source code\n')
                 replace_values(tree, ba, fname, code, verbose)
 
-
-
     else:
-        print ('error no file')
+        print (code-'error no file')
 
 
 if __name__ == '__main__':
@@ -1349,7 +1381,7 @@ if __name__ == '__main__':
     parser.add_argument('file', help='path to file')
     parser.add_argument('-n', '--no_execute', help='Set execution to false',
                         action='store_true', )
-    parser.add_argument('--verbose', help='Verbose mode',
+    parser.add_argument('-v', '--verbose', help='Verbose mode',
                         action='store_true', )
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
