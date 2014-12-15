@@ -1,14 +1,18 @@
 #!/usr/bin/env python
 # encoding: utf-8
+from __future__ import print_function
 
 import ast
 import os
 import argparse
 import pprinter
+import sys
+
 
 import cfg_analysis
 
 from collections import defaultdict, deque
+from ast_tools import get_name, get_string_repr
 
 
 class TreeObject(object):
@@ -66,7 +70,7 @@ class ClassVariable(object):
 
 
 class FunctionVariable(object):
-    '''holds information about a Function variable'''
+    """holds information about a Function variable"""
 
 
     def __init__(self, cls, func, name, assign):
@@ -100,7 +104,6 @@ class FunctionVariable(object):
         name = self.name == other.name
         return func and name
 
-
     def __hash__(self):
         return hash(self.cls) and hash(self.name)
 
@@ -108,7 +111,6 @@ class FunctionVariable(object):
 class SearchStruct(object):
     '''data structure that holds information for the search/backward
     analysis'''
-
 
     def __init__(self, statement, publisher, children, distance, important=False, distance_cost=1):
         self.statement = statement
@@ -122,7 +124,6 @@ class SearchStruct(object):
         self.distance = distance
         self.parent = None
         self.important = important
-
 
     def __str__(self):
         return self.__repr__()
@@ -138,28 +139,26 @@ class SearchStruct(object):
 
 
 class CanidateStore(object):
-    '''class to hold all of the candiates for 
+    """class to hold all of the candidates for
         thresholds.  Will include num literals, class variables,
-        and variables wihtin a function'''
-
+        and variables within a function"""
 
     def __init__(self, assignments, tree):
-        '''build the list from found assignments'''
+        """build the list from found assignments"""
         self.assignments = assignments
         self.tree = tree
         self.class_vars = {}
         self.func_vars = {}
         self.compile_canidates()
 
-
     def compile_canidates(self):
-        '''compile all of the assignments down into a list that we can check
-        to see what they really assign and how many times they are assigned'''
+        """compile all of the assignments down into a list that we can check
+        to see what they really assign and how many times they are assigned"""
         self.do_class_variables()
         self.do_func_variables()
 
     def do_class_variables(self):
-        '''Define all of the class variables as constants or not'''
+        """Define all of the class variables as constants or not"""
         # book keeping
         for_certain = set()
         bad = set()
@@ -196,11 +195,10 @@ class CanidateStore(object):
             else:
                 self.class_vars[i.cls] = [i]
 
-
     def do_func_variables(self):
-        '''Define function variables as constants or not'''
+        """Define function variables as constants or not"""
         classes = self.assignments.keys()
-        canidates = {}
+        candidates = {}
         bad = bad = set()
         for cls in classes:
             variables = sorted(self.assignments[cls], key=lambda x: x.name)
@@ -211,13 +209,13 @@ class CanidateStore(object):
                     else:
                         const = self.check_only_const(i.assign.value)
                         if const:
-                            if i in canidates:
-                                canidates[i] += 1
+                            if i in candidates:
+                                candidates[i] += 1
                             else:
-                                canidates[i] = 1
+                                candidates[i] = 1
                         else:
                             bad.add(i)
-        vals = [x for x in canidates.keys() if canidates[x] == 1]
+        vals = [x for x in candidates.keys() if candidates[x] == 1]
         vals = set(vals)
         vals = vals - bad
         for i in vals:
@@ -225,7 +223,6 @@ class CanidateStore(object):
                 self.func_vars[i.cls].append(i)
             else:
                 self.func_vars[i.cls] = [i]
-
 
     def check_only_const(self, node):
         if isinstance(node, ast.Num):
@@ -240,14 +237,12 @@ class CanidateStore(object):
         elif isinstance(node, ast.Attribute):
             return self.is_const(node)
 
-
     def is_paramcall(self, node):
         if isinstance(node.func, ast.Attribute):
             if isinstance(node.func.value, ast.Name):
                 if node.func.value.id == 'rospy' and node.func.attr == 'get_param':
                     return True
         return False
-
 
     def is_const(self, node):
         '''given a node of an ast return if it is
@@ -263,27 +258,37 @@ class CanidateStore(object):
                         return True
             return False
 
-
     def get_class_and_func(self, node):
         visitor = ClassFuncVisit(node)
         visitor.visit(self.tree)
         return visitor.cls, visitor.func
 
 
-class ReachingDefinition(object):
-    '''class to compute reaching definitions on all functions within
-    a file.  Will compute both exit and enter values for all of them'''
+def get_gen(node):
+    '''gen set -> any assignment'''
+    to_return = set()
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            to_return.add((get_name(target), node))
+    elif isinstance(node, ast.AugAssign):
+        target = node.target
+        to_return.add((get_name(target), node))
+    return to_return
 
+
+class ReachingDefinition(object):
+    """class to compute reaching definitions on all functions within
+    a file.  Will compute both exit and enter values for all of them"""
 
     def __init__(self, tree, cfg_store):
-        '''build'''
+        """build"""
         self.tree = tree
         self.cfg_store = cfg_store
         self.rds_in = {}
         self.rds_out = {}
 
     def compute(self):
-        '''compute RD for each funciton'''
+        """compute RD for each funciton"""
         for i in self.cfg_store:
             self.rds_out[i] = {}
             self.rds_in[i] = {}
@@ -292,11 +297,10 @@ class ReachingDefinition(object):
                 self.rds_out[i][func] = outs
                 self.rds_in[i][func] = ins
 
-
     def do_function(self, cfg):
-        '''compute ins and outs for a function
+        """compute ins and outs for a function
         start off with any params that are not self in the function
-        and than do some iteration until you reach a fix point'''
+        and than do some iteration until you reach a fix point"""
         outs = {}
         ins = {}
         for i in cfg.preds:
@@ -311,7 +315,7 @@ class ReachingDefinition(object):
                 else:
                     outs[func].add((arg.id, arg))
             else:
-                print 'ERROROROR line 325ish'
+                print('ERROR line 325ish', file=sys.stderr)
 
         # now we will iterate until something changes
         changed = True
@@ -332,25 +336,24 @@ class ReachingDefinition(object):
             ins[i] = vals
         return ins, outs
 
-
     def iterate(self, seen, node, outs, cfg):
-        '''this is the main function that computs gens
-        and kills and than does the union on the entering data'''
+        """this is the main function that computs gens
+        and kills and than does the union on the entering data"""
         if node in seen:
             return False
         if isinstance(node, ast.FunctionDef):
             return False
 
         changed = False
-        # add intials
-        vals = cfg.preds[node]
+        # add initials
+        values = cfg.preds[node]
         ins = set()
-        for val in vals:
+        for val in values:
             for to_add in outs[val]:
                 ins.add(to_add)
 
         # gen kill set operations
-        gen = self.get_gen(node)
+        gen = get_gen(node)
         kill = self.get_kill(node, ins)
         temp = (ins - kill)
         for one_gen in gen:
@@ -361,15 +364,17 @@ class ReachingDefinition(object):
 
         # keep track
         seen.add(node)
-        #visit all the successors
+        # visit all the successors
         if node in cfg.succs:
             for i in cfg.succs[node]:
                 changed = self.iterate(seen, i, outs, cfg) or changed
         return changed
 
-
     def get_kill(self, node, current):
-        '''kill set -> here its any assignment'''
+        """kill set -> here its any assignment
+        :param node:
+        :param current:
+        """
         to_return = set()
         if isinstance(node, ast.Assign):
             for target in node.targets:
@@ -385,31 +390,6 @@ class ReachingDefinition(object):
             if val[0] == name:
                 to_return.add(val)
         return to_return
-
-
-    def get_gen(self, node):
-        '''gen set -> any assignment'''
-        to_return = set()
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                to_return.add((get_name(target), node))
-        elif isinstance(node, ast.AugAssign):
-            target = node.target
-            to_return.add((get_name(target), node))
-        return to_return
-
-
-def get_name(attr, start=str()):
-    '''get the name recursivley defined'''
-    if isinstance(attr, ast.Name):
-        name = attr.id
-    elif isinstance(attr, ast.Attribute):
-        name = get_name(attr.value, start) + '.' + get_name(attr.attr, start)
-    elif isinstance(attr, str):
-        name = attr
-    else:
-        name = ''
-    return name
 
 
 class BasicVisitor(ast.NodeVisitor):
@@ -519,10 +499,10 @@ class AssignFindVisitor(BasicVisitor):
             else:
                 # print ast.dump(node)
                 # TODO Do we need to worry about anyting else?
-                print 'ignoring attribute that is not part of a self'
+                print( 'ignoring attribute that is not part of a self', pprinter.dump(node), file=sys.stderr)
                 pass
         else:
-            print 'ignoring a value that is not a name in an attribute'
+            print ('ignoring a value that is not a name in an attribute', file=sys.stderr)
 
     def handle_name(self, name, node):
         self.canidates[self.current_class].append(FunctionVariable(
@@ -546,8 +526,8 @@ class AssignFindVisitor(BasicVisitor):
             elif isinstance(i, ast.Subscript):
                 self.handle_subscript(i, node)
             else:
-                print '\nERROR unimplemented AST Type:', node.lineno, type(i)
-                print  pprinter.dump(i)
+                print ('\nERROR unimplemented AST Type:', node.lineno, type(i), file=sys.stderr)
+                print ( pprinter.dump(i), file=sys.stderr)
 
     def get_tuple_elements(self, tup):
         vals = []
@@ -673,10 +653,10 @@ class ServiceCallFinder(BasicVisitor):
             fv = FunctionVariable(self.current_class, self.current_function, name, node)
             if fv in self.proxies:
                 if self.current_expr is None:
-                    print node
-                    print node.lineno
-                    print pprinter.dump(node)
-                    print '\n\n'
+                    print (node, file=sys.stderr)
+                    print (node.lineno, file=sys.stderr)
+                    print (pprinter.dump(node), file=sys.stderr)
+                    print ('\n\n',file=sys.stderr)
                 self.calls.append(
                     TreeObject(self.current_class,
                                self.current_function, self.current_expr, node))
@@ -808,21 +788,21 @@ class BackwardAnalysis(object):
         while len(to_search) > 0:
             current = to_search.popleft()
             if self.verbose:
-                print '\n'
-                print current
+                print ('\n')
+                print (current)
             # find some thresholds
             new_thresholds = self.find_thresholds(current)
             if len(new_thresholds) > 0:
                 thresh[current] = new_thresholds
                 if self.verbose:
-                    print '\tFOUND THRESHOLD!:',
+                    print ('\tFOUND THRESHOLD!:')
                 for i in new_thresholds:
                     pass
                     if self.verbose:
-                        print   i,
+                        print(i)
             # get data flows from here
             new_data = self.find_data_dependiences(current)
-            #get new flow dependinces here
+            # get new flow dependinces here
             new_flow = self.find_flow_dependencies(current)
 
             for can in new_data:
@@ -831,7 +811,7 @@ class BackwardAnalysis(object):
                 ok = ok and self.check_member(can, searched)
                 if ok:
                     if self.verbose:
-                        print '\tstructure', can
+                        print ('\tstructure', can)
                     to_search.append(can)
 
             for can in new_flow:
@@ -840,7 +820,7 @@ class BackwardAnalysis(object):
                 ok = ok and self.check_member(can, searched)
                 if ok:
                     if self.verbose:
-                        print '\tstructure', can
+                        print( '\tstructure', can)
                     to_search.append(can)
             searched.add(current)
 
@@ -851,12 +831,12 @@ class BackwardAnalysis(object):
             if i in thresh:
                 self.thresholds.append((i, thresh[i]))
                 if self.verbose:
-                    print '\n'
-                    print 'Thresholds: ', thresh[i]
+                    print ('\n')
+                    print ('Thresholds: ', thresh[i])
                     full_print(i)
                 count += 1
         if self.verbose:
-            print 'total thresholds {:d}'.format(count)
+            print ('total thresholds {:d}'.format(count))
 
 
     def check_member(self, canidate, collection):
@@ -867,7 +847,7 @@ class BackwardAnalysis(object):
             return True
         else:
             if self.verbose:
-                print 'Already visited:', canidate
+                print ('Already visited:', canidate)
             if self.web_style:
                 col = list(collection)
                 mem = col[col.index(canidate)]
@@ -876,24 +856,24 @@ class BackwardAnalysis(object):
                 # if they are different method calls we need to combined them.
                 if set(mem_calls) != set(can_calls):
                     if self.verbose:
-                        print '\tdifferent calls adding to candiates'
+                        print ('\tdifferent calls adding to candiates')
                     for i in canidate.children:
                         if i not in mem.children:
                             if self.verbose:
-                                print '\t\tAdding', mem, '<-', i
+                                print ('\t\tAdding', mem, '<-', i)
                             mem.children.append(i)
                 # otherwise we need to check distances to determine what to do
                 elif canidate.distance < mem.distance:
-                    print "\tERROR distance violation!!!"
+                    print ("\tERROR distance violation!!!")
 
                 elif canidate.distance == mem.distance:
                     if self.verbose:
-                        print '\tsame distance'
+                        print ('\tsame distance')
                     for i in canidate.children:
                         if i not in mem.children:
                             mem.children.append(i)
                             if self.verbose:
-                                print '\t\tAdding', mem, '<-', i
+                                print ('\t\tAdding', mem, '<-', i)
 
                 else:
                     pass
@@ -901,7 +881,7 @@ class BackwardAnalysis(object):
                     # for i in canidate.children:
                     # if i not in mem.children:
                     # print 'combining children'
-                    #             print '\t', mem.children, '<-', i
+                    # print '\t', mem.children, '<-', i
                     #             mem.children.append(i)
             return False
 
@@ -937,8 +917,11 @@ class BackwardAnalysis(object):
             else:
                 try:
                     rd = rd[current.statement.expr]
-                except:
-                    print 'reachind definition exceptions'
+                except Exception as e:
+                    print (e, file=sys.stderr)
+                    print( current.statement, file=sys.stderr)
+                    print (current.statement.expr, file=sys.stderr)
+                    print ('reaching definition exceptions', file=sys.stderr)
                     return []
 
         if isinstance(current.statement.node, ast.If):
@@ -970,7 +953,7 @@ class BackwardAnalysis(object):
                     for i in fv:
                         func_vars.add(i)
             else:
-                print 'Weird you shouldn"t be here'
+                print ('Weird you shouldn"t be here', file=sys.stderr)
         elif isinstance(current.statement.node, ast.AugAssign):
             cv, fv = self.get_vars(current.statement, current.statement.node.value)
             for i in cv:
@@ -979,9 +962,9 @@ class BackwardAnalysis(object):
                 func_vars.add(i)
 
         else:
-            print '\nwhy are you here'
-            print ast.dump(current.statement.node)
-            print '\n'
+            print ('\nwhy are you here', file=sys.stderr)
+            print (ast.dump(current.statement.node), file=sys.stderr)
+            print ('\n', file=sys.stderr)
 
         # find class statements and reachind definitions to examine next!
         for var in class_vars:
@@ -1002,7 +985,7 @@ class BackwardAnalysis(object):
                 if v == d1[:len(v)]:
                     # if not printed:
                     # print current.statement.node.lineno, current.statement.node
-                    #     printed = True
+                    # printed = True
                     # print '\t->', d[1].lineno, d[0], d[1]
                     state = TreeObject(current.statement.cls, current.statement.func, d[1], d[1])
                     obj = SearchStruct(state, current.publisher, current, current.distance + 1)
@@ -1034,7 +1017,7 @@ class BackwardAnalysis(object):
 
 
 def full_print(obj, tabs=0, visited=None):
-    print '\t' * tabs, obj
+    print ('\t' * tabs, obj)
     if visited is None:
         visited = set()
     visited.add(obj)
@@ -1179,7 +1162,7 @@ class ModCalls(ast.NodeTransformer):
     def visit_If(self, node):
         if node in self.tmap:
             if self.verbose:
-                print 'modifying:', node.lineno, node
+                print( 'modifying:', node.lineno, node)
             code = self.code.split('\n')[node.lineno - 1].lstrip().strip()
             nav = NameAttrVisitor(self.fname)
             nav.visit(node.test)
@@ -1267,109 +1250,6 @@ class NameAttrVisitor(ast.NodeVisitor):
         self.things.append(keyword)
 
 
-def get_string_repr(node, cur_name=''):
-    if isinstance(node, ast.Name):
-        return get_name(node)
-    if isinstance(node, ast.Attribute): return get_name(node)
-    if isinstance(node, ast.UnaryOp):
-        op = node.op
-        if isinstance(op, ast.UAdd):
-            return '+ ' + get_string_repr(node.operand)
-        if isinstance(op, ast.USub):
-            return '- ' + get_string_repr(node.operand)
-        if isinstance(op, ast.Not):
-            return 'not ' + get_string_repr(node.operand)
-        if isinstance(op, ast.Invert):
-            return '~ ' + get_string_repr(node.operand)
-
-    if isinstance(node, ast.Subscript):
-        print node
-        val = get_string_repr(node.value)
-        slc = get_string_repr(node.slice)
-        return val + '[' + slc + ']'
-
-    if isinstance(node, ast.Index):
-        return get_string_repr(node.value)
-
-    if isinstance(node, ast.Slice):
-        val = get_string_repr(node.lower) + ":" + get_string_repr(node.upper)
-        if node.step is not None:
-            val = val + ":" + get_string_repr(node.step)
-        return val
-
-    if isinstance(node, ast.ExtSlice):
-        vals = ', '.join([get_string_repr(x) for x in node.dims])
-        return vals
-
-    if isinstance(node, ast.BinOp):
-        op = node.op
-        left = node.left
-        right = node.right
-        if isinstance(op, ast.Add):
-            return get_string_repr(left) + ' + ' + get_string_repr(right)
-        if isinstance(op, ast.Sub):
-            return get_string_repr(left) + ' - ' + get_string_repr(right)
-        if isinstance(op, ast.Mult):
-            return get_string_repr(left) + ' * ' + get_string_repr(right)
-        if isinstance(op, ast.Div):
-            return get_string_repr(left) + ' / ' + get_string_repr(right)
-        if isinstance(op, ast.FloorDiv):
-            return get_string_repr(left) + ' // ' + get_string_repr(right)
-        if isinstance(op, ast.Mod):
-            return get_string_repr(left) + ' % ' + get_string_repr(right)
-        if isinstance(op, ast.Pow):
-            return get_string_repr(left) + ' ** ' + get_string_repr(right)
-        if isinstance(op, ast.LShift):
-            return get_string_repr(left) + ' << ' + get_string_repr(right)
-        if isinstance(op, ast.RShift):
-            return get_string_repr(left) + ' >> ' + get_string_repr(right)
-        if isinstance(op, ast.BitOr):
-            return get_string_repr(left) + ' | ' + get_string_repr(right)
-        if isinstance(op, ast.BitXor):
-            return get_string_repr(left) + ' ^ ' + get_string_repr(right)
-        if isinstance(op, ast.BitAnd):
-            return get_string_repr(left) + ' & ' + get_string_repr(right)
-
-    if isinstance(node, ast.BoolOp):
-        op = node.op
-        if isinstance(op, ast.Or):
-            return ' or '.join([get_string_repr(x) for x in node.values])
-        if isinstance(op, ast.And):
-            return ' and '.join([get_string_repr(x) for x in node.values])
-
-    if isinstance(node, ast.Compare):
-        string = get_string_repr(node.left)
-        for op, val in zip(node.ops, node.comparators):
-            string += ' ' + get_string_repr(op) + ' ' + get_string_repr(val)
-        return string
-
-    if isinstance(node, ast.Call):
-        string = get_string_repr(node.func)
-        return string + '( )'
-
-    if isinstance(node, ast.Eq):
-        return ' == '
-    if isinstance(node, ast.NotEq):
-        return ' != '
-    if isinstance(node, ast.Lt):
-        return ' < '
-    if isinstance(node, ast.LtE):
-        return ' <= '
-    if isinstance(node, ast.Gt):
-        return ' > '
-    if isinstance(node, ast.GtE):
-        return ' >= '
-    if isinstance(node, ast.Is):
-        return ' is '
-    if isinstance(node, ast.IsNot):
-        return ' is not '
-    if isinstance(node, ast.In):
-        return ' in '
-    if isinstance(node, ast.NotIn):
-        return ' not in '
-
-    if isinstance(node, ast.Num):
-        return str(node.n)
 
 
 def replace_values(tree, back_analysis, fname, code, verbose):
@@ -1402,65 +1282,65 @@ def close_graph(node, graph, visited):
 
 def analyze_file(fname, verbose=False, execute=False):
     """new main function...get CFG and find pubs first"""
-    print '\n\n', fname, ':'
     if os.path.isfile(fname):
         tree = None
         with open(fname, 'r') as openf:
             if verbose:
-                print 'parsing file'
+                print ('parsing file')
             code = openf.read()
             tree = ast.parse(code)
+            spcode = code.split('\n')
 
             if verbose:
-                print 'finding assignments'
+                print ('finding assignments')
             a = AssignFindVisitor()
             a.visit(tree)
             if verbose:
-                print 'done finding assignments'
+                print ('done finding assignments')
 
             if verbose:
-                print 'Pruning to canidate set'
+                print ('Pruning to canidate set')
             canidates = CanidateStore(a.canidates, tree)
 
             if verbose:
-                print 'Bulding control flow graph'
-            flow_store = cfg_analysis.build_files_cfgs(tree=tree)
+                print ('Bulding control flow graph')
+            flow_store = cfg_analysis.build_files_cfgs(tree=tree, verbose=verbose, src_code=code)
 
             if verbose:
-                print 'Computing reaching definition'
+                print ('Computing reaching definition')
             rd = ReachingDefinition(tree, flow_store)
             rd.compute()
 
             if verbose:
-                print 'Finding publishers'
+                print ('Finding publishers')
             publish_finder = PublishFinderVisitor()
             publish_finder.visit(tree)
 
             if verbose:
-                print 'Finding Services'
+                print ('Finding Services')
             services = find_services(tree)
 
             calls = publish_finder.publish_calls + services
             if verbose:
-                print 'finding thresholds based on computed data'
+                print ('finding thresholds based on computed data')
             ba = BackwardAnalysis(canidates, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=False)
             ba.compute()
-            print 'file: ', fname, 'thresholds:', len(ba.thresholds)
+            print ('file: ', fname, 'thresholds:', len(ba.thresholds))
             for i in ba.thresholds:
-                print i[0], i[1]
+                print (i[0], i[1])
 
             if verbose:
                 for i in ba.thresholds:
                     full_print(i[0])
 
             if execute:
-                print '\nnow modifying source code\n'
+                print ('\nnow modifying source code\n')
                 replace_values(tree, ba, fname, code, verbose)
 
 
 
     else:
-        print 'error no file'
+        print ('error no file')
 
 
 if __name__ == '__main__':
@@ -1473,6 +1353,4 @@ if __name__ == '__main__':
                         action='store_true', )
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
-    print args.no_execute
-    print 'rest of args:', args.rest
     analyze_file(args.file, verbose=args.verbose, execute=not args.no_execute)
