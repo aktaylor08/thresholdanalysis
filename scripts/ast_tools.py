@@ -1,6 +1,14 @@
 import ast
 
 
+def get_node_code(node, code):
+    return code[node.lineno-1].lstrip().rstrip()
+
+
+def print_code_node(node, code):
+    print get_node_code(node, code)
+
+
 def get_name(attr, start=str()):
     """get the name recursively defined"""
     if isinstance(attr, ast.Name):
