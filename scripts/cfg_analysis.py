@@ -324,19 +324,19 @@ class BuildAllCFG(ast.NodeVisitor):
         self.store[self.current_key][node] = func_visit
         if self.verbose:
             print '\n'
-            print '\n'
-            print '!*!*!*!*!' * 5
-            print '\n'
             if self.code is not None:
-                print '-----Forward CFG for----- ', node.lineno, self.code[node.lineno - 1].lstrip().strip(), '\n'
+                print 'CFGs for: ', node.lineno, self.code[node.lineno - 1].lstrip().strip()
+                print 'Forward: '
                 self.print_graph_code(func_visit.succs)
-                print '\nBackward CFG\n'
+                print '\nBackward:'
                 self.print_graph_code(func_visit.preds)
             else:
-                print '-----Forward CFG for----- ', node.lineno, node, '\n'
+                print 'CFGs for:', node.lineno, node
+                print 'Forward: '
                 self.print_graph(func_visit.succs)
-                print '\nBackward CFG\n'
+                print '\nBackward:'
                 self.print_graph(func_visit.preds)
+                print '\n'
 
     def print_graph_code(self, thing):
         vals = []
