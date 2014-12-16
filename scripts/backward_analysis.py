@@ -452,6 +452,11 @@ class BasicVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         self.current_expr = None
 
+    def visit_Return(self, node):
+        self.current_expr = node
+        self.generic_visit(node)
+        self.current_expr = None
+
 
     def generic_visit(self, node):
         if isinstance(node, ast.If):
@@ -495,10 +500,11 @@ class AssignFindVisitor(BasicVisitor):
     into global and class lists'''
 
 
-    def __init__(self):
+    def __init__(self, src_code):
         '''save symbol table and current class and 
         locations'''
         BasicVisitor.__init__(self)
+        self.src_code = src_code
         self.canidates = defaultdict(list)
 
     def handle_attribute(self, attr, node):
@@ -510,10 +516,11 @@ class AssignFindVisitor(BasicVisitor):
             else:
                 # print ast.dump(node)
                 # TODO Do we need to worry about anyting else?
-                print( 'ignoring attribute that is not part of a self', pprinter.dump(node), file=sys.stderr)
-                pass
+                self.canidates[self.current_class].append(FunctionVariable(
+                    self.current_class, self.current_function, get_name(attr), node))
         else:
             print ('ignoring a value that is not a name in an attribute', file=sys.stderr)
+            print( 'ignoring a value that is not a name in an attribute', node.lineno, self.src_code[node.lineno -1], file=sys.stderr)
 
     def handle_name(self, name, node):
         self.canidates[self.current_class].append(FunctionVariable(
@@ -921,6 +928,7 @@ class BackwardAnalysis(object):
         rd = self.reaching_defs[current.statement.cls][current.statement.func]
         if current.statement.node in rd:
             rd = rd[current.statement.node]
+
         else:
             if isinstance(current.statement.node, ast.Name):
                 return []
@@ -928,10 +936,12 @@ class BackwardAnalysis(object):
                 try:
                     rd = rd[current.statement.expr]
                 except Exception as e:
-                    print (e, file=sys.stderr)
                     print( current.statement.get_repr(self.src_code), file=sys.stderr)
+                    print(current, file=sys.stderr)
                     print (current.statement.expr, file=sys.stderr)
                     print ('reaching definition exceptions', file=sys.stderr)
+                    full_print(current)
+                    assert(False)
                     return []
 
         if isinstance(current.statement.node, ast.If):
@@ -1308,7 +1318,7 @@ def analyze_file(fname, verbose=False, execute=False):
 
             if verbose:
                 print ('finding assignments')
-            a = AssignFindVisitor()
+            a = AssignFindVisitor(spcode)
             a.visit(tree)
             if verbose:
                 print ('done finding assignments')
@@ -1384,5 +1394,8 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose', help='Verbose mode',
                         action='store_true', )
     parser.add_argument('rest', nargs='*')
+    # parser.add_argument('--list-ifs', help='List all if statements and exit', action='store_true')
+    # parser.add_argument('--list-constants', help='List all of the identified constants', action='store_true')
+    # parser.add_argument('--list-pubs', help='List all of the statements IDed as publishers', action='store_true')
     args = parser.parse_args()
     analyze_file(args.file, verbose=args.verbose, execute=not args.no_execute)
