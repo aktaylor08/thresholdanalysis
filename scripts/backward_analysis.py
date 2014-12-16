@@ -1304,85 +1304,133 @@ def close_graph(node, graph, visited):
         close_graph(target, graph, visited)
 
 
+def get_code(fname):
+    """Get the code from a file"""
+    if os.path.isfile(fname):
+        with open(fname, 'r') as openf:
+            code = openf.read()
+            spcode = code.split('\n')
+            return code, spcode
+    else:
+        print ('error no file')
+        return None, None
+
+
+def get_tree(code):
+    """Return a tree from the code passed in here"""
+    tree = ast.parse(code)
+    return tree
+
+
+def get_candidates(tree, spcode, verbose=False):
+    if verbose:
+        print ('finding assignments')
+    a = AssignFindVisitor(spcode)
+    a.visit(tree)
+    if verbose:
+        print ('done finding assignments')
+
+    if verbose:
+        print ('Pruning to canidate set')
+    canidates = CanidateStore(a.canidates, tree)
+    return canidates
+
+
+def get_cfg(tree, src_code, verbose=False):
+    if verbose:
+        print ('Bulding control flow graph')
+    flow_store = cfg_analysis.build_files_cfgs(tree=tree, verbose=verbose, src_code=src_code)
+    return flow_store
+
+
+def get_reaching_definitions(tree, flow_store, verbose=False):
+    if verbose:
+        print ('Computing reaching definition')
+    rd = ReachingDefinition(tree, flow_store)
+    rd.compute()
+    return rd
+
+
+def get_pub_srv_calls(tree, spcode, verbose=False):
+    if verbose:
+        print ('Finding publishers')
+    publish_finder = PublishFinderVisitor()
+    publish_finder.visit(tree)
+
+    if verbose:
+        print ('Finding Services')
+    services = find_services(tree)
+
+    calls = publish_finder.publish_calls + services
+    if verbose:
+        print('\nPub and service calls: ')
+        for i in calls:
+            print ('\t', i.get_repr(spcode))
+    return calls
+
+
+def get_const_ifs(candidates, tree, spcode, verbose=False):
+    if verbose:
+        print('\nFinding if statemetns with constant values')
+    if_visit = IfConstantVisitor(candidates)
+    if_visit.visit(tree)
+    if verbose:
+        print("Following if statements have conastants: ")
+        for i in if_visit.ifs:
+            print (get_node_code(i, spcode))
+    return if_visit
+
+
+def perform_analysis(if_visit, calls, flow_store, tree, rd, verbose=False, web=False, src_code=None):
+    if verbose:
+        print ('\nfinding thresholds in file')
+    ba = BackwardAnalysis(if_visit, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=False, src_code=src_code)
+    ba.compute()
+    if verbose:
+        for i in ba.thresholds:
+            full_print(i[0], code=src_code)
+            print("\n")
+    return ba
+
+
 def analyze_file(fname, verbose=False, execute=False):
     """new main function...get CFG and find pubs first"""
     if os.path.isfile(fname):
-        tree = None
-        with open(fname, 'r') as openf:
-            print ('file: ', fname)
+            print ('File: ', fname)
             if verbose:
                 print ('parsing file')
-            code = openf.read()
-            tree = ast.parse(code)
-            spcode = code.split('\n')
+            code, spcode = get_code(fname)
+            tree = get_tree(code)
 
-            if verbose:
-                print ('finding assignments')
-            a = AssignFindVisitor(spcode)
-            a.visit(tree)
-            if verbose:
-                print ('done finding assignments')
+            candidates = get_candidates(tree, spcode, verbose)
+            flow_store = get_cfg(tree, code, verbose)
+            rd = get_reaching_definitions(tree, flow_store, verbose)
+            calls = get_pub_srv_calls(tree, spcode, verbose)
+            if_visit = get_const_ifs(candidates, tree, spcode, verbose)
+            ba = perform_analysis(if_visit, calls, flow_store, tree, rd,
+                                  verbose=verbose, web=False, src_code=spcode)
 
-            if verbose:
-                print ('Pruning to canidate set')
-            canidates = CanidateStore(a.canidates, tree)
-
-            if verbose:
-                print ('Bulding control flow graph')
-            flow_store = cfg_analysis.build_files_cfgs(tree=tree, verbose=verbose, src_code=code)
-
-            if verbose:
-                print ('Computing reaching definition')
-            rd = ReachingDefinition(tree, flow_store)
-            rd.compute()
-
-            if verbose:
-                print ('Finding publishers')
-            publish_finder = PublishFinderVisitor()
-            publish_finder.visit(tree)
-
-            if verbose:
-                print ('Finding Services')
-            services = find_services(tree)
-
-            calls = publish_finder.publish_calls + services
-            if verbose:
-                print('\nPub and service calls: ')
-                for i in calls:
-                    print ('\t', i.get_repr(spcode))
-
-
-            if verbose:
-                print('\nFinding if statemetns with constant values')
-            if_visit = IfConstantVisitor(canidates)
-            if_visit.visit(tree)
-
-            if verbose:
-                print("Following if statements have conastants: ")
-                for i in if_visit.ifs:
-                    print (get_node_code(i, spcode))
-
-
-
-            if_visit.visit_Assign(tree)
-            if verbose:
-                print ('\nfinding thresholds in file')
-            ba = BackwardAnalysis(if_visit, calls, flow_store, tree, rd.rds_in, verbose=verbose, web=False, src_code=spcode)
-            ba.compute()
-            print ('thresholds:', len(ba.thresholds))
+            print ('Number of Thresholds:', len(ba.thresholds))
             for i in ba.thresholds:
                 print (i[0], i[1])
-
-            if verbose:
-                for i in ba.thresholds:
-                    full_print(i[0], code=spcode)
 
             if execute:
                 print ('\nnow modifying source code\n')
                 replace_values(tree, ba, fname, code, verbose)
 
     else:
-        print (code-'error no file')
+        print ('error no file')
+
+
+# class PrintIfVisitor():
+#     pass
+#
+#
+# def list_ifs(filen):
+#     _, sp_code = get_code(filen)
+#     tree = get_tree(code)
+#     PrintIfVisitor().visit(tree)
+
 
 
 if __name__ == '__main__':
@@ -1394,8 +1442,16 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose', help='Verbose mode',
                         action='store_true', )
     parser.add_argument('rest', nargs='*')
-    # parser.add_argument('--list-ifs', help='List all if statements and exit', action='store_true')
-    # parser.add_argument('--list-constants', help='List all of the identified constants', action='store_true')
-    # parser.add_argument('--list-pubs', help='List all of the statements IDed as publishers', action='store_true')
+    parser.add_argument('--list-ifs', help='List all if statements and exit', action='store_true')
+    parser.add_argument('--list-const-ifs', help='List all if statements that contain constnts', action='store_true')
+    parser.add_argument('--list-constants', help='List all of the identified constants', action='store_true')
+    parser.add_argument('--list-pubs', help='List all of the statements IDed as publishers', action='store_true')
     args = parser.parse_args()
+    # if args.list_ifs:
+    #     list_ifs(args.file)
+    # elif args.list_constants:
+    #     list_constants(args.file)
+    # elif args.list_pubs:
+    #     list_pubs(args.file)
+    # else:
     analyze_file(args.file, verbose=args.verbose, execute=not args.no_execute)
