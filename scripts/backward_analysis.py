@@ -416,6 +416,19 @@ class ReachingDefinition(object):
         return to_return
 
 
+class AssignPrinter(ast.NodeVisitor):
+    """Class to print out assignments"""
+
+    def __init__(self, src_code):
+        self.code = src_code
+
+    def visit_Assign(self, node):
+        print('\t', node.lineno, get_node_code(node, self.code))
+
+    def visit_AugAssign(self, node):
+        print('\t', node.lineno, get_node_code(node, self.code))
+
+
 class PrintIfVisitor(ast.NodeVisitor):
 
     """Super simple visitor to print out all encountered if functions"""
@@ -1453,13 +1466,20 @@ def list_ifs(fname):
     PrintIfVisitor(sp_code).visit(tree)
 
 
+def list_assigns(fname):
+    code, spcode = get_code(fname)
+    tree = get_tree(code)
+    print('Assignments in {:s}'.format(fname))
+    AssignPrinter(spcode).visit(tree)
+
+
 def list_constants(fname):
     code, spcode = get_code(fname)
     tree = get_tree(code)
     candidates = get_candidates(tree, spcode)
     print("\nIdentified Constants in {:s}".format(fname))
     for cls in candidates.class_vars:
-        print('\tClass: {:s}'.format( cls.name))
+        print('\tClass: {:s}'.format(cls.name))
         for cls_var in candidates.class_vars[cls]:
             print('\t\t{:s}'.format(cls_var))
 
@@ -1504,6 +1524,8 @@ if __name__ == '__main__':
         '--list-constants', help='List all of the identified constants', action='store_true')
     parser.add_argument(
         '--list-pubs', help='List all of the statements IDed as publishers', action='store_true')
+    parser.add_argument(
+        '--list-assign', help='List all of the assignments in code', action='store_true')
     args = parser.parse_args()
     no_analysis = False
     if args.list_ifs:
@@ -1517,6 +1539,9 @@ if __name__ == '__main__':
         no_analysis = True
     if args.list_pubs:
         list_pubs(args.file)
+        no_analysis = True
+    if args.list_assign:
+        list_assigns(args.file)
         no_analysis = True
 
     if not no_analysis:
