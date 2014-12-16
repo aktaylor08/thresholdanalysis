@@ -540,19 +540,14 @@ class AssignFindVisitor(BasicVisitor):
         self.canidates = defaultdict(list)
 
     def handle_attribute(self, attr, node):
-        if isinstance(attr.value, ast.Name):
-            if attr.value.id == 'self':
-                # class value save it here
-                self.canidates[self.current_class].append(ClassVariable(
-                    self.current_class, self.current_function, attr.attr, node))
-            else:
-                self.canidates[self.current_class].append(FunctionVariable(
-                    self.current_class, self.current_function, get_name(attr), node))
+        name = get_name(attr)
+        if name.startswith('self.'):
+            # class value save it here
+            self.canidates[self.current_class].append(ClassVariable(
+                self.current_class, self.current_function, attr.attr, node))
         else:
-            print(
-                'ignoring a value that is not a name in an attribute', file=sys.stderr)
-            print('ignoring a value that is not a name in an attribute', node.lineno, self.src_code[node.lineno - 1],
-                  file=sys.stderr)
+            self.canidates[self.current_class].append(FunctionVariable(
+                self.current_class, self.current_function, get_name(attr), node))
 
     def handle_name(self, name, node):
         self.canidates[self.current_class].append(FunctionVariable(
