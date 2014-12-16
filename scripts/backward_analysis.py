@@ -486,32 +486,32 @@ class BasicVisitor(ast.NodeVisitor):
             ast.NodeVisitor.generic_visit(self, node)
 
 
-class ConstantVisitor(BasicVisitor):
-
-    def __init__(self, canidates, cls, func):
-        BasicVisitor.__init__(self)
-        self.canidates = canidates
-        self.consts = []
-        self.current_class = cls
-        self.current_function = func
-
-    def visit_Num(self, node):
-        self.consts.append(node)
-
-    def visit_Attribute(self, node):
-        if isinstance(node.value, ast.Name):
-            if node.value.id == 'self':
-                cv = ClassVariable(self.current_class, self.current_function,
-                                   node.attr, node)
-                if cv in self.canidates.class_vars[self.current_class]:
-                    self.consts.append(cv)
-
-    def visit_Name(self, node):
-        fv = FunctionVariable(self.current_class,
-                              self.current_function, node.id, node)
-        if self.current_class in self.canidates.func_vars:
-            if fv in self.canidates.func_vars[self.current_class]:
-                self.consts.append(fv)
+# class ConstantVisitor(BasicVisitor):
+#
+#     def __init__(self, canidates, cls, func):
+#         BasicVisitor.__init__(self)
+#         self.canidates = canidates
+#         self.consts = []
+#         self.current_class = cls
+#         self.current_function = func
+#
+#     def visit_Num(self, node):
+#         self.consts.append(node)
+#
+#     def visit_Attribute(self, node):
+#         if isinstance(node.value, ast.Name):
+#             if node.value.id == 'self':
+#                 cv = ClassVariable(self.current_class, self.current_function,
+#                                    node.attr, node)
+#                 if cv in self.canidates.class_vars[self.current_class]:
+#                     self.consts.append(cv)
+#
+#     def visit_Name(self, node):
+#         fv = FunctionVariable(self.current_class,
+#                               self.current_function, node.id, node)
+#         if self.current_class in self.canidates.func_vars:
+#             if fv in self.canidates.func_vars[self.current_class]:
+#                 self.consts.append(fv)
 
 
 class AssignFindVisitor(BasicVisitor):
@@ -533,8 +533,6 @@ class AssignFindVisitor(BasicVisitor):
                 self.canidates[self.current_class].append(ClassVariable(
                     self.current_class, self.current_function, attr.attr, node))
             else:
-                # print ast.dump(node)
-                # TODO Do we need to worry about anyting else?
                 self.canidates[self.current_class].append(FunctionVariable(
                     self.current_class, self.current_function, get_name(attr), node))
         else:
@@ -641,7 +639,8 @@ class IfOrFuncVisitor(BasicVisitor):
                     self.res = TreeObject(self.current_class, self.current_function,
                                           self.current_expr, temp)
                     break
-            for i in reversed(popped):
+            # WTF?
+            for _ in reversed(popped):
                 self.canidates.append(popped)
         else:
             BasicVisitor.generic_visit(self, node)
@@ -954,7 +953,7 @@ class BackwardAnalysis(object):
             else:
                 try:
                     rd = rd[current.statement.expr]
-                except Exception as e:
+                except KeyError:
                     print(
                         current.statement.get_repr(self.src_code), file=sys.stderr)
                     print(current, file=sys.stderr)
@@ -962,7 +961,6 @@ class BackwardAnalysis(object):
                     print('reaching definition exceptions', file=sys.stderr)
                     full_print(current)
                     assert False
-                    return []
 
         if isinstance(current.statement.node, ast.If):
             cv, fv = self.get_vars(
@@ -995,7 +993,7 @@ class BackwardAnalysis(object):
                     for i in fv:
                         func_vars.add(i)
             else:
-                print('Weird you shouldn"t be here', file=sys.stderr)
+                print('Weird you should not be here', file=sys.stderr)
         elif isinstance(current.statement.node, ast.AugAssign):
             cv, fv = self.get_vars(
                 current.statement, current.statement.node.value)
@@ -1019,18 +1017,11 @@ class BackwardAnalysis(object):
                 to_return.append(obj)
 
         # do function variables
-        printed = False
         for fv in func_vars:
             for d in rd:
                 v = fv.split('.')
                 d1 = d[0].split('.')
-                # print v
-                # print d1
                 if v == d1[:len(v)]:
-                    # if not printed:
-                    # print current.statement.node.lineno, current.statement.node
-                    # printed = True
-                    # print '\t->', d[1].lineno, d[0], d[1]
                     state = TreeObject(
                         current.statement.cls, current.statement.func, d[1], d[1])
                     obj = SearchStruct(
@@ -1073,7 +1064,7 @@ def full_print(obj, tabs=0, visited=None, code=None):
     visited.add(obj)
 
     for child in obj.children:
-        if not child in visited:
+        if child not in visited:
             full_print(child, tabs + 1, visited, code)
     visited.remove(obj)
 
@@ -1130,8 +1121,8 @@ class FindCallVisitor(BasicVisitor):
 
 class IfConstantVisitor(BasicVisitor):
 
-    '''visit if statements to ID which constants are
-    used in if statements'''
+    """visit if statements to ID which constants are
+    used in if statements"""
 
     def __init__(self, canidates):
         BasicVisitor.__init__(self)
@@ -1222,13 +1213,13 @@ class ModCalls(ast.NodeTransformer):
 
             name = ast.Name(id='reporting', ctx=ast.Load())
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load())
-            args = [node.test, ast.Str(s=self.fname), ast.Str(
+            func_args = [node.test, ast.Str(s=self.fname), ast.Str(
                 s=str(node.lineno)), ast.Str(s=code)]
 
             # print nav.things
             # nav.things)
             call = ast.Call(
-                func=attr, args=args, keywords=nav.things, starargs=None, kwargs=None)
+                func=attr, args=func_args, keywords=nav.things, starargs=None, kwargs=None)
             node.test = call
         self.generic_visit(node)
         return node
@@ -1418,7 +1409,7 @@ def perform_analysis(if_visit, calls, flow_store, tree, rd, verbose=False, web=F
     if verbose:
         print('\nfinding thresholds in file')
     ba = BackwardAnalysis(if_visit, calls, flow_store, tree,
-                          rd.rds_in, verbose=verbose, web=False, src_code=src_code)
+                          rd.rds_in, verbose=verbose, web=web, src_code=src_code)
     ba.compute()
     if verbose:
         for i in ba.thresholds:
