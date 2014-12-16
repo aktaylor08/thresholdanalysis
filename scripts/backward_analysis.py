@@ -1445,22 +1445,46 @@ def analyze_file(fname, verbose=False, execute=False):
         print('error no file')
 
 
-def list_ifs(filen):
+def list_ifs(fname):
     """Quickly print a list of all the if statements in the file"""
-    code, sp_code = get_code(filen)
+    code, sp_code = get_code(fname)
     tree = get_tree(code)
-    print('If statements in {:s}: '.format(filen))
+    print('\nIf statements in {:s}: '.format(fname))
     PrintIfVisitor(sp_code).visit(tree)
 
 
-def list_constants(filen):
-    print(filen)
-    pass
+def list_constants(fname):
+    code, spcode = get_code(fname)
+    tree = get_tree(code)
+    candidates = get_candidates(tree, spcode)
+    print("\nIdentified Constants in {:s}".format(fname))
+    for cls in candidates.class_vars:
+        print('\tClass: {:s}'.format( cls.name))
+        for cls_var in candidates.class_vars[cls]:
+            print('\t\t{:s}'.format(cls_var))
+
+    print('\tFunction Constants:')
+    for cls in candidates.func_vars:
+        for func_var in candidates.func_vars[cls]:
+            print('\t\t{:s}'.format(func_var))
 
 
-def list_pubs(filen):
-    print(filen)
-    pass
+def list_pubs(fname):
+    code, spcode = get_code(fname)
+    tree = get_tree(code)
+    print('\nPublish Calls in {:s}'.format(fname))
+    for pub in get_pub_srv_calls(tree, spcode):
+        print('\t', pub.get_repr(spcode))
+
+
+def list_constant_ifs(fname):
+    code, spcode = get_code(fname)
+    tree = get_tree(code)
+    candidates = get_candidates(tree, spcode)
+    if_visit = get_const_ifs(candidates, tree, spcode)
+    print('\nIf statements with Constant Values in {:s}: '.format(fname))
+    for i in if_visit.ifs:
+        print('\t', i.lineno, '->', get_node_code(i, spcode))
 
 
 if __name__ == '__main__':
@@ -1475,18 +1499,26 @@ if __name__ == '__main__':
     parser.add_argument(
         '--list-ifs', help='List all if statements and exit', action='store_true')
     parser.add_argument(
-        '--list-const-ifs', help='List all if statements that contain consents', action='store_true')
+        '--list-const-ifs', help='List all if statements that contain constants', action='store_true')
     parser.add_argument(
         '--list-constants', help='List all of the identified constants', action='store_true')
     parser.add_argument(
         '--list-pubs', help='List all of the statements IDed as publishers', action='store_true')
     args = parser.parse_args()
+    no_analysis = False
     if args.list_ifs:
         list_ifs(args.file)
-    elif args.list_constants:
+        no_analysis = True
+    if args.list_constants:
         list_constants(args.file)
-    elif args.list_pubs:
+        no_analysis = True
+    if args.list_const_ifs:
+        list_constant_ifs(args.file)
+        no_analysis = True
+    if args.list_pubs:
         list_pubs(args.file)
-    else:
+        no_analysis = True
+
+    if not no_analysis:
         analyze_file(
             args.file, verbose=args.verbose, execute=not args.no_execute)
