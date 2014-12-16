@@ -1180,14 +1180,12 @@ class ConstantVisitor(BasicVisitor):
                 self.consts.append(fv)
 
 
-class AddImportStatement(ast.NodeTransformer):
-
-    def visit_Module(self, node):
-        new_node = ast.Import(names=[ast.alias(name='reporting', asname=None)])
-        new_node = ast.copy_location(new_node, node.body[0])
-        ast.increment_lineno(node.body[0], 1)
-        node.body = [new_node] + node.body
-        return node
+def add_import_statement(node):
+    new_node = ast.Import(names=[ast.alias(name='reporting', asname=None)])
+    new_node = ast.copy_location(new_node, node.body[0])
+    ast.increment_lineno(node.body[0], 1)
+    node.body = [new_node] + node.body
+    return node
 
 
 class ModCalls(ast.NodeTransformer):
@@ -1301,7 +1299,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
 def replace_values(tree, back_analysis, fname, code, verbose):
     tree = ModCalls(back_analysis, fname, code, verbose).visit(tree)
-    tree = AddImportStatement().visit(tree)
+    tree = add_import_statement(tree)
     ast.fix_missing_locations(tree)
 
     code = compile(tree, fname, mode='exec')
@@ -1455,11 +1453,13 @@ def list_ifs(filen):
     PrintIfVisitor(sp_code).visit(tree)
 
 
-def list_constants(file):
+def list_constants(filen):
+    print(filen)
     pass
 
 
-def list_pubs(file):
+def list_pubs(filen):
+    print(filen)
     pass
 
 
@@ -1475,7 +1475,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--list-ifs', help='List all if statements and exit', action='store_true')
     parser.add_argument(
-        '--list-const-ifs', help='List all if statements that contain constnts', action='store_true')
+        '--list-const-ifs', help='List all if statements that contain consents', action='store_true')
     parser.add_argument(
         '--list-constants', help='List all of the identified constants', action='store_true')
     parser.add_argument(
