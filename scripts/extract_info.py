@@ -11,7 +11,6 @@ import sys
 from IPython import embed
 
 
-
 def add_to_store(store, key, idx, value, length):
     try:
         value = float(value)
@@ -51,7 +50,7 @@ def to_dataframe(series):
 
         fname = vals[1]
         lineno = vals[2]
-        thresh_id = fname + str(lineno) 
+        thresh_id = fname + str(lineno)
         add_to_store(datastore, 'id', idx, thresh_id, length)
         add_to_store(datastore, 'file_name', idx, fname, length)
         add_to_store(datastore, 'line_number', idx, lineno, length)
@@ -66,23 +65,23 @@ def to_dataframe(series):
                 key, val = i.split(':')
             except:
                 pass
-                # print i 
+                # print i
                 # vals = i.split(':')
                 # key = vals[0]
                 # print key
                 # val = ''.join(vals[1:])
 
-
             add_to_store(datastore, key, idx, val, length)
         if duplicate:
             idx = old_idx
         else:
-            idx +=1
+            idx += 1
     index = index[:idx]
-    for i,v in datastore.iteritems():
+    for i, v in datastore.iteritems():
         datastore[i] = v[:idx]
     df = pd.DataFrame(data=datastore, index=index)
     return df
+
 
 def from_file(fname, return_both=False):
     df = rbp.bag_to_dataframe(fname)
@@ -94,8 +93,8 @@ def from_file(fname, return_both=False):
 
 
 def get_time_window(df, et, length):
-        st = et - datetime.timedelta(0,2.0)
-        return df.between_time(st, et)
+    st = et - datetime.timedelta(0, 2.0)
+    return df.between_time(st, et)
 
 
 def get_goods_bads(df):
@@ -137,7 +136,7 @@ def get_thresh_percents(df):
     as a dictonary returned'''
     total = {}
     percent = {}
-    all_groups = df.groupby('id') 
+    all_groups = df.groupby('id')
     for name, group in all_groups:
         total[name], percent[name] = get_total_and_percentage_result(group)
     return total, percent
@@ -147,7 +146,7 @@ def get_bads_time(df):
     to_ret = []
     try:
         idx = df.mark_bad__data_nsecs.dropna().index
-        vals = df.loc[idx,['mark_bad__data_secs',  'mark_bad__data_nsecs']]
+        vals = df.loc[idx, ['mark_bad__data_secs',  'mark_bad__data_nsecs']]
         for _, data in vals.iterrows():
             s = data['mark_bad__data_secs']
             ns = data['mark_bad__data_nsecs']
@@ -157,8 +156,9 @@ def get_bads_time(df):
         print 'No bad marked?'
     return to_ret
 
+
 def check_bad_vs_good(df, thresh):
-    bads, goods =  get_goods_bads(df)
+    bads, goods = get_goods_bads(df)
     # bads =get_bads_time(df)
     fstring = '{:s}\t\t{:.2%}\t{:f}'
     total, percent = get_thresh_percents(thresh)
@@ -168,10 +168,11 @@ def check_bad_vs_good(df, thresh):
 
     for et in bads:
         print et
-        checks = get_time_window(thresh, et, 1) 
+        checks = get_time_window(thresh, et, 1)
         t, p = get_thresh_percents(checks)
         for name in t.keys():
             print '\t', fstring.format(name, p[name], t[name])
+
 
 def ts_to_sec(ts):
     epoch = datetime.datetime.utcfromtimestamp(0)
@@ -180,6 +181,7 @@ def ts_to_sec(ts):
         return delta.total_seconds()
     except:
         return np.NaN
+
 
 def get_flops(thresh, cutoff):
     lows = []
@@ -191,9 +193,8 @@ def get_flops(thresh, cutoff):
         elif percents[i] > 1.0 - cutoff:
             highs.append(i)
 
-         
     flops = {}
-    #store the flops
+    # store the flops
     for tid, group in thresh.groupby('id'):
         if tid in lows:
             opposite = group[group.result == 'True']
@@ -204,13 +205,13 @@ def get_flops(thresh, cutoff):
     return flops
 
 
-def add_times(thresh,flops):
+def add_times(thresh, flops):
     cur_time = thresh.index.to_series().apply(ts_to_sec)
     for name in flops.keys():
         thresh[name] = pd.Series(flops[name], flops[name])
         thresh[name] = thresh[name].apply(func=lambda x: pd.Timestamp(x))
         thresh[name] = thresh[name].apply(ts_to_sec)
-        thresh[name] = cur_time - thresh[name].ffill() 
+        thresh[name] = cur_time - thresh[name].ffill()
     return thresh
 
 
@@ -220,31 +221,31 @@ def last_flop(df, thresh, cutoff=.25):
     # bads, goods = get_goods_bads(df)
     bads = get_bads_time(df)
     flops = get_flops(thresh, cutoff)
-    thresh  = add_times(thresh, flops)
+    thresh = add_times(thresh, flops)
 
     cols = [x for x in thresh.columns if x.startswith('/')]
     for time in bads:
         t = thresh.index.asof(time)
         data = thresh.loc[t, cols]
         data.sort()
-        for k,v in data.iteritems():
+        for k, v in data.iteritems():
             print k, v
 
     # embed()
 
+
 def find_close(df, thresh, cutoff=.25):
     bads = get_bads_time(df)
     flops = get_flops(thresh, cutoff)
-    thresh  = add_times(thresh, flops)
+    thresh = add_times(thresh, flops)
 
-    thresh['flop'] =  None 
+    thresh['flop'] = None
     for name in flops:
         for val in flops[name]:
-            thresh.loc[val, 'flop'] = name 
+            thresh.loc[val, 'flop'] = name
 
-    
-    val_cols = [x for x in thresh.columns if x.find('value->') > 0]  
-    for v in val_cols:  
+    val_cols = [x for x in thresh.columns if x.find('value->') > 0]
+    for v in val_cols:
         try:
             print v, len(thresh[v].value_counts())
         except:
@@ -275,29 +276,16 @@ def find_close(df, thresh, cutoff=.25):
     # idx = []
     # for i in df.mark_bad__data_secs.dropna().index:
     #     idx.append(filled.index.asof(i))
-    # points =  filled.loc[idx, val_cols] 
-
+    # points =  filled.loc[idx, val_cols]
 
     # for mark, row in points.iterrows():
     #     print mark
     #     for pos_thresh, vals in means.iterrows():
     #         print '\t', pos_thresh, np.abs((row - vals).dropna()).sum()
-    
-    
-    
 
     # flop_df = thresh[thresh.flop.notnull()]
 
-
-
     embed()
-
-    
-
-    
-
-
-
 
 
 if __name__ == '__main__':
@@ -312,7 +300,6 @@ if __name__ == '__main__':
         ns = ''
     df = rbp.bag_to_dataframe(f)
 
-
     if ns == '':
         data = df['threshold_information__data']
     else:
@@ -322,6 +309,3 @@ if __name__ == '__main__':
     # check_bad_vs_good(df,thresh)
     # last_flop(df, thresh)
     find_close(df, thresh)
-
-
-

@@ -6,21 +6,23 @@ import binascii
 import datetime
 from std_msgs.msg import String
 
-def report(expr, f_name, line,check, *args,  **kwargs):
 
-    vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), str(f_name), str(line),str(check),str(expr)]
+def report(expr, f_name, line, check, *args,  **kwargs):
+
+    vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), str(
+        f_name), str(line), str(check), str(expr)]
     for key in kwargs:
         if type(kwargs[key]) is bytes:
             vals.append(str(key) + ':' + binascii.hexlify(kwargs[key]))
         else:
             vals.append(str(key) + ':' + str(kwargs[key]))
-    vals =','.join(vals)
+    vals = ','.join(vals)
     Reporter.Instance().publish(vals)
-    return expr 
-
+    return expr
 
 
 class Singleton:
+
     """
     A non-thread-safe helper class to ease implementing singletons.
     This should be used as a decorator -- not a metaclass -- to the
@@ -65,7 +67,8 @@ class Reporter:
 
     def __init__(self):
         print rospy.get_name()
-        self.pub = rospy.Publisher('threshold_information', String, queue_size=100)
+        self.pub = rospy.Publisher(
+            'threshold_information', String, queue_size=100)
 
     def publish(self, msg):
         self.pub.publish(msg)
