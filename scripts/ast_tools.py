@@ -41,7 +41,7 @@ def get_string_repr(node):
             return '~ ' + get_string_repr(node.operand)
 
     if isinstance(node, ast.Subscript):
-        print node
+        print node.slice
         val = get_string_repr(node.value)
         slc = get_string_repr(node.slice)
         return val + '[' + slc + ']'
@@ -131,3 +131,6 @@ def get_string_repr(node):
 
     if isinstance(node, ast.FunctionDef):
         return 'def ' + str(node.name) + '(...):'
+
+    if isinstance(node, ast.Str):
+        return node.s
