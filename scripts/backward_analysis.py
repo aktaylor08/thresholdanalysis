@@ -1211,7 +1211,7 @@ class ModCalls(ast.NodeTransformer):
         if node in self.tmap:
             if self.verbose:
                 print('modifying:', node.lineno, node)
-            code = self.code.split('\n')[node.lineno - 1].lstrip().strip()
+            line_code = self.code[node.lineno - 1].lstrip().strip()
             nav = NameAttrVisitor(self.fname)
             nav.visit(node.test)
             for i in nav.things:
@@ -1220,7 +1220,7 @@ class ModCalls(ast.NodeTransformer):
             name = ast.Name(id='reporting', ctx=ast.Load())
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load())
             func_args = [node.test, ast.Str(s=self.fname), ast.Str(
-                s=str(node.lineno)), ast.Str(s=code)]
+                s=str(node.lineno)), ast.Str(s=line_code)]
 
             # print nav.things
             # nav.things)
@@ -1345,16 +1345,23 @@ def get_code(fname):
         return None, None
 
 
+def get_code_and_tree(fname):
+    """Return the source code list and the ast tree"""
+    code, spcode = get_code(fname)
+    tree = get_tree(code)
+    return spcode, tree
+
+
 def get_tree(code):
     """Return a tree from the code passed in here"""
     tree = ast.parse(code)
     return tree
 
 
-def get_candidates(tree, spcode, verbose=False):
+def get_candidates(tree, src_code, verbose=False):
     if verbose:
         print('finding assignments')
-    a = AssignFindVisitor(spcode)
+    a = AssignFindVisitor(src_code)
     a.visit(tree)
     if verbose:
         print('done finding assignments')
@@ -1381,7 +1388,7 @@ def get_reaching_definitions(tree, flow_store, verbose=False):
     return rd
 
 
-def get_pub_srv_calls(tree, spcode, verbose=False):
+def get_pub_srv_calls(tree, src_code, verbose=False):
     if verbose:
         print('Finding publishers')
     publish_finder = PublishFinderVisitor()
@@ -1395,7 +1402,7 @@ def get_pub_srv_calls(tree, spcode, verbose=False):
     if verbose:
         print('\nPub and service calls: ')
         for i in calls:
-            print('\t', i.get_repr(spcode))
+            print('\t', i.get_repr(src_code))
     return calls
 
 
@@ -1430,16 +1437,14 @@ def analyze_file(fname, verbose=False, execute=False):
         print('File: ', fname)
         if verbose:
             print('parsing file')
-        code, spcode = get_code(fname)
-        tree = get_tree(code)
-
-        candidates = get_candidates(tree, spcode, verbose)
-        flow_store = get_cfg(tree, code, verbose)
+        src_code, tree = get_code_and_tree(fname)
+        candidates = get_candidates(tree,  src_code, verbose)
+        flow_store = get_cfg(tree, src_code, verbose)
         rd = get_reaching_definitions(tree, flow_store, verbose)
-        calls = get_pub_srv_calls(tree, spcode, verbose)
-        if_visit = get_const_ifs(candidates, tree, spcode, verbose)
+        calls = get_pub_srv_calls(tree,  src_code, verbose)
+        if_visit = get_const_ifs(candidates, tree,  src_code, verbose)
         ba = perform_analysis(if_visit, calls, flow_store, tree, rd,
-                              verbose=verbose, web=False, src_code=spcode)
+                              verbose=verbose, web=False, src_code=src_code)
 
         print('Number of Thresholds:', len(ba.thresholds))
         for i in ba.thresholds:
@@ -1447,7 +1452,7 @@ def analyze_file(fname, verbose=False, execute=False):
 
         if execute:
             print('\nnow modifying source code\n')
-            replace_values(tree, ba, fname, code, verbose)
+            replace_values(tree, ba, fname, src_code, verbose)
 
     else:
         print('error no file')
@@ -1455,23 +1460,20 @@ def analyze_file(fname, verbose=False, execute=False):
 
 def list_ifs(fname):
     """Quickly print a list of all the if statements in the file"""
-    code, sp_code = get_code(fname)
-    tree = get_tree(code)
+    src_code, tree = get_code_and_tree()
     print('\nIf statements in {:s}: '.format(fname))
-    PrintIfVisitor(sp_code).visit(tree)
+    PrintIfVisitor(src_code).visit(tree)
 
 
 def list_assigns(fname):
-    code, spcode = get_code(fname)
-    tree = get_tree(code)
+    src_code, tree = get_code_and_tree(fname)
     print('Assignments in {:s}'.format(fname))
-    AssignPrinter(spcode).visit(tree)
+    AssignPrinter( src_code).visit(tree)
 
 
 def list_constants(fname):
-    code, spcode = get_code(fname)
-    tree = get_tree(code)
-    candidates = get_candidates(tree, spcode)
+    src_code, tree = get_code_and_tree(fname)
+    candidates = get_candidates(tree, src_code)
     print("\nIdentified Constants in {:s}".format(fname))
     for cls in candidates.class_vars:
         print('\tClass: {:s}'.format(cls.name))
@@ -1485,21 +1487,24 @@ def list_constants(fname):
 
 
 def list_pubs(fname):
-    code, spcode = get_code(fname)
-    tree = get_tree(code)
+    src_code, tree = get_code_and_tree(fname)
     print('\nPublish Calls in {:s}'.format(fname))
-    for pub in get_pub_srv_calls(tree, spcode):
-        print('\t', pub.get_repr(spcode))
+    for pub in get_pub_srv_calls(tree, src_code):
+        print('\t', pub.get_repr(src_code))
 
 
 def list_constant_ifs(fname):
-    code, spcode = get_code(fname)
-    tree = get_tree(code)
-    candidates = get_candidates(tree, spcode)
-    if_visit = get_const_ifs(candidates, tree, spcode)
+    src_code, tree = get_code_and_tree(fname)
+    candidates = get_candidates(tree, src_code)
+    if_visit = get_const_ifs(candidates, tree, src_code)
     print('\nIf statements with Constant Values in {:s}: '.format(fname))
     for i in if_visit.ifs:
-        print('\t', i.lineno, '->', get_node_code(i, spcode))
+        print('\t', i.lineno, '->', get_node_code(i, src_code))
+
+
+def list_cfg(fname):
+    src_code, tree = get_code_and_tree(fname)
+    get_cfg(tree, src_code=src_code, verbose=True)
 
 
 if __name__ == '__main__':
@@ -1521,6 +1526,8 @@ if __name__ == '__main__':
         '--list-pubs', help='List all of the statements IDed as publishers', action='store_true')
     parser.add_argument(
         '--list-assign', help='List all of the assignments in code', action='store_true')
+    parser.add_argument(
+        '--list-cfg', help='Print the CFG created for the file', action='store_true')
     args = parser.parse_args()
     no_analysis = False
     if args.list_ifs:
@@ -1537,6 +1544,9 @@ if __name__ == '__main__':
         no_analysis = True
     if args.list_assign:
         list_assigns(args.file)
+        no_analysis = True
+    if args.list_cfg:
+        list_cfg(args.file)
         no_analysis = True
 
     if not no_analysis:

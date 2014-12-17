@@ -350,7 +350,7 @@ def build_files_cfgs(tree=None, fname=None, verbose=False, src_code=None):
         or analyze a passed file name.  Verbose to print
         as you go'''
     if tree is not None:
-        cfgvisit = BuildAllCFG(verbose, code=src_code.split('\n'))
+        cfgvisit = BuildAllCFG(verbose, code=src_code)
         cfgvisit.visit(tree)
         return cfgvisit.store
     elif fname is not None:
