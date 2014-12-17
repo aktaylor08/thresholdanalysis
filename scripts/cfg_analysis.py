@@ -8,53 +8,81 @@ import argparse
 import ast_tools
 
 
-class CFGVisitor(ast.NodeVisitor):
+class FunctionCFGStore(object):
+    """Store for the CFG information instead of the actual visitor itself"""
 
-    '''build the CFG for a function in python'''
-
-    def __init__(self, func):
-        '''initilize the function'''
-        self.statements = set()
-        self.init_map = dict()
-        self.func = func
-        self.start = None
-        self.last = func
+    def __init__(self):
         self.succs = dict()
         self.preds = dict()
-        self.current_loop = []
-        self.next_loop_target = []
-        self.try_targets = []
+        self.start = None
+        self.last = None
+
+
+class CFGVisitor(ast.NodeVisitor):
+
+    """build the CFG for a function in python"""
+
+    def __init__(self, func):
+        """initilize the function"""
+        self._statements = set()
+        self._init_map = dict()
+        self._func = func
+        self._start = None
+        self._last = func
+        self._succs = dict()
+        self._preds = dict()
+        self._current_loop = []
+        self._next_loop_target = []
+        self._try_targets = []
+        self.stores = dict()
+
 
     def visit_FunctionDef(self, node):
-        ''' here lies the start of it all.  Add some bookkeeping edges'''
+        if node != self._func:
+            sub_graph_visitor = CFGVisitor(node)
+            sub_graph_visitor.start_visit(node)
+            for k, v in sub_graph_visitor.stores.iteritems():
+                self.stores[k] = v
+        self.generic_visit(node)
+
+    def start_visit(self, node):
+        """ here lies the start of it all.  Add some bookkeeping edges"""
         # set the start to be the first node in body
-        self.start = node.body[0]
+        self._start = node.body[0]
         # the last one is the function itself
         # now start the cfg by adding one to the end
-        self.last = node
+        self._last = node
 
         # one node body is also different
-        self.add_edge(node.body[-1], self.last)
+        self.add_edge(node.body[-1], self._last)
         self.handleBlock(node.body)
         self.generic_visit(node)
-        self.buildCFG(set(), self.start)
+        self.buildCFG(set(), self._start)
         # add the start node to the pred graph so we have a close one
-        self.preds[self.start] = set([node])
+        self._preds[self._start] = set([node])
+        store = FunctionCFGStore()
+        store.succs = self._succs
+        store.preds = self._preds
+        store.start = self._start
+        store.last = self._last
+        self.stores[node] = store
+
+
 
     def visit_While(self, node):
-        '''pass it to the loop handler'''
+        """pass it to the loop handler"""
         self.handle_loop(node)
 
     def visit_For(self, node):
-        '''pass it to the loop handler'''
+        """pass it to the loop handler"""
         self.handle_loop(node)
 
     def visit_TryFinally(self, node):
-        '''visit a try finally block'''
+        """visit a try finally block"""
         # get where this node points
         nnode = self.get_target(node)
         # clear the nodes target and point it at the body
-        self.init_map[node].clear()
+        self._init_map[node].clear()
 
         # point to the correct things
         self.add_edge(node, node.body[0])
@@ -67,10 +95,10 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_TryExcept(self, node):
-        '''try excpts'''
+        """try excpts"""
         target = self.get_target(node)
         # point to some of the right things
-        self.init_map[node].clear()
+        self._init_map[node].clear()
         self.add_edge(node, node.body[0])
         self.add_edge(node.body[-1], target)
 
@@ -87,16 +115,16 @@ class CFGVisitor(ast.NodeVisitor):
                 first = nh
 
         # add exception handlers to be pointed at only point to first one
-        self.try_targets.append(node.handlers[0])
+        self._try_targets.append(node.handlers[0])
 
         # visit
         self.handleBlock(node.body)
         self.generic_visit(node)
         # remove them
-        self.try_targets = self.try_targets[:-1]
+        self._try_targets = self._try_targets[:-1]
 
     def visit_ExceptHandler(self, node):
-        '''here we visit an exception handler'''
+        """here we visit an exception handler"""
         target = self.get_target(node)
 
         # we are good so
@@ -104,24 +132,24 @@ class CFGVisitor(ast.NodeVisitor):
         self.add_edge(node.body[-1], target)
         # pop one off before we visit some blocks because they will be
         # already visited and don't want to point to ourselves
-        tt = self.try_targets[-1]
-        self.try_targets = self.try_targets[:-1]
+        tt = self._try_targets[-1]
+        self._try_targets = self._try_targets[:-1]
         self.handleBlock(node.body)
-        self.try_targets.append(tt)
+        self._try_targets.append(tt)
         self.generic_visit(node)
 
     def visit_If(self, node):
-        '''visit an if node'''
+        """visit an if node"""
         nnode = self.get_target(node)
-        self.init_map[node].clear()
+        self._init_map[node].clear()
         # do stuff with the then list
         then_list = node.body
         self.add_edge(node, then_list[0])
-        for eh in self.try_targets:
+        for eh in self._try_targets:
             self.add_edge(node, eh)
         self.add_edge(then_list[-1], nnode)
         # handle try targets
-        for eh in self.try_targets:
+        for eh in self._try_targets:
             self.add_edge(node, eh)
         self.handleBlock(then_list)
         else_list = node.orelse
@@ -134,57 +162,57 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Return(self, node):
-        '''add and edge to the last on return'''
-        self.add_edge(node, self.last)
+        """add and edge to the last on return"""
+        self.add_edge(node, self._last)
 
     def visit_Continue(self, node):
-        '''add an edges back to the loop'''
-        self.add_edge(node, self.current_loop[-1])
+        """add an edges back to the loop"""
+        self.add_edge(node, self._current_loop[-1])
 
     def visit_Break(self, node):
-        '''go to the next target'''
-        self.add_edge(node, self.next_loop_target[-1])
+        """go to the next target"""
+        self.add_edge(node, self._next_loop_target[-1])
 
     def visit_With(self, node):
-        '''in a with just treat it as another block'''
+        """in a with just treat it as another block"""
         nnode = self.get_target(node)
-        self.init_map[node].clear()
+        self._init_map[node].clear()
         self.add_edge(node, node.body[0])
         self.add_edge(node.body[-1], nnode)
         self.handleBlock(node.body)
         self.generic_visit(node)
 
     def buildCFG(self, visited, statement):
-        '''build the final CFG with boths succsessors and predicenents'''
+        """build the final CFG with boths succsessors and predicenents"""
         if statement in visited:
             return
         visited.add(statement)
         # get all in the map
-        if statement in self.init_map:
-            vals = self.init_map[statement]
+        if statement in self._init_map:
+            vals = self._init_map[statement]
         else:
             vals = []
         for succsessor in vals:
-            if statement in self.succs:
-                self.succs[statement].add(succsessor)
+            if statement in self._succs:
+                self._succs[statement].add(succsessor)
             else:
-                self.succs[statement] = set()
-                self.succs[statement].add(succsessor)
+                self._succs[statement] = set()
+                self._succs[statement].add(succsessor)
 
-            if succsessor in self.preds:
-                self.preds[succsessor].add(statement)
+            if succsessor in self._preds:
+                self._preds[succsessor].add(statement)
             else:
-                self.preds[succsessor] = set()
-                self.preds[succsessor].add(statement)
+                self._preds[succsessor] = set()
+                self._preds[succsessor].add(statement)
                 self.buildCFG(visited, succsessor)
 
     def add_edge(self, from_node, to_node):
-        '''add an edge to the node in the initial map'''
+        """add an edge to the node in the initial map"""
         # don't do return unless it is going home
-        if isinstance(from_node, ast.Return) and to_node != self.last:
+        if isinstance(from_node, ast.Return) and to_node != self._last:
             return
         # handle weird break case to make sure it doesn't go back to loop
-        nlt = list(self.next_loop_target)
+        nlt = list(self._next_loop_target)
         # no next loop target. get off of the because you dont want to add yet
         if len(nlt) == 0 and isinstance(from_node, ast.Break):
             return
@@ -192,33 +220,33 @@ class CFGVisitor(ast.NodeVisitor):
         if isinstance(from_node, ast.Break) and to_node != nlt[-1]:
             return
             # handle weird break case to make sure it doesn't go back to loop
-        nlt = list(self.current_loop)
+        nlt = list(self._current_loop)
         # no next loop target. get off of the because you dont want to add yet
         if len(nlt) == 0 and isinstance(from_node, ast.Continue):
             return
         if isinstance(from_node, ast.Continue) and to_node != nlt[-1]:
             return
             # add the nodes to the statement list
-        self.statements.add(from_node)
-        self.statements.add(to_node)
+        self._statements.add(from_node)
+        self._statements.add(to_node)
         # add it to the initial map we have
-        if from_node not in self.init_map:
-            self.init_map[from_node] = set()
-            self.init_map[from_node].add(to_node)
+        if from_node not in self._init_map:
+            self._init_map[from_node] = set()
+            self._init_map[from_node].add(to_node)
         else:
-            self.init_map[from_node].add(to_node)
+            self._init_map[from_node].add(to_node)
 
     def handleBlock(self, node_list):
-        '''handle a list of blocks.  We assume 
+        """handle a list of blocks.  We assume
         that the first and last nodes in this block
         are already pointed at correctly and have the correct
-        targets'''
+        targets"""
         if len(node_list) == 0:
             # if there is nothing than nothing to do here
             return
         elif len(node_list) == 1:
-            # if it is only one node than add edges to the execption handlers
-            for target in self.try_targets:
+            # if it is only one node than add edges to the execution handlers
+            for target in self._try_targets:
                 self.add_edge(node_list[0], target)
         else:
             # otherwise we need to loop through them all and add edges
@@ -232,28 +260,28 @@ class CFGVisitor(ast.NodeVisitor):
                     self.add_edge(from_node, to_node)
 
                 # handle exception handlers
-                for target in self.try_targets:
+                for target in self._try_targets:
                     self.add_edge(from_node, target)
                 from_node = to_node
 
             # exception handing for the last node in the list
-            for target in self.try_targets:
+            for target in self._try_targets:
                 self.add_edge(to_node, target)
 
     def handle_loop(self, node):
-        '''handle a loop construct'''
+        """handle a loop construct"""
         # some housekeeping here to handel current loop and next loop for break
         # and continue statemnts
         # keep track of these for break and continue statements
         nnode = self.get_target(node)
-        self.current_loop.append(node)
-        self.next_loop_target.append(nnode)
+        self._current_loop.append(node)
+        self._next_loop_target.append(nnode)
         # handle or else clauses on loops lol python
         if len(node.orelse) > 0:
             self.add_edge(node, node.orelse[0])
             self.add_edge(node.orelse[-1], nnode)
         # handle excpetions
-        for eh in self.try_targets:
+        for eh in self._try_targets:
             self.add_edge(node, eh)
         # point the loop to the right stuff
         self.add_edge(node, node.body[0])
@@ -263,15 +291,15 @@ class CFGVisitor(ast.NodeVisitor):
         self.handleBlock(node.orelse)
         self.generic_visit(node)
         # get rid of some bookkeeping stuff
-        self.current_loop = self.current_loop[:-1]
-        self.next_loop_target = self.next_loop_target[:-1]
+        self._current_loop = self._current_loop[:-1]
+        self._next_loop_target = self._next_loop_target[:-1]
 
     def get_target(self, node):
-        '''get the target of a node from the init map
+        """get the target of a node from the init map
         only returns non exception handlers which
         may already be in the map.  Don't worry they will
-        get added back to the map if needed'''
-        nnode = list(self.init_map[node])
+        get added back to the map if needed"""
+        nnode = list(self._init_map[node])
         if len(nnode) != 1:
             # find true target
             for i in nnode:
@@ -285,7 +313,7 @@ class CFGVisitor(ast.NodeVisitor):
 
 class BuildAllCFG(ast.NodeVisitor):
 
-    '''build cfg for all functions'''
+    """build cfg for all functions"""
 
     def __init__(self, verbose=True, code=None):
         self.verbose = verbose
@@ -306,23 +334,24 @@ class BuildAllCFG(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node):
         func_visit = CFGVisitor(node)
-        func_visit.visit(node)
-        self.store[self.current_key][node] = func_visit
-        if self.verbose:
-            print '\n'
-            if self.code is not None:
-                print 'CFGs for: ', node.lineno, self.code[node.lineno - 1].lstrip().strip()
-                print 'Forward: '
-                self.print_graph_code(func_visit.succs)
-                print '\nBackward:'
-                self.print_graph_code(func_visit.preds)
-            else:
-                print 'CFGs for:', node.lineno, node
-                print 'Forward: '
-                self.print_graph(func_visit.succs)
-                print '\nBackward:'
-                self.print_graph(func_visit.preds)
+        func_visit.start_visit(node)
+        for key, value in func_visit.stores.iteritems():
+            self.store[self.current_key][key] = value
+            if self.verbose:
                 print '\n'
+                if self.code is not None:
+                    print 'CFGs for: ', key.lineno, self.code[key.lineno - 1].lstrip().strip()
+                    print 'Forward: '
+                    self.print_graph_code(value.succs)
+                    print '\nBackward:'
+                    self.print_graph_code(value.preds)
+                else:
+                    print 'CFGs for:', key.lineno, key
+                    print 'Forward: '
+                    self.print_graph(value.succs)
+                    print '\nBackward:'
+                    self.print_graph(value.preds)
+                    print '\n'
 
     def print_graph_code(self, thing):
         vals = []
@@ -346,9 +375,9 @@ class BuildAllCFG(ast.NodeVisitor):
 
 
 def build_files_cfgs(tree=None, fname=None, verbose=False, src_code=None):
-    '''build a files cfg.  Either analyze a passed tree
+    """build a files cfg.  Either analyze a passed tree
         or analyze a passed file name.  Verbose to print
-        as you go'''
+        as you go"""
     if tree is not None:
         cfgvisit = BuildAllCFG(verbose, code=src_code)
         cfgvisit.visit(tree)
@@ -372,11 +401,10 @@ def main(fname, verbose):
     """
 
     if os.path.isfile(fname):
-        tree = None
         with open(fname, 'r') as openf:
             code = openf.read()
             tree = ast.parse(code)
-            cfgvisit = BuildAllCFG()
+            cfgvisit = BuildAllCFG(code=code.split('\n'))
             cfgvisit.visit(tree)
 
     else:
