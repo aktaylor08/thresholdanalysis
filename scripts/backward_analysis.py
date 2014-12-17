@@ -964,7 +964,7 @@ class BackwardAnalysis(object):
                 except KeyError:
                     print(
                         current.statement.get_repr(self.src_code), file=sys.stderr)
-                    print(current, file=sys.stderr)
+                    print(current.get_repr(self.src_code), file=sys.stderr)
                     print(current.statement.expr, file=sys.stderr)
                     print('reaching definition exceptions', file=sys.stderr)
                     full_print(current)
@@ -1460,7 +1460,7 @@ def analyze_file(fname, verbose=False, execute=False):
 
 def list_ifs(fname):
     """Quickly print a list of all the if statements in the file"""
-    src_code, tree = get_code_and_tree()
+    src_code, tree = get_code_and_tree(fname)
     print('\nIf statements in {:s}: '.format(fname))
     PrintIfVisitor(src_code).visit(tree)
 
@@ -1468,7 +1468,7 @@ def list_ifs(fname):
 def list_assigns(fname):
     src_code, tree = get_code_and_tree(fname)
     print('Assignments in {:s}'.format(fname))
-    AssignPrinter( src_code).visit(tree)
+    AssignPrinter(src_code).visit(tree)
 
 
 def list_constants(fname):
@@ -1509,7 +1509,7 @@ def list_cfg(fname):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=("This is a program to find"
-                                                  "constant thresholds in a python program"))
+                                                  " constant thresholds in a python program"))
     parser.add_argument('file', help='path to file')
     parser.add_argument('-n', '--no_execute', help='Set execution to false',
                         action='store_true', )
