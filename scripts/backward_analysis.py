@@ -501,34 +501,6 @@ class BasicVisitor(ast.NodeVisitor):
             ast.NodeVisitor.generic_visit(self, node)
 
 
-# class ConstantVisitor(BasicVisitor):
-#
-#     def __init__(self, canidates, cls, func):
-#         BasicVisitor.__init__(self)
-#         self.canidates = canidates
-#         self.consts = []
-#         self.current_class = cls
-#         self.current_function = func
-#
-#     def visit_Num(self, node):
-#         self.consts.append(node)
-#
-#     def visit_Attribute(self, node):
-#         if isinstance(node.value, ast.Name):
-#             if node.value.id == 'self':
-#                 cv = ClassVariable(self.current_class, self.current_function,
-#                                    node.attr, node)
-#                 if cv in self.canidates.class_vars[self.current_class]:
-#                     self.consts.append(cv)
-#
-#     def visit_Name(self, node):
-#         fv = FunctionVariable(self.current_class,
-#                               self.current_function, node.id, node)
-#         if self.current_class in self.canidates.func_vars:
-#             if fv in self.canidates.func_vars[self.current_class]:
-#                 self.consts.append(fv)
-
-
 class AssignFindVisitor(BasicVisitor):
 
     """find all of the assignments and organize them
