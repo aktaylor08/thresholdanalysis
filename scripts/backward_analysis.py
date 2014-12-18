@@ -28,6 +28,11 @@ class TreeObject(object):
     def get_repr(self, code):
         return str(self.node.lineno) + ': ' + get_node_code(self.node, code)
 
+    def get_full_dict(self, code):
+        ret = {'cls': get_node_code(self.cls, code), 'func': get_node_code(self.func, code),
+               'expr': get_node_code(self.expr, code), 'node': get_node_code(self.node, code)}
+        return ret
+
     def __str__(self):
         return self.__repr__()
 
@@ -710,6 +715,29 @@ class PublishFinderVisitor(BasicVisitor):
                                self.current_function, self.current_expr, node))
 
 
+class InterestingStatementStore(object):
+
+    def __init__(self, tree=None, src_code=None):
+        self.tree = tree
+        self.src_code = src_code
+        self.calls = list()
+        self.get_local_calls()
+
+    def get_local_calls(self):
+        publish_finder = PublishFinderVisitor()
+        publish_finder.visit(self.tree)
+        service_finder = ServiceFinderVisitor()
+        service_finder.visit(self.tree)
+        call_finder = ServiceCallFinder(service_finder.proxies)
+        call_finder.visit(self.tree)
+        print(call_finder.calls)
+        print(publish_finder.publish_calls)
+        self.calls = call_finder.calls + publish_finder.publish_calls
+
+
+
+
+
 class ClassFuncVisit(BasicVisitor):
 
     def __init__(self, target):
@@ -1292,14 +1320,6 @@ def replace_values(tree, back_analysis, fname, code, verbose):
     exec (code, ns)
 
 
-def find_services(tree):
-    service_finder = ServiceFinderVisitor()
-    service_finder.visit(tree)
-    call_finder = ServiceCallFinder(service_finder.proxies)
-    call_finder.visit(tree)
-    return call_finder.calls
-
-
 def close_graph(node, graph, visited):
     if node in visited:
         return
@@ -1366,16 +1386,11 @@ def get_reaching_definitions(tree, flow_store, verbose=False):
 
 
 def get_pub_srv_calls(tree, src_code, verbose=False):
-    if verbose:
-        print('Finding publishers')
-    publish_finder = PublishFinderVisitor()
-    publish_finder.visit(tree)
 
     if verbose:
-        print('Finding Services')
-    services = find_services(tree)
-
-    calls = publish_finder.publish_calls + services
+        print('Finding interesting calls')
+    iss = InterestingStatementStore(tree, src_code)
+    calls = iss.calls
     if verbose:
         print('\nPub and service calls: ')
         for i in calls:
@@ -1467,7 +1482,7 @@ def list_pubs(fname):
     src_code, tree = get_code_and_tree(fname)
     print('\nPublish Calls in {:s}'.format(fname))
     for pub in get_pub_srv_calls(tree, src_code):
-        print('\t', pub.get_repr(src_code))
+        print('\n\t'.join([k + ' : ' + v for k, v in pub.get_full_dict(src_code).iteritems()]))
 
 
 def list_constant_ifs(fname):
