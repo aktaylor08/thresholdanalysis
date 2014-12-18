@@ -276,7 +276,7 @@ class CanidateStore(object):
         cls, func = self.get_class_and_func(node)
 
         # if it is an attribute than check if it is a self call and
-        # htan check to see if it is in its class listing
+        # then check to see if it is in its class listing
         if isinstance(node, ast.Attribute):
             if isinstance(node.value, ast.Name) and node.value.id == 'self':
                 if cls in self.class_vars:
@@ -351,7 +351,7 @@ class ReachingDefinition(object):
             node = cfg.start
             changed = self.iterate(seen, node, outs, cfg)
 
-        # ins are just the union of the preceeding outs.
+        # ins are just the union of the preceding outs.
         for i in outs:
             if isinstance(i, ast.FunctionDef):
                 continue
@@ -364,7 +364,7 @@ class ReachingDefinition(object):
         return ins, outs
 
     def iterate(self, seen, node, outs, cfg):
-        """this is the main function that computs gens
+        """this is the main function that compute gens
         and kills and than does the union on the entering data"""
         if node in seen:
             return False
@@ -540,7 +540,7 @@ class AssignFindVisitor(BasicVisitor):
 
     def visit_assign_things(self, queue, node):
         for i in queue:
-            # assigning to self.asdfasfd is an attribute
+            # assigning to self.value is an attribute
             if isinstance(i, ast.Attribute):
                 self.handle_attribute(i, node)
             elif isinstance(i, ast.Name):
@@ -735,9 +735,6 @@ class InterestingStatementStore(object):
         self.calls = call_finder.calls + publish_finder.publish_calls
 
 
-
-
-
 class ClassFuncVisit(BasicVisitor):
 
     def __init__(self, target):
@@ -905,7 +902,7 @@ class BackwardAnalysis(object):
                 # if they are different method calls we need to combined them.
                 if set(mem_calls) != set(can_calls):
                     if self.verbose:
-                        print('\tdifferent calls adding to candiates')
+                        print('\tdifferent calls adding to candidates')
                     for i in canidate.children:
                         if i not in mem.children:
                             if self.verbose:
