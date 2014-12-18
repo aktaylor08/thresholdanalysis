@@ -722,6 +722,7 @@ class InterestingStatementStore(object):
         self.src_code = src_code
         self.calls = list()
         self.get_local_calls()
+        self.find_import_values()
 
     def get_local_calls(self):
         publish_finder = PublishFinderVisitor()
@@ -733,6 +734,14 @@ class InterestingStatementStore(object):
         print(call_finder.calls)
         print(publish_finder.publish_calls)
         self.calls = call_finder.calls + publish_finder.publish_calls
+
+    def find_import_values(self):
+        for node in self.tree.body:
+            if isinstance(node, ast.Import):
+                print(node)
+            elif isinstance(node, ast.ImportFrom):
+                print(node)
+
 
 
 class ClassFuncVisit(BasicVisitor):
