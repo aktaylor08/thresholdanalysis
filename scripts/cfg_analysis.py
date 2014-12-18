@@ -36,14 +36,14 @@ class CFGVisitor(ast.NodeVisitor):
         self._try_targets = []
         self.stores = dict()
 
-
     def visit_FunctionDef(self, node):
         if node != self._func:
             sub_graph_visitor = CFGVisitor(node)
             sub_graph_visitor.start_visit(node)
             for k, v in sub_graph_visitor.stores.iteritems():
                 self.stores[k] = v
-        self.generic_visit(node)
+        else:
+            self.generic_visit(node)
 
     def start_visit(self, node):
         """ here lies the start of it all.  Add some bookkeeping edges"""

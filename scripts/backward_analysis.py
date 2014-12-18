@@ -454,6 +454,8 @@ class BasicVisitor(ast.NodeVisitor):
         self.current_function = None
         self.current_expr = None
 
+        self._flevel = 0
+
     def visit_Module(self, node):
         """we set the module level as the current class"""
         self.current_class = node
@@ -568,10 +570,13 @@ class AssignFindVisitor(BasicVisitor):
                 self.handle_name(i, node)
             elif isinstance(i, ast.Subscript):
                 self.handle_subscript(i, node)
+            elif isinstance(i, ast.List):
+                for elt in i.elts:
+                    queue.append(elt)
             else:
                 print('\nERROR unimplemented AST Type:',
                       node.lineno, type(i), file=sys.stderr)
-                print(pprinter.dump(i), file=sys.stderr)
+                print(get_node_code(node, self.src_code), file=sys.stderr)
 
     def get_tuple_elements(self, tup):
         vals = []
@@ -884,7 +889,7 @@ class BackwardAnalysis(object):
             print('total thresholds {:d}'.format(count))
 
     def check_member(self, canidate, collection):
-        """check if it is a memeber and if it is
+        """check if it is a member and if it is
             then add it to the children  return true if
             it is not"""
         if canidate not in collection:
