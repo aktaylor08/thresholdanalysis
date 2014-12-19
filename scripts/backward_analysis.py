@@ -731,7 +731,7 @@ class InterestingStatementStore(object):
         self.tree = tree
         self.src_code = src_code
         self.calls = list()
-        self.get_local_pub_srv()
+        self.get_local_pub_srv(tree)
         self.find_import_values()
 
     def find_import_values(self):
@@ -740,7 +740,6 @@ class InterestingStatementStore(object):
                 print(node)
             elif isinstance(node, ast.ImportFrom):
                 print(node)
-
 
 
 class ClassFuncVisit(BasicVisitor):
