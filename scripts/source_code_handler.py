@@ -1,16 +1,47 @@
 from docutils.nodes import table
 import sys
-
-__author__ = 'ataylor'
-
+import pprinter
 
 import inspect
 import ast_tools
 import ast
 from collections import defaultdict
 
-from backward_analysis import BasicVisitor, get_local_pub_srv
+from backward_analysis import BasicVisitor, get_local_pub_srv, ServiceFinderVisitor, ServiceCallFinder, TreeObject
 
+
+class OutsidePubFinder(BasicVisitor):
+    def __init__(self):
+        BasicVisitor.__init__(self)
+        self.publish_calls = []
+        self.in_expr = False
+        self.found = False
+
+    def visit_Expr(self, node):
+        self.current_expr = node
+        self.in_expr = True
+        self.generic_visit(node)
+        if self.found:
+            self.publish_calls.append(
+                TreeObject(self.current_class,
+                           self.current_function, self.current_expr, node))
+            self.found = False
+        self.in_expr = False
+        self.current_expr = None
+
+    def visit_Attribute(self, node):
+        if node.attr == 'publish':
+            self.found = True
+
+
+def get_outside_pub_svr(tree):
+    service_finder = ServiceFinderVisitor()
+    service_finder.visit(tree)
+    call_finder = ServiceCallFinder(service_finder.proxies)
+    call_finder.visit(tree)
+    opf = OutsidePubFinder()
+    opf.visit(tree)
+    return call_finder.calls + opf.publish_calls
 
 
 class ObjectOutsideMap(object):
@@ -23,14 +54,21 @@ class ObjectOutsideMap(object):
         self.function_map = defaultdict(set)
         self.total_map = defaultdict(set)
 
-    def contains_pub(self, variable, function):
-        pass
+    def outside(self, call):
+        if isinstance(call.func, ast.Attribute):
+            name = ast_tools.get_name(call.func.value)
+            if call.func.attr in self.total_map[name]:
+                return True
+            else:
+                return False
+        else:
+            print ast.dump(call)
 
     def get_functions(self, cls):
-        pass
+        return self.function_map[cls]
 
     def print_out(self):
-        for k,v in self.total_map.iteritems():
+        for k, v in self.total_map.iteritems():
             print k
             for func in list(v):
                 print '\t', func
@@ -38,7 +76,7 @@ class ObjectOutsideMap(object):
     def populate_map(self, variable, module, cls):
         src_code = get_code_from_pkg_class(module, cls)
         tree = ast.parse(src_code)
-        vals = get_local_pub_srv(tree)
+        vals = get_outside_pub_svr(tree)
         for i in vals:
             if i.cls.name == cls:
                 for var in variable:
@@ -46,17 +84,17 @@ class ObjectOutsideMap(object):
                     self.function_map[cls].add(i.func.name)
                     self.total_map[var].add(i.func.name)
 
+
 def get_call_objects(node, import_names):
     nn = ast_tools.get_name(node)
     for i in import_names:
         if nn.startswith(i[1]):
-            obj = nn[nn.index(i[1])+len(i[1])+1:]
+            obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
             return i[2], obj
     return None, None
 
 
 class ImportFinder(ast.NodeVisitor):
-
     def __init__(self):
         # Names is a list of tuples. First element module_names, second names in file, third element is module
         self.names = []
@@ -77,7 +115,6 @@ class ImportFinder(ast.NodeVisitor):
 
 
 class OutsideChecker(ast.NodeVisitor):
-
     def __init__(self, names, src_code):
         self.names = names
         self.src_code = src_code
@@ -85,7 +122,7 @@ class OutsideChecker(ast.NodeVisitor):
         self.outside_class_map = ObjectOutsideMap()
 
     def visit_Assign(self, node):
-        #if it is a call check to see if it came from imports
+        # if it is a call check to see if it came from imports
         if isinstance(node.value, ast.Call):
             t = [ast_tools.get_name(x) for x in node.targets]
             if isinstance(node.value.func, ast.Attribute):
@@ -96,23 +133,11 @@ class OutsideChecker(ast.NodeVisitor):
                         # store the class type here and map all of the functions that contain outside  values
                         self.outside_class_map.populate_map(t, mod, obj)
 
-
-
-
             elif isinstance(node.value.func, ast.Name):
                 #TODO: handle pure names
                 pass
 
         self.generic_visit(node)
-
-    # def visit_Call(self, node):
-    #     self.generic_visit(node)
-    #     if self.match:
-    #         ast_tools.print_code_node(node, self.src_code)
-    #         # get_obj_type(self.matched_name[2], self.matched_name[0])
-    #         print '\n'
-    #         self.match = False
-    #         self.matched_obj = None
 
 
 def get_src_code(cls_obj):
@@ -128,7 +153,6 @@ def get_code_from_pkg_class(package, cls):
 
 
 def get_obj_type(package, name):
-    print package, name
     pkg = __import__(package)
     obj = getattr(pkg, name)
     if inspect.isclass(obj):
@@ -138,6 +162,16 @@ def get_obj_type(package, name):
     else:
         return 'unkown'
 
+
+class OutsideCallFinder(ast.NodeVisitor):
+
+    def __init__(self, ocm):
+        self.ocm = ocm
+
+    def visit_Call(self, node):
+        is_pub = self.ocm.outside(node)
+        if is_pub:
+            print 'outside', node.lineno
 
 def build_import_list(tree=None, fname=None, src_code=None):
     if tree is None and fname is None:
@@ -150,9 +184,14 @@ def build_import_list(tree=None, fname=None, src_code=None):
 
     import_finder = ImportFinder()
     import_finder.visit(tree)
+    print('Compiling import stuff')
     oc = OutsideChecker(import_finder.names, src_code)
     oc.visit(tree)
     oc.outside_class_map.print_out()
+    print('\nFinding outside calls')
+
+    ocf = OutsideCallFinder(oc.outside_class_map)
+    ocf.visit(tree)
 
 
 if __name__ == '__main__':
@@ -163,6 +202,6 @@ if __name__ == '__main__':
     # package = 'baxter_interface'
     # cls = 'Head'
     # for i in get_code_from_pkg_class(package, cls):
-    #     print i
+    # print i
 
 

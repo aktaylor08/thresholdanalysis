@@ -15,7 +15,6 @@ from ast_tools import get_name, get_string_repr, get_node_code
 
 
 class TreeObject(object):
-
     """'hold all of the information needed
     about a cfg node in this stuff"""
 
@@ -55,7 +54,6 @@ class TreeObject(object):
 
 
 class ClassVariable(object):
-
     """holds information about a class variable"""
 
     def __init__(self, cls, func, name, assign):
@@ -82,7 +80,6 @@ class ClassVariable(object):
 
 
 class FunctionVariable(object):
-
     """holds information about a Function variable"""
 
     def __init__(self, cls, func, name, assign):
@@ -121,7 +118,6 @@ class FunctionVariable(object):
 
 
 class SearchStruct(object):
-
     """data structure that holds information for the search/backward
     analysis"""
 
@@ -159,7 +155,6 @@ class SearchStruct(object):
 
 
 class CanidateStore(object):
-
     """class to hold all of the candidates for
         thresholds.  Will include num literals, class variables,
         and variables within a function"""
@@ -303,7 +298,6 @@ def get_gen(node):
 
 
 class ReachingDefinition(object):
-
     """class to compute reaching definitions on all functions within
     a file.  Will compute both exit and enter values for all of them"""
 
@@ -435,7 +429,6 @@ class AssignPrinter(ast.NodeVisitor):
 
 
 class PrintIfVisitor(ast.NodeVisitor):
-
     """Super simple visitor to print out all encountered if functions"""
 
     def __init__(self, src_code):
@@ -446,7 +439,6 @@ class PrintIfVisitor(ast.NodeVisitor):
 
 
 class BasicVisitor(ast.NodeVisitor):
-
     """this is a super simple visitor
     which keeps track of the current class
     and function that you are in while traversing
@@ -507,7 +499,6 @@ class BasicVisitor(ast.NodeVisitor):
 
 
 class AssignFindVisitor(BasicVisitor):
-
     """find all of the assignments and organize them
     into global and class lists"""
 
@@ -597,7 +588,6 @@ class AssignFindVisitor(BasicVisitor):
 
 
 class IfOrFuncVisitor(BasicVisitor):
-
     """finds if the program is part of an if statement"""
 
     def __init__(self, target):
@@ -637,7 +627,6 @@ class IfOrFuncVisitor(BasicVisitor):
 
 
 class ServiceFinderVisitor(BasicVisitor):
-
     def __init__(self):
         BasicVisitor.__init__(self)
         self.proxies = []
@@ -661,7 +650,6 @@ class ServiceFinderVisitor(BasicVisitor):
 
 
 class ServiceCallFinder(BasicVisitor):
-
     def __init__(self, proxies):
         BasicVisitor.__init__(self)
         self.proxies = proxies
@@ -694,7 +682,6 @@ class ServiceCallFinder(BasicVisitor):
 
 
 class PublishFinderVisitor(BasicVisitor):
-
     """find and store all of the rospy.publish calls
     in this manner we can get all of the functions and
     stuff that they reside in  will store them in an object"""
@@ -726,13 +713,12 @@ def get_local_pub_srv(tree):
 
 
 class InterestingStatementStore(object):
-
     def __init__(self, tree=None, src_code=None):
         self.tree = tree
         self.src_code = src_code
         self.calls = list()
-        self.get_local_pub_srv(tree)
-        self.find_import_values()
+        self.calls = get_local_pub_srv(tree)
+        # self.find_import_values()
 
     def find_import_values(self):
         for node in self.tree.body:
@@ -743,7 +729,6 @@ class InterestingStatementStore(object):
 
 
 class ClassFuncVisit(BasicVisitor):
-
     def __init__(self, target):
         BasicVisitor.__init__(self)
         self.target = target
@@ -759,7 +744,6 @@ class ClassFuncVisit(BasicVisitor):
 
 
 class GetVarsVisit(ast.NodeVisitor):
-
     def __init__(self, statement):
         self.statement = statement
         self.class_vars = set()
@@ -782,7 +766,6 @@ class GetVarsVisit(ast.NodeVisitor):
 
 
 class FindAssigns(BasicVisitor):
-
     def __init__(self, var):
         BasicVisitor.__init__(self)
         self.var = var
@@ -817,7 +800,6 @@ class FindAssigns(BasicVisitor):
 
 
 class BackwardAnalysis(object):
-
     """class to perform the backward analysis needed on all of the files"""
 
     def __init__(self, if_visitor, calls, flow_store, tree, reaching_defs, verbose=False, web=False, src_code=None):
@@ -1118,7 +1100,6 @@ def get_base_calls(thing, visited=None):
 
 
 class FindCallVisitor(BasicVisitor):
-
     def __init__(self, target_class, target_func):
         BasicVisitor.__init__(self)
         self.target_class = target_class
@@ -1137,7 +1118,6 @@ class FindCallVisitor(BasicVisitor):
 
 
 class IfConstantVisitor(BasicVisitor):
-
     """visit if statements to ID which constants are
     used in if statements"""
 
@@ -1168,7 +1148,6 @@ class IfConstantVisitor(BasicVisitor):
 
 
 class ConstantVisitor(BasicVisitor):
-
     """IDs constants from candidates and also numerical constants"""
 
     def __init__(self, canidates, cls, func):
@@ -1206,7 +1185,6 @@ def add_import_statement(node):
 
 
 class ModCalls(ast.NodeTransformer):
-
     def __init__(self, ba, fname, code, verbose):
         self.ba = ba
         self.fname = fname
@@ -1241,7 +1219,6 @@ class ModCalls(ast.NodeTransformer):
 
 
 class NameAttrVisitor(ast.NodeVisitor):
-
     def __init__(self, name_pre):
         self.things = []
         self.name_pre = name_pre
@@ -1254,7 +1231,7 @@ class NameAttrVisitor(ast.NodeVisitor):
     # or not
     def visit_UnaryOp(self, node):
         name = self.name_pre + \
-            str(node.lineno) + ' value->' + get_string_repr(node)
+               str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1262,7 +1239,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_BinOp(self, node):
         name = self.name_pre + \
-            str(node.lineno) + ' value->' + get_string_repr(node)
+               str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1271,7 +1248,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_BoolOp(self, node):
         name = self.name_pre + \
-            str(node.lineno) + ' value->' + get_string_repr(node)
+               str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1280,7 +1257,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_Compare(self, node):
         name = self.name_pre + \
-            str(node.lineno) + ' value->' + get_string_repr(node)
+               str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1290,7 +1267,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node):
         name = self.name_pre + \
-            str(node.lineno) + ' value->' + get_string_repr(node)
+               str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1303,13 +1280,13 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_Attribute(self, node):
         name = self.name_pre + \
-            str(node.lineno) + ' value->' + get_string_repr(node)
+               str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
     def visit_Name(self, node):
         name = self.name_pre + \
-            str(node.lineno) + ' value->' + get_string_repr(node)
+               str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1390,7 +1367,6 @@ def get_reaching_definitions(tree, flow_store, verbose=False):
 
 
 def get_pub_srv_calls(tree, src_code, verbose=False):
-
     if verbose:
         print('Finding interesting calls')
     iss = InterestingStatementStore(tree, src_code)
@@ -1434,11 +1410,11 @@ def analyze_file(fname, verbose=False, execute=False):
         if verbose:
             print('parsing file')
         src_code, tree = get_code_and_tree(fname)
-        candidates = get_candidates(tree,  src_code, verbose)
+        candidates = get_candidates(tree, src_code, verbose)
         flow_store = get_cfg(tree, src_code, verbose)
         rd = get_reaching_definitions(tree, flow_store, verbose)
-        calls = get_pub_srv_calls(tree,  src_code, verbose)
-        if_visit = get_const_ifs(candidates, tree,  src_code, verbose)
+        calls = get_pub_srv_calls(tree, src_code, verbose)
+        if_visit = get_const_ifs(candidates, tree, src_code, verbose)
         ba = perform_analysis(if_visit, calls, flow_store, tree, rd,
                               verbose=verbose, web=False, src_code=src_code)
 
