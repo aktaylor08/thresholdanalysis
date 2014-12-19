@@ -715,25 +715,24 @@ class PublishFinderVisitor(BasicVisitor):
                                self.current_function, self.current_expr, node))
 
 
+def get_local_pub_srv(tree):
+    publish_finder = PublishFinderVisitor()
+    publish_finder.visit(tree)
+    service_finder = ServiceFinderVisitor()
+    service_finder.visit(tree)
+    call_finder = ServiceCallFinder(service_finder.proxies)
+    call_finder.visit(tree)
+    return call_finder.calls + publish_finder.publish_calls
+
+
 class InterestingStatementStore(object):
 
     def __init__(self, tree=None, src_code=None):
         self.tree = tree
         self.src_code = src_code
         self.calls = list()
-        self.get_local_calls()
+        self.get_local_pub_srv()
         self.find_import_values()
-
-    def get_local_calls(self):
-        publish_finder = PublishFinderVisitor()
-        publish_finder.visit(self.tree)
-        service_finder = ServiceFinderVisitor()
-        service_finder.visit(self.tree)
-        call_finder = ServiceCallFinder(service_finder.proxies)
-        call_finder.visit(self.tree)
-        print(call_finder.calls)
-        print(publish_finder.publish_calls)
-        self.calls = call_finder.calls + publish_finder.publish_calls
 
     def find_import_values(self):
         for node in self.tree.body:
