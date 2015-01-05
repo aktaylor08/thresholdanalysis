@@ -1,13 +1,10 @@
-from docutils.nodes import table
 import sys
-import pprinter
-
 import inspect
-import ast_tools
 import ast
 from collections import defaultdict
 
-from backward_analysis import BasicVisitor, get_local_pub_srv, ServiceFinderVisitor, ServiceCallFinder, TreeObject
+import ast_tools
+from backward_analysis import BasicVisitor, ServiceFinderVisitor, ServiceCallFinder, TreeObject
 
 
 class OutsidePubFinder(BasicVisitor):
@@ -55,6 +52,7 @@ class ObjectOutsideMap(object):
         self.total_map = defaultdict(set)
 
     def outside(self, call):
+        """Check to see if the passed node calls an outside function"""
         if isinstance(call.func, ast.Attribute):
             name = ast_tools.get_name(call.func.value)
             if call.func.attr in self.total_map[name]:
@@ -62,7 +60,7 @@ class ObjectOutsideMap(object):
             else:
                 return False
         else:
-            print ast.dump(call)
+            print '\t', call.lineno, ast.dump(call)
 
     def get_functions(self, cls):
         return self.function_map[cls]
@@ -74,6 +72,8 @@ class ObjectOutsideMap(object):
                 print '\t', func
 
     def populate_map(self, variable, module, cls):
+        """Populate the map with the variable name, the module, and any functions
+        that publish within the class"""
         src_code = get_code_from_pkg_class(module, cls)
         tree = ast.parse(src_code)
         vals = get_outside_pub_svr(tree)
@@ -134,7 +134,7 @@ class OutsideChecker(ast.NodeVisitor):
                         self.outside_class_map.populate_map(t, mod, obj)
 
             elif isinstance(node.value.func, ast.Name):
-                #TODO: handle pure names
+                # TODO: handle pure names
                 pass
 
         self.generic_visit(node)
@@ -163,45 +163,24 @@ def get_obj_type(package, name):
         return 'unkown'
 
 
-class OutsideCallFinder(ast.NodeVisitor):
+class OutsideCallFinder(BasicVisitor):
 
     def __init__(self, ocm):
+        super(OutsideCallFinder, self).__init__()
         self.ocm = ocm
+        self.outside_calls = []
 
     def visit_Call(self, node):
         is_pub = self.ocm.outside(node)
         if is_pub:
             print 'outside', node.lineno
+            oc = TreeObject(self.current_class, self.current_function, self.current_expr, node)
+            self.outside_calls.append(oc)
 
-def build_import_list(tree=None, fname=None, src_code=None):
-    if tree is None and fname is None:
-        print("Error no file or tree")
-        return None
-    if tree is None:
-        src_code = open(fname).read()
-        tree = ast.parse(src_code)
-        src_code = src_code.split('\n')
 
-    import_finder = ImportFinder()
-    import_finder.visit(tree)
-    print('Compiling import stuff')
-    oc = OutsideChecker(import_finder.names, src_code)
-    oc.visit(tree)
-    oc.outside_class_map.print_out()
-    print('\nFinding outside calls')
 
-    ocf = OutsideCallFinder(oc.outside_class_map)
-    ocf.visit(tree)
 
 
 if __name__ == '__main__':
     fname = sys.argv[1]
     build_import_list(fname=fname)
-
-
-    # package = 'baxter_interface'
-    # cls = 'Head'
-    # for i in get_code_from_pkg_class(package, cls):
-    # print i
-
-
