@@ -178,7 +178,37 @@ class OutsideCallFinder(BasicVisitor):
             self.outside_calls.append(oc)
 
 
+def build_import_list(tree=None, file_name=None, src_code=None):
+    """
+    Build a list of TreeObjects that are calls to outside functions
 
+    :param tree:  AST Tree
+    :param file_name:  File Name
+    :param src_code: Source Code string
+    :return: List of Tree objects that contain outside publish calls
+    """
+    if tree is None and file_name is None:
+        print("Error no file or tree")
+        return None
+    if tree is None:
+        src_code = open(file_name).read()
+        tree = ast.parse(src_code)
+        src_code = src_code.split('\n')
+
+    print('Finding Imports')
+    import_finder = ImportFinder()
+    import_finder.visit(tree)
+    for i in import_finder.names:
+        print(i)
+    print('Compiling import stuff')
+    oc = OutsideChecker(import_finder.names, src_code)
+    oc.visit(tree)
+    oc.outside_class_map.print_out()
+    print('\nFinding outside calls')
+
+    ocf = OutsideCallFinder(oc.outside_class_map)
+    ocf.visit(tree)
+    return ocf.outside_calls
 
 
 if __name__ == '__main__':
