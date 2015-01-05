@@ -716,9 +716,8 @@ class InterestingStatementStore(object):
     def __init__(self, tree=None, src_code=None):
         self.tree = tree
         self.src_code = src_code
-        self.calls = list()
-        self.calls = get_local_pub_srv(tree)
-        # self.find_import_values()
+        asdf = get_local_pub_srv(tree)
+        self.calls = asdf
 
     def find_import_values(self):
         for node in self.tree.body:
