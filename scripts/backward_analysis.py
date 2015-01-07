@@ -13,6 +13,7 @@ import cfg_analysis
 
 from collections import defaultdict, deque
 from ast_tools import get_name, get_string_repr, get_node_code
+import reaching_definition
 
 
 class TreeObject(object):
@@ -155,6 +156,66 @@ class SearchStruct(object):
         print(get_string_repr(code))
 
 
+class BasicVisitor(ast.NodeVisitor):
+    """this is a super simple visitor
+    which keeps track of the current class
+    and function that you are in while traversing
+    the tree.  Can be extended to keep the functionality
+    without having to copy a bunch of code"""
+
+    def __init__(self):
+        """start the tracking"""
+        self.current_class = None
+        self.current_function = None
+        self.current_expr = None
+
+        self._flevel = 0
+
+    def visit_Module(self, node):
+        """we set the module level as the current class"""
+        self.current_class = node
+        self.current_function = ast.FunctionDef('GLOBAL_FUNCTION', [], [], [])
+        self.generic_visit(node)
+        self.current_class = None
+
+    def visit_FunctionDef(self, node):
+        """do some assignments"""
+        old_func = self.current_function
+        self.current_function = node
+        self.generic_visit(node)
+        self.current_function = old_func
+
+    def visit_ClassDef(self, node):
+        """do some more assignments"""
+        old_class = self.current_class
+        self.current_class = node
+        self.generic_visit(node)
+        self.current_class = old_class
+
+    def visit_Expr(self, node):
+        self.current_expr = node
+        self.generic_visit(node)
+        self.current_expr = None
+
+    def visit_Assign(self, node):
+        self.current_expr = node
+        self.generic_visit(node)
+        self.current_expr = None
+
+    def visit_Return(self, node):
+        self.current_expr = node
+        self.generic_visit(node)
+        self.current_expr = None
+
+    def generic_visit(self, node):
+        if isinstance(node, ast.If):
+            self.current_expr = node
+            ast.NodeVisitor.generic_visit(self, node)
+            self.current_expr = None
+        else:
+            ast.NodeVisitor.generic_visit(self, node)
+
+
 class CanidateStore(object):
     """class to hold all of the candidates for
         thresholds.  Will include num literals, class variables,
@@ -284,231 +345,6 @@ class CanidateStore(object):
         visitor = ClassFuncVisit(node)
         visitor.visit(self.tree)
         return visitor.cls, visitor.func
-
-
-def get_gen(node):
-    """gen set -> any assignment"""
-    to_return = set()
-    if isinstance(node, ast.Assign):
-        for target in node.targets:
-            to_return.add((get_name(target), node))
-    elif isinstance(node, ast.AugAssign):
-        target = node.target
-        to_return.add((get_name(target), node))
-    return to_return
-
-
-class ReachingDefinition(object):
-    """class to compute reaching definitions on all functions within
-    a file.  Will compute both exit and enter values for all of them"""
-
-    def __init__(self, tree, cfg_store):
-        """build"""
-        self.tree = tree
-        self.cfg_store = cfg_store
-        self.rds_in = {}
-        self.rds_out = {}
-
-    def compute(self):
-        """compute RD for each function"""
-        for i in self.cfg_store:
-            self.rds_out[i] = {}
-            self.rds_in[i] = {}
-            for func in self.cfg_store[i]:
-                ins, outs = self.do_function(self.cfg_store[i][func])
-                self.rds_out[i][func] = outs
-                self.rds_in[i][func] = ins
-
-    def do_function(self, cfg):
-        """compute ins and outs for a function
-        start off with any params that are not self in the function
-        and than do some iteration until you reach a fix point"""
-        outs = {}
-        ins = {}
-        for i in cfg.preds:
-            outs[i] = set()
-        func = list(cfg.preds[cfg.start])[0]
-        # handle the arguments
-        arguments = func.args.args
-        for arg in arguments:
-            if isinstance(arg, ast.Name):
-                if arg.id == 'self':
-                    pass
-                else:
-                    outs[func].add((arg.id, arg))
-            else:
-                print('ERROR line 325ish', file=sys.stderr)
-
-        # now we will iterate until something changes
-        changed = True
-        while changed:
-            seen = set()
-            node = cfg.start
-            changed = self.iterate(seen, node, outs, cfg)
-
-        # ins are just the union of the preceding outs.
-        for i in outs:
-            if isinstance(i, ast.FunctionDef):
-                continue
-            preds = cfg.preds[i]
-            vals = set()
-            for p in preds:
-                for o in outs[p]:
-                    vals.add(o)
-            ins[i] = vals
-        return ins, outs
-
-    def iterate(self, seen, node, outs, cfg):
-        """this is the main function that compute gens
-        and kills and than does the union on the entering data"""
-        if node in seen:
-            return False
-        if isinstance(node, ast.FunctionDef):
-            return False
-
-        changed = False
-        # add initials
-        values = cfg.preds[node]
-        ins = set()
-        for val in values:
-            for to_add in outs[val]:
-                ins.add(to_add)
-
-        # gen kill set operations
-        gen = get_gen(node)
-        kill = self.get_kill(node, ins)
-        temp = (ins - kill)
-        for one_gen in gen:
-            temp.add(one_gen)
-        if temp != outs[node]:
-            changed = True
-            outs[node] = temp
-
-        # keep track
-        seen.add(node)
-        # visit all the successors
-        if node in cfg.succs:
-            for i in cfg.succs[node]:
-                changed = self.iterate(seen, i, outs, cfg) or changed
-        return changed
-
-    @staticmethod
-    def get_kill(node, current):
-        """kill set -> here its any assignment
-        :param node:
-        :param current:
-        """
-        to_return = set()
-        name = None
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                name = get_name(target, '')
-
-        elif isinstance(node, ast.AugAssign):
-            target = node.target
-            name = get_name(target, '')
-        else:
-            return set()
-
-        for val in current:
-            if val[0] == name:
-                to_return.add(val)
-        return to_return
-
-
-class AssignPrinter(ast.NodeVisitor):
-    """Class to print out assignments"""
-
-    def __init__(self, src_code):
-        self.code = src_code
-
-    def visit_Assign(self, node):
-        print('\t', node.lineno, get_node_code(node, self.code))
-
-    def visit_AugAssign(self, node):
-        print('\t', node.lineno, get_node_code(node, self.code))
-
-
-class PrintIfVisitor(ast.NodeVisitor):
-    """Super simple visitor to print out all encountered if functions"""
-
-    def __init__(self, src_code):
-        self.code = src_code
-
-    def visit_If(self, node):
-        print('\t', get_node_code(node, self.code))
-        self.generic_visit(node)
-
-
-class PrintWhileVisitor(ast.NodeVisitor):
-    """Super simple visitor to print out all encountered if functions"""
-
-    def __init__(self, src_code):
-        self.code = src_code
-
-    def visit_While(self, node):
-        print('\t', get_node_code(node, self.code))
-        self.generic_visit(node)
-
-
-class BasicVisitor(ast.NodeVisitor):
-    """this is a super simple visitor
-    which keeps track of the current class
-    and function that you are in while traversing
-    the tree.  Can be extended to keep the functionality
-    without having to copy a bunch of code"""
-
-    def __init__(self):
-        """start the tracking"""
-        self.current_class = None
-        self.current_function = None
-        self.current_expr = None
-
-        self._flevel = 0
-
-    def visit_Module(self, node):
-        """we set the module level as the current class"""
-        self.current_class = node
-        self.current_function = ast.FunctionDef('GLOBAL_FUNCTION', [], [], [])
-        self.generic_visit(node)
-        self.current_class = None
-
-    def visit_FunctionDef(self, node):
-        """do some assignments"""
-        old_func = self.current_function
-        self.current_function = node
-        self.generic_visit(node)
-        self.current_function = old_func
-
-    def visit_ClassDef(self, node):
-        """do some more assignments"""
-        old_class = self.current_class
-        self.current_class = node
-        self.generic_visit(node)
-        self.current_class = old_class
-
-    def visit_Expr(self, node):
-        self.current_expr = node
-        self.generic_visit(node)
-        self.current_expr = None
-
-    def visit_Assign(self, node):
-        self.current_expr = node
-        self.generic_visit(node)
-        self.current_expr = None
-
-    def visit_Return(self, node):
-        self.current_expr = node
-        self.generic_visit(node)
-        self.current_expr = None
-
-    def generic_visit(self, node):
-        if isinstance(node, ast.If):
-            self.current_expr = node
-            ast.NodeVisitor.generic_visit(self, node)
-            self.current_expr = None
-        else:
-            ast.NodeVisitor.generic_visit(self, node)
 
 
 class AssignFindVisitor(BasicVisitor):
@@ -715,16 +551,6 @@ class PublishFinderVisitor(BasicVisitor):
                                self.current_function, self.current_expr, node))
 
 
-def get_local_pub_srv(tree):
-    publish_finder = PublishFinderVisitor()
-    publish_finder.visit(tree)
-    service_finder = ServiceFinderVisitor()
-    service_finder.visit(tree)
-    call_finder = ServiceCallFinder(service_finder.proxies)
-    call_finder.visit(tree)
-    return call_finder.calls + publish_finder.publish_calls
-
-
 class ObjectOutsideMap(object):
     """" This object contains a map that maps variables to outside
     modules/classes and than it maps those modules/classes to functions which
@@ -850,6 +676,16 @@ class OutsideCallFinder(BasicVisitor):
         if is_pub:
             oc = TreeObject(self.current_class, self.current_function, self.current_expr, node)
             self.outside_calls.append(oc)
+
+
+def get_local_pub_srv(tree):
+    publish_finder = PublishFinderVisitor()
+    publish_finder.visit(tree)
+    service_finder = ServiceFinderVisitor()
+    service_finder.visit(tree)
+    call_finder = ServiceCallFinder(service_finder.proxies)
+    call_finder.visit(tree)
+    return call_finder.calls + publish_finder.publish_calls
 
 
 def get_outside_pub_svr(tree):
@@ -1563,7 +1399,7 @@ def get_code(fname):
 
 
 def get_code_and_tree(fname):
-    """Return the source code list and the ast tree"""
+    """Return the source code list (split by lines) and the ast tree"""
     code, spcode = get_code(fname)
     tree = get_tree(code)
     return spcode, tree
@@ -1575,7 +1411,16 @@ def get_tree(code):
     return tree
 
 
-def get_candidates(tree, src_code, verbose=False):
+def get_external_candidates(tree=None, src_code=None, fname=None):
+    if tree is None and src_code is None:
+        if fname is None:
+            assert False
+            # need some code for this to work
+        src_code, tree = get_code_and_tree(fname)
+    return []
+
+
+def get_candidates(tree, src_code, verbose=False, include_external=True):
     if verbose:
         print('finding assignments')
     a = AssignFindVisitor(src_code)
@@ -1586,6 +1431,9 @@ def get_candidates(tree, src_code, verbose=False):
     if verbose:
         print('Pruning to canidate set')
     canidates = CanidateStore(a.canidates, tree)
+    if include_external:
+        ext_can = get_external_candidates(tree=tree, src_code=src_code)
+        print(ext_can)
     return canidates
 
 
@@ -1600,7 +1448,7 @@ def get_cfg(tree, src_code, verbose=False):
 def get_reaching_definitions(tree, flow_store, verbose=False):
     if verbose:
         print('Computing reaching definition')
-    rd = ReachingDefinition(tree, flow_store)
+    rd = reaching_definition.ReachingDefinition(tree, flow_store)
     rd.compute()
     return rd
 
@@ -1699,6 +1547,41 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
 
     else:
         print('error no file')
+
+
+class AssignPrinter(ast.NodeVisitor):
+    """Class to print out assignments"""
+
+    def __init__(self, src_code):
+        self.code = src_code
+
+    def visit_Assign(self, node):
+        print('\t', node.lineno, get_node_code(node, self.code))
+
+    def visit_AugAssign(self, node):
+        print('\t', node.lineno, get_node_code(node, self.code))
+
+
+class PrintIfVisitor(ast.NodeVisitor):
+    """Super simple visitor to print out all encountered if functions"""
+
+    def __init__(self, src_code):
+        self.code = src_code
+
+    def visit_If(self, node):
+        print('\t', get_node_code(node, self.code))
+        self.generic_visit(node)
+
+
+class PrintWhileVisitor(ast.NodeVisitor):
+    """Super simple visitor to print out all encountered if functions"""
+
+    def __init__(self, src_code):
+        self.code = src_code
+
+    def visit_While(self, node):
+        print('\t', get_node_code(node, self.code))
+        self.generic_visit(node)
 
 
 def list_ifs(fname):
