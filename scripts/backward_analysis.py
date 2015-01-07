@@ -732,7 +732,8 @@ class ObjectOutsideMap(object):
             else:
                 return False
         else:
-            print('\t', call.lineno, ast.dump(call))
+            #print('\t', call.lineno, ast.dump(call))
+            pass
 
     def get_functions(self, cls):
         return self.function_map[cls]
@@ -836,7 +837,7 @@ class OutsideCallFinder(BasicVisitor):
     def visit_Call(self, node):
         is_pub = self.ocm.outside(node)
         if is_pub:
-            print('outside', node.lineno)
+            #print('outside', node.lineno)
             oc = TreeObject(self.current_class, self.current_function, self.current_expr, node)
             self.outside_calls.append(oc)
 
@@ -900,16 +901,16 @@ def build_import_list(tree=None, file_name=None, src_code=None):
         tree = ast.parse(src_code)
         src_code = src_code.split('\n')
 
-    print('Finding Imports')
+    # print('Finding Imports')
     import_finder = ImportFinder()
     import_finder.visit(tree)
-    for i in import_finder.names:
-        print(i)
-    print('Compiling import stuff')
+    # for i in import_finder.names:
+    #     print(i)
+    # print('Compiling import stuff')
     oc = OutsideChecker(import_finder.names, src_code)
     oc.visit(tree)
-    oc.outside_class_map.print_out()
-    print('\nFinding outside calls')
+    # oc.outside_class_map.print_out()
+    # print('\nFinding outside calls')
 
     ocf = OutsideCallFinder(oc.outside_class_map)
     ocf.visit(tree)
@@ -920,15 +921,9 @@ class InterestingStatementStore(object):
     def __init__(self, tree=None, src_code=None):
         self.tree = tree
         self.src_code = src_code
-        asdf = get_local_pub_srv(tree)
-        self.calls = asdf
-
-    def find_import_values(self):
-        for node in self.tree.body:
-            if isinstance(node, ast.Import):
-                print(node)
-            elif isinstance(node, ast.ImportFrom):
-                print(node)
+        self.internal = get_local_pub_srv(tree)
+        self.external = build_import_list(tree=tree)
+        self.calls = self.internal + self.external
 
 
 class ClassFuncVisit(BasicVisitor):
@@ -1569,7 +1564,10 @@ def get_reaching_definitions(tree, flow_store, verbose=False):
     return rd
 
 
-def get_pub_srv_calls(tree, src_code, verbose=False):
+def get_pub_srv_calls(tree, src_code, verbose=False, split=False):
+    """Return the publish and service calls in the program.
+    If split is passed will return external and internal calls seperatly.
+    Otherwise returns them all as one"""
     if verbose:
         print('Finding interesting calls')
     iss = InterestingStatementStore(tree, src_code)
@@ -1578,7 +1576,10 @@ def get_pub_srv_calls(tree, src_code, verbose=False):
         print('\nPub and service calls: ')
         for i in calls:
             print('\t', i.get_repr(src_code))
-    return calls
+    if split:
+        return iss.internal, iss.external
+    else:
+        return calls
 
 
 def get_const_ifs(candidates, tree, spcode, verbose=False):
@@ -1664,8 +1665,14 @@ def list_constants(fname):
 def list_pubs(fname):
     src_code, tree = get_code_and_tree(fname)
     print('\nPublish Calls in {:s}'.format(fname))
-    for pub in get_pub_srv_calls(tree, src_code):
+    internal, external = get_pub_srv_calls(tree, src_code, split=True)
+    for pub in internal:
         print('\n\t'.join([k + ' : ' + v for k, v in pub.get_full_dict(src_code).iteritems()]))
+    print('\nExternal Publish Calls in {:s}'.format(fname))
+    for pub in external:
+        print('\n\t'.join([k + ' : ' + v for k, v in pub.get_full_dict(src_code).iteritems()]))
+
+
 
 
 def list_constant_ifs(fname):
