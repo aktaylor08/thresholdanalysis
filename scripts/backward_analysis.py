@@ -665,6 +665,27 @@ class OutsideChecker(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def get_call_objects(node, import_names):
+    """Get the objects involved with a call"""
+    nn = get_name(node)
+    for i in import_names:
+        if nn.startswith(i[1]):
+            obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
+            return i[2], obj
+    return None, None
+
+
+def get_obj_type(package, name):
+    pkg = __import__(package)
+    obj = getattr(pkg, name)
+    if inspect.isclass(obj):
+        return 'class'
+    elif inspect.isfunction(obj):
+        return 'function'
+    else:
+        return 'unknown'
+
+
 class OutsideCallFinder(BasicVisitor):
     def __init__(self, ocm):
         super(OutsideCallFinder, self).__init__()
@@ -1226,7 +1247,7 @@ class NameAttrVisitor(ast.NodeVisitor):
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
-
+# Replacement stuff to modify and exit the code.
 def replace_values(tree, back_analysis, fname, code, verbose):
     tree = ModCalls(back_analysis, fname, code, verbose).visit(tree)
     tree = add_import_statement(tree)
@@ -1245,16 +1266,6 @@ def add_import_statement(node):
     return node
 
 
-def close_graph(node, graph, visited):
-    if node in visited:
-        return
-    if node not in graph:
-        return
-    visited.add(node)
-    for target in graph[node]:
-        close_graph(target, graph, visited)
-
-
 def get_code(fname):
     """Get the code from a file"""
     if os.path.isfile(fname):
@@ -1267,17 +1278,17 @@ def get_code(fname):
         return None, None
 
 
+def get_tree(code):
+    """Return a tree from the code passed in here"""
+    tree = ast.parse(code)
+    return tree
+
+
 def get_code_and_tree(fname):
     """Return the source code list (split by lines) and the ast tree"""
     code, spcode = get_code(fname)
     tree = get_tree(code)
     return spcode, tree
-
-
-def get_tree(code):
-    """Return a tree from the code passed in here"""
-    tree = ast.parse(code)
-    return tree
 
 
 def get_local_pub_srv(tree):
@@ -1300,36 +1311,13 @@ def get_outside_pub_svr(tree):
     return call_finder.calls + opf.publish_calls
 
 
-def get_call_objects(node, import_names):
-    nn = get_name(node)
-    for i in import_names:
-        if nn.startswith(i[1]):
-            obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
-            return i[2], obj
-    return None, None
-
-
-def get_src_code(cls_obj):
-    src_file = inspect.getsourcefile(cls_obj)
-    with open(src_file) as f:
-        return f.read()
-
-
 def get_code_from_pkg_class(package, cls):
     val = __import__(package)
     attr = getattr(val, cls)
-    return get_src_code(attr)
-
-
-def get_obj_type(package, name):
-    pkg = __import__(package)
-    obj = getattr(pkg, name)
-    if inspect.isclass(obj):
-        return 'class'
-    elif inspect.isfunction(obj):
-        return 'function'
-    else:
-        return 'unknown'
+    src_file = inspect.getsourcefile(attr)
+    with open(src_file) as f:
+        code = f.read()
+        return code
 
 
 def build_import_list(tree=None, file_name=None, src_code=None):
@@ -1363,21 +1351,6 @@ def build_import_list(tree=None, file_name=None, src_code=None):
     ocf = OutsideCallFinder(oc.outside_class_map)
     ocf.visit(tree)
     return ocf.outside_calls
-
-
-def full_print(obj, tabs=0, visited=None, code=None):
-    if code is not None:
-        print('\t' * tabs, obj.get_repr(code))
-    else:
-        print('\t' * tabs, obj)
-    if visited is None:
-        visited = set()
-    visited.add(obj)
-
-    for child in obj.children:
-        if child not in visited:
-            full_print(child, tabs + 1, visited, code)
-    visited.remove(obj)
 
 
 def get_base_calls(thing, visited=None):
@@ -1568,6 +1541,21 @@ class PrintWhileVisitor(ast.NodeVisitor):
     def visit_While(self, node):
         print('\t', get_node_code(node, self.code))
         self.generic_visit(node)
+
+
+def full_print(obj, tabs=0, visited=None, code=None):
+    if code is not None:
+        print('\t' * tabs, obj.get_repr(code))
+    else:
+        print('\t' * tabs, obj)
+    if visited is None:
+        visited = set()
+    visited.add(obj)
+
+    for child in obj.children:
+        if child not in visited:
+            full_print(child, tabs + 1, visited, code)
+    visited.remove(obj)
 
 
 def list_ifs(fname):
