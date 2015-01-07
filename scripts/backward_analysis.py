@@ -1380,20 +1380,6 @@ def full_print(obj, tabs=0, visited=None, code=None):
     visited.remove(obj)
 
 
-def check_important(obj, visited=None):
-    if visited is None:
-        visited = set()
-    if obj in visited:
-        return False
-    if len(obj.children) == 0:
-        return obj.important
-    else:
-        important = False
-        for child in obj.children:
-            important = check_important(child, visited)
-        return important
-
-
 def get_base_calls(thing, visited=None):
     if visited is None:
         visited = set()
