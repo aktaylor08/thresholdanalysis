@@ -437,6 +437,18 @@ class PrintIfVisitor(ast.NodeVisitor):
 
     def visit_If(self, node):
         print('\t', get_node_code(node, self.code))
+        self.generic_visit(node)
+
+
+class PrintWhileVisitor(ast.NodeVisitor):
+    """Super simple visitor to print out all encountered if functions"""
+
+    def __init__(self, src_code):
+        self.code = src_code
+
+    def visit_While(self, node):
+        print('\t', get_node_code(node, self.code))
+        self.generic_visit(node)
 
 
 class BasicVisitor(ast.NodeVisitor):
@@ -732,7 +744,7 @@ class ObjectOutsideMap(object):
             else:
                 return False
         else:
-            #print('\t', call.lineno, ast.dump(call))
+            # print('\t', call.lineno, ast.dump(call))
             pass
 
     def get_functions(self, cls):
@@ -837,7 +849,7 @@ class OutsideCallFinder(BasicVisitor):
     def visit_Call(self, node):
         is_pub = self.ocm.outside(node)
         if is_pub:
-            #print('outside', node.lineno)
+            # print('outside', node.lineno)
             oc = TreeObject(self.current_class, self.current_function, self.current_expr, node)
             self.outside_calls.append(oc)
 
@@ -905,7 +917,7 @@ def build_import_list(tree=None, file_name=None, src_code=None):
     import_finder = ImportFinder()
     import_finder.visit(tree)
     # for i in import_finder.names:
-    #     print(i)
+    # print(i)
     # print('Compiling import stuff')
     oc = OutsideChecker(import_finder.names, src_code)
     oc.visit(tree)
@@ -1000,11 +1012,11 @@ class FindAssigns(BasicVisitor):
 class BackwardAnalysis(object):
     """class to perform the backward analysis needed on all of the files"""
 
-    def __init__(self, if_visitor, calls, flow_store, tree, reaching_defs, verbose=False, web=False, src_code=None):
+    def __init__(self, control_statements, calls, flow_store, tree, reaching_defs, verbose=False, web=False, src_code=None):
         self.calls = calls
         self.flow_store = flow_store
         self.tree = tree
-        self.if_visitor = if_visitor
+        self.control_statements = control_statements
         self.reaching_defs = reaching_defs
         self.verbose = verbose
         self.web_style = web
@@ -1122,8 +1134,8 @@ class BackwardAnalysis(object):
         """find any thresholds in the current statement and
         return them if we find any"""
         # TODO: Currently only if statements
-        if current.statement.node in self.if_visitor.ifs:
-            return self.if_visitor.ifs[current.statement.node]
+        if current.statement.node in self.control_statements:
+            return self.control_statements[current.statement.node]
         else:
             return []
 
@@ -1340,6 +1352,36 @@ class IfConstantVisitor(BasicVisitor):
         for i in self.ifs:
             string += str(i.lineno) + ' ' + str(i) + ':\n'
             for const in self.ifs[i]:
+                string += '\t' + str(const) + '\n'
+
+        return string
+
+
+class WhileConstantVisitor(BasicVisitor):
+    """visit while statements to ID which constants are
+    used in while statements"""
+
+    def __init__(self, canidates):
+        BasicVisitor.__init__(self)
+        self.canidates = canidates
+        self.whiles = {}
+
+    def visit_While(self, node):
+        cv = ConstantVisitor(self.canidates, self.current_class,
+                             self.current_function)
+        cv.visit(node.test)
+        if len(cv.consts) > 0:
+            self.whiles[node] = cv.consts
+        self.generic_visit(node)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        string = ''
+        for i in self.whiles:
+            string += str(i.lineno) + ' ' + str(i) + ':\n'
+            for const in self.whiles[i]:
                 string += '\t' + str(const) + '\n'
 
         return string
@@ -1594,10 +1636,36 @@ def get_const_ifs(candidates, tree, spcode, verbose=False):
     return if_visit
 
 
-def perform_analysis(if_visit, calls, flow_store, tree, rd, verbose=False, web=False, src_code=None):
+def get_const_whiles(candidates, tree, spcode, verbose=False):
+    if verbose:
+        print('\nFinding while statements with constant values')
+    while_visit = WhileConstantVisitor(candidates)
+    while_visit.visit(tree)
+    if verbose:
+        print("Following if statements have constants: ")
+        for i in while_visit.whiles:
+            print(get_node_code(i, spcode))
+    return while_visit
+
+
+def get_const_control(candidates, tree, spcode, verbose=False, ifs=True, whiles=True):
+    ret_val = {}
+    if ifs:
+        v = get_const_ifs(candidates, tree, spcode, verbose)
+        # transfer to the return value
+        for k in v.ifs:
+            ret_val[k] = v.ifs[k]
+    if whiles:
+        v = get_const_whiles(candidates, tree, spcode, verbose)
+        for k in v.whiles:
+            ret_val[k] = v.whiles[k]
+    return ret_val
+
+
+def perform_analysis(ctrl_statements, calls, flow_store, tree, rd, verbose=False, web=False, src_code=None):
     if verbose:
         print('\nfinding thresholds in file')
-    ba = BackwardAnalysis(if_visit, calls, flow_store, tree,
+    ba = BackwardAnalysis(ctrl_statements, calls, flow_store, tree,
                           rd.rds_in, verbose=verbose, web=web, src_code=src_code)
     ba.compute()
     if verbose:
@@ -1607,7 +1675,7 @@ def perform_analysis(if_visit, calls, flow_store, tree, rd, verbose=False, web=F
     return ba
 
 
-def analyze_file(fname, verbose=False, execute=False):
+def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
     """new main function...get CFG and find pubs first"""
     if os.path.isfile(fname):
         print('File: ', fname)
@@ -1618,8 +1686,8 @@ def analyze_file(fname, verbose=False, execute=False):
         flow_store = get_cfg(tree, src_code, verbose)
         rd = get_reaching_definitions(tree, flow_store, verbose)
         calls = get_pub_srv_calls(tree, src_code, verbose)
-        if_visit = get_const_ifs(candidates, tree, src_code, verbose)
-        ba = perform_analysis(if_visit, calls, flow_store, tree, rd,
+        ctrl_statements = get_const_control(candidates, tree, src_code, verbose=verbose, ifs=ifs, whiles=whiles)
+        ba = perform_analysis(ctrl_statements, calls, flow_store, tree, rd,
                               verbose=verbose, web=False, src_code=src_code)
 
         print('Number of Thresholds:', len(ba.thresholds))
@@ -1639,6 +1707,13 @@ def list_ifs(fname):
     src_code, tree = get_code_and_tree(fname)
     print('\nIf statements in {:s}: '.format(fname))
     PrintIfVisitor(src_code).visit(tree)
+
+
+def list_whiles(fname):
+    """Quickly print a list of all the while statements in the file"""
+    src_code, tree = get_code_and_tree(fname)
+    print('\nWhile statements in {:s}: '.format(fname))
+    PrintWhileVisitor(src_code).visit(tree)
 
 
 def list_assigns(fname):
@@ -1673,14 +1748,21 @@ def list_pubs(fname):
         print('\n\t'.join([k + ' : ' + v for k, v in pub.get_full_dict(src_code).iteritems()]))
 
 
-
-
 def list_constant_ifs(fname):
     src_code, tree = get_code_and_tree(fname)
     candidates = get_candidates(tree, src_code)
     if_visit = get_const_ifs(candidates, tree, src_code)
     print('\nIf statements with Constant Values in {:s}: '.format(fname))
     for i in if_visit.ifs:
+        print('\t', i.lineno, '->', get_node_code(i, src_code))
+
+
+def list_constant_whiles(fname):
+    src_code, tree = get_code_and_tree(fname)
+    candidates = get_candidates(tree, src_code)
+    while_visit = get_const_whiles(candidates, tree, src_code)
+    print('\nWhile statements with Constant Values in {:s}: '.format(fname))
+    for i in while_visit.whiles:
         print('\t', i.lineno, '->', get_node_code(i, src_code))
 
 
@@ -1701,7 +1783,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '--list-ifs', help='List all if statements and exit', action='store_true')
     parser.add_argument(
+        '--list-whiles', help='List all while statements and exit', action='store_true')
+    parser.add_argument(
         '--list-const-ifs', help='List all if statements that contain constants', action='store_true')
+    parser.add_argument(
+        '--list-const-whiles', help='List all while statements that contain constants', action='store_true')
+    parser.add_argument(
+        '--list-const-control', help='List all control flow statements that contain constants', action='store_true')
     parser.add_argument(
         '--list-constants', help='List all of the identified constants', action='store_true')
     parser.add_argument(
@@ -1710,16 +1798,30 @@ if __name__ == '__main__':
         '--list-assign', help='List all of the assignments in code', action='store_true')
     parser.add_argument(
         '--list-cfg', help='Print the CFG created for the file', action='store_true')
+    parser.add_argument(
+        '--exclude-whiles', help='Do Not include while statements in the threshold identification', action='store_true')
+    parser.add_argument(
+        '--exclude-ifs', help='Do Not include if statements in the threshold identification', action='store_true')
     args = parser.parse_args()
     no_analysis = False
     if args.list_ifs:
         list_ifs(args.file)
+        no_analysis = True
+    if args.list_whiles:
+        list_whiles(args.file)
         no_analysis = True
     if args.list_constants:
         list_constants(args.file)
         no_analysis = True
     if args.list_const_ifs:
         list_constant_ifs(args.file)
+        no_analysis = True
+    if args.list_const_whiles:
+        list_constant_whiles(args.file)
+        no_analysis = True
+    if args.list_const_control:
+        list_constant_ifs(args.file)
+        list_constant_whiles(args.file)
         no_analysis = True
     if args.list_pubs:
         list_pubs(args.file)
@@ -1733,4 +1835,5 @@ if __name__ == '__main__':
 
     if not no_analysis:
         analyze_file(
-            args.file, verbose=args.verbose, execute=not args.no_execute)
+            args.file, verbose=args.verbose, execute=not args.no_execute, ifs=not args.exclude_ifs,
+            whiles=not args.exclude_whiles)
