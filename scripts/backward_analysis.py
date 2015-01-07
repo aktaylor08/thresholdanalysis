@@ -586,13 +586,23 @@ class ObjectOutsideMap(object):
         that publish within the class"""
         src_code = get_code_from_pkg_class(module, cls)
         tree = ast.parse(src_code)
-        vals = get_outside_pub_svr(tree)
+        vals = self.get_outside_pub_svr(tree)
         for i in vals:
             if i.cls.name == cls:
                 for var in variable:
                     self.variable_map[var] = cls
                     self.function_map[cls].add(i.func.name)
                     self.total_map[var].add(i.func.name)
+
+    @staticmethod
+    def get_outside_pub_svr(tree):
+        service_finder = ServiceFinderVisitor()
+        service_finder.visit(tree)
+        call_finder = ServiceCallFinder(service_finder.proxies)
+        call_finder.visit(tree)
+        opf = OutsidePubFinder()
+        opf.visit(tree)
+        return call_finder.calls + opf.publish_calls
 
 
 class OutsidePubFinder(BasicVisitor):
@@ -704,7 +714,7 @@ class InterestingStatementStore(object):
         self.tree = tree
         self.src_code = src_code
         self.internal = get_local_pub_srv(tree)
-        self.external = build_import_list(tree=tree)
+        self.external = get_outside_calls(tree=tree)
         self.calls = self.internal + self.external
 
 
@@ -1247,6 +1257,7 @@ class NameAttrVisitor(ast.NodeVisitor):
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
+
 # Replacement stuff to modify and exit the code.
 def replace_values(tree, back_analysis, fname, code, verbose):
     tree = ModCalls(back_analysis, fname, code, verbose).visit(tree)
@@ -1266,6 +1277,7 @@ def add_import_statement(node):
     return node
 
 
+# Code getting stuff
 def get_code(fname):
     """Get the code from a file"""
     if os.path.isfile(fname):
@@ -1291,36 +1303,7 @@ def get_code_and_tree(fname):
     return spcode, tree
 
 
-def get_local_pub_srv(tree):
-    publish_finder = PublishFinderVisitor()
-    publish_finder.visit(tree)
-    service_finder = ServiceFinderVisitor()
-    service_finder.visit(tree)
-    call_finder = ServiceCallFinder(service_finder.proxies)
-    call_finder.visit(tree)
-    return call_finder.calls + publish_finder.publish_calls
-
-
-def get_outside_pub_svr(tree):
-    service_finder = ServiceFinderVisitor()
-    service_finder.visit(tree)
-    call_finder = ServiceCallFinder(service_finder.proxies)
-    call_finder.visit(tree)
-    opf = OutsidePubFinder()
-    opf.visit(tree)
-    return call_finder.calls + opf.publish_calls
-
-
-def get_code_from_pkg_class(package, cls):
-    val = __import__(package)
-    attr = getattr(val, cls)
-    src_file = inspect.getsourcefile(attr)
-    with open(src_file) as f:
-        code = f.read()
-        return code
-
-
-def build_import_list(tree=None, file_name=None, src_code=None):
+def get_outside_calls(tree=None, file_name=None, src_code=None):
     """
     Build a list of TreeObjects that are calls to outside functions
 
@@ -1331,7 +1314,7 @@ def build_import_list(tree=None, file_name=None, src_code=None):
     """
     if tree is None and file_name is None:
         print("Error no file or tree")
-        return None
+        assert False
     if tree is None:
         src_code = open(file_name).read()
         tree = ast.parse(src_code)
@@ -1353,6 +1336,25 @@ def build_import_list(tree=None, file_name=None, src_code=None):
     return ocf.outside_calls
 
 
+def get_local_pub_srv(tree):
+    publish_finder = PublishFinderVisitor()
+    publish_finder.visit(tree)
+    service_finder = ServiceFinderVisitor()
+    service_finder.visit(tree)
+    call_finder = ServiceCallFinder(service_finder.proxies)
+    call_finder.visit(tree)
+    return call_finder.calls + publish_finder.publish_calls
+
+
+def get_code_from_pkg_class(package, cls):
+    val = __import__(package)
+    attr = getattr(val, cls)
+    src_file = inspect.getsourcefile(attr)
+    with open(src_file) as f:
+        code = f.read()
+        return code
+
+
 def get_base_calls(thing, visited=None):
     if visited is None:
         visited = set()
@@ -1370,12 +1372,16 @@ def get_base_calls(thing, visited=None):
     return values
 
 
-def get_external_candidates(tree=None, src_code=None, fname=None):
+def get_outside_candidates(tree=None, src_code=None, fname=None):
     if tree is None and src_code is None:
         if fname is None:
+            print("Code Needed!")
             assert False
             # need some code for this to work
         src_code, tree = get_code_and_tree(fname)
+    import_finder = ImportFinder()
+    import_finder.visit(tree)
+    print(import_finder.names)
     return []
 
 
@@ -1391,7 +1397,7 @@ def get_candidates(tree, src_code, verbose=False, include_external=True):
         print('Pruning to canidate set')
     canidates = CanidateStore(a.canidates, tree)
     if include_external:
-        ext_can = get_external_candidates(tree=tree, src_code=src_code)
+        ext_can = get_outside_candidates(tree=tree, src_code=src_code)
         print(ext_can)
     return canidates
 
