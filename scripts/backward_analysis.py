@@ -678,91 +678,6 @@ class OutsideCallFinder(BasicVisitor):
             self.outside_calls.append(oc)
 
 
-def get_local_pub_srv(tree):
-    publish_finder = PublishFinderVisitor()
-    publish_finder.visit(tree)
-    service_finder = ServiceFinderVisitor()
-    service_finder.visit(tree)
-    call_finder = ServiceCallFinder(service_finder.proxies)
-    call_finder.visit(tree)
-    return call_finder.calls + publish_finder.publish_calls
-
-
-def get_outside_pub_svr(tree):
-    service_finder = ServiceFinderVisitor()
-    service_finder.visit(tree)
-    call_finder = ServiceCallFinder(service_finder.proxies)
-    call_finder.visit(tree)
-    opf = OutsidePubFinder()
-    opf.visit(tree)
-    return call_finder.calls + opf.publish_calls
-
-
-def get_call_objects(node, import_names):
-    nn = get_name(node)
-    for i in import_names:
-        if nn.startswith(i[1]):
-            obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
-            return i[2], obj
-    return None, None
-
-
-def get_src_code(cls_obj):
-    src_file = inspect.getsourcefile(cls_obj)
-    with open(src_file) as f:
-        return f.read()
-
-
-def get_code_from_pkg_class(package, cls):
-    val = __import__(package)
-    attr = getattr(val, cls)
-    return get_src_code(attr)
-
-
-def get_obj_type(package, name):
-    pkg = __import__(package)
-    obj = getattr(pkg, name)
-    if inspect.isclass(obj):
-        return 'class'
-    elif inspect.isfunction(obj):
-        return 'function'
-    else:
-        return 'unknown'
-
-
-def build_import_list(tree=None, file_name=None, src_code=None):
-    """
-    Build a list of TreeObjects that are calls to outside functions
-
-    :param tree:  AST Tree
-    :param file_name:  File Name
-    :param src_code: Source Code string
-    :return: List of Tree objects that contain outside publish calls
-    """
-    if tree is None and file_name is None:
-        print("Error no file or tree")
-        return None
-    if tree is None:
-        src_code = open(file_name).read()
-        tree = ast.parse(src_code)
-        src_code = src_code.split('\n')
-
-    # print('Finding Imports')
-    import_finder = ImportFinder()
-    import_finder.visit(tree)
-    # for i in import_finder.names:
-    # print(i)
-    # print('Compiling import stuff')
-    oc = OutsideChecker(import_finder.names, src_code)
-    oc.visit(tree)
-    # oc.outside_class_map.print_out()
-    # print('\nFinding outside calls')
-
-    ocf = OutsideCallFinder(oc.outside_class_map)
-    ocf.visit(tree)
-    return ocf.outside_calls
-
-
 class InterestingStatementStore(object):
     def __init__(self, tree=None, src_code=None):
         self.tree = tree
@@ -1098,52 +1013,6 @@ class BackwardAnalysis(object):
         return fcv.calls
 
 
-def full_print(obj, tabs=0, visited=None, code=None):
-    if code is not None:
-        print('\t' * tabs, obj.get_repr(code))
-    else:
-        print('\t' * tabs, obj)
-    if visited is None:
-        visited = set()
-    visited.add(obj)
-
-    for child in obj.children:
-        if child not in visited:
-            full_print(child, tabs + 1, visited, code)
-    visited.remove(obj)
-
-
-def check_important(obj, visited=None):
-    if visited is None:
-        visited = set()
-    if obj in visited:
-        return False
-    if len(obj.children) == 0:
-        return obj.important
-    else:
-        important = False
-        for child in obj.children:
-            important = check_important(child, visited)
-        return important
-
-
-def get_base_calls(thing, visited=None):
-    if visited is None:
-        visited = set()
-    if thing in visited:
-        return []
-    visited.add(thing)
-    values = []
-    if len(thing.children) == 0:
-        values.append(thing)
-    else:
-        for i in thing.children:
-            ret = get_base_calls(i, visited)
-            for v in ret:
-                values.append(v)
-    return values
-
-
 class FindCallVisitor(BasicVisitor):
     def __init__(self, target_class, target_func):
         BasicVisitor.__init__(self)
@@ -1249,14 +1118,6 @@ class ConstantVisitor(BasicVisitor):
         if self.current_class in self.canidates.func_vars:
             if fv in self.canidates.func_vars[self.current_class]:
                 self.consts.append(fv)
-
-
-def add_import_statement(node):
-    new_node = ast.Import(names=[ast.alias(name='reporting', asname=None)])
-    new_node = ast.copy_location(new_node, node.body[0])
-    ast.increment_lineno(node.body[0], 1)
-    node.body = [new_node] + node.body
-    return node
 
 
 class ModCalls(ast.NodeTransformer):
@@ -1376,6 +1237,14 @@ def replace_values(tree, back_analysis, fname, code, verbose):
     exec (code, ns)
 
 
+def add_import_statement(node):
+    new_node = ast.Import(names=[ast.alias(name='reporting', asname=None)])
+    new_node = ast.copy_location(new_node, node.body[0])
+    ast.increment_lineno(node.body[0], 1)
+    node.body = [new_node] + node.body
+    return node
+
+
 def close_graph(node, graph, visited):
     if node in visited:
         return
@@ -1409,6 +1278,137 @@ def get_tree(code):
     """Return a tree from the code passed in here"""
     tree = ast.parse(code)
     return tree
+
+
+def get_local_pub_srv(tree):
+    publish_finder = PublishFinderVisitor()
+    publish_finder.visit(tree)
+    service_finder = ServiceFinderVisitor()
+    service_finder.visit(tree)
+    call_finder = ServiceCallFinder(service_finder.proxies)
+    call_finder.visit(tree)
+    return call_finder.calls + publish_finder.publish_calls
+
+
+def get_outside_pub_svr(tree):
+    service_finder = ServiceFinderVisitor()
+    service_finder.visit(tree)
+    call_finder = ServiceCallFinder(service_finder.proxies)
+    call_finder.visit(tree)
+    opf = OutsidePubFinder()
+    opf.visit(tree)
+    return call_finder.calls + opf.publish_calls
+
+
+def get_call_objects(node, import_names):
+    nn = get_name(node)
+    for i in import_names:
+        if nn.startswith(i[1]):
+            obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
+            return i[2], obj
+    return None, None
+
+
+def get_src_code(cls_obj):
+    src_file = inspect.getsourcefile(cls_obj)
+    with open(src_file) as f:
+        return f.read()
+
+
+def get_code_from_pkg_class(package, cls):
+    val = __import__(package)
+    attr = getattr(val, cls)
+    return get_src_code(attr)
+
+
+def get_obj_type(package, name):
+    pkg = __import__(package)
+    obj = getattr(pkg, name)
+    if inspect.isclass(obj):
+        return 'class'
+    elif inspect.isfunction(obj):
+        return 'function'
+    else:
+        return 'unknown'
+
+
+def build_import_list(tree=None, file_name=None, src_code=None):
+    """
+    Build a list of TreeObjects that are calls to outside functions
+
+    :param tree:  AST Tree
+    :param file_name:  File Name
+    :param src_code: Source Code string
+    :return: List of Tree objects that contain outside publish calls
+    """
+    if tree is None and file_name is None:
+        print("Error no file or tree")
+        return None
+    if tree is None:
+        src_code = open(file_name).read()
+        tree = ast.parse(src_code)
+        src_code = src_code.split('\n')
+
+    # print('Finding Imports')
+    import_finder = ImportFinder()
+    import_finder.visit(tree)
+    # for i in import_finder.names:
+    # print(i)
+    # print('Compiling import stuff')
+    oc = OutsideChecker(import_finder.names, src_code)
+    oc.visit(tree)
+    # oc.outside_class_map.print_out()
+    # print('\nFinding outside calls')
+
+    ocf = OutsideCallFinder(oc.outside_class_map)
+    ocf.visit(tree)
+    return ocf.outside_calls
+
+
+def full_print(obj, tabs=0, visited=None, code=None):
+    if code is not None:
+        print('\t' * tabs, obj.get_repr(code))
+    else:
+        print('\t' * tabs, obj)
+    if visited is None:
+        visited = set()
+    visited.add(obj)
+
+    for child in obj.children:
+        if child not in visited:
+            full_print(child, tabs + 1, visited, code)
+    visited.remove(obj)
+
+
+def check_important(obj, visited=None):
+    if visited is None:
+        visited = set()
+    if obj in visited:
+        return False
+    if len(obj.children) == 0:
+        return obj.important
+    else:
+        important = False
+        for child in obj.children:
+            important = check_important(child, visited)
+        return important
+
+
+def get_base_calls(thing, visited=None):
+    if visited is None:
+        visited = set()
+    if thing in visited:
+        return []
+    visited.add(thing)
+    values = []
+    if len(thing.children) == 0:
+        values.append(thing)
+    else:
+        for i in thing.children:
+            ret = get_base_calls(i, visited)
+            for v in ret:
+                values.append(v)
+    return values
 
 
 def get_external_candidates(tree=None, src_code=None, fname=None):
