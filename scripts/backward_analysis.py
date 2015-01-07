@@ -726,7 +726,7 @@ def get_local_pub_srv(tree):
 
 
 class ObjectOutsideMap(object):
-    """" This object contains a matp that maps variables to outside
+    """" This object contains a map that maps variables to outside
     modules/classes and than it maps those modules/classes to functions which
     contain publish calls"""
 
@@ -744,7 +744,6 @@ class ObjectOutsideMap(object):
             else:
                 return False
         else:
-            # print('\t', call.lineno, ast.dump(call))
             pass
 
     def get_functions(self, cls):
@@ -849,7 +848,6 @@ class OutsideCallFinder(BasicVisitor):
     def visit_Call(self, node):
         is_pub = self.ocm.outside(node)
         if is_pub:
-            # print('outside', node.lineno)
             oc = TreeObject(self.current_class, self.current_function, self.current_expr, node)
             self.outside_calls.append(oc)
 
@@ -893,7 +891,7 @@ def get_obj_type(package, name):
     elif inspect.isfunction(obj):
         return 'function'
     else:
-        return 'unkown'
+        return 'unknown'
 
 
 def build_import_list(tree=None, file_name=None, src_code=None):
@@ -1012,7 +1010,8 @@ class FindAssigns(BasicVisitor):
 class BackwardAnalysis(object):
     """class to perform the backward analysis needed on all of the files"""
 
-    def __init__(self, control_statements, calls, flow_store, tree, reaching_defs, verbose=False, web=False, src_code=None):
+    def __init__(self, control_statements, calls, flow_store, tree, reaching_defs, verbose=False, web=False,
+                 src_code=None):
         self.calls = calls
         self.flow_store = flow_store
         self.tree = tree
@@ -1471,7 +1470,7 @@ class NameAttrVisitor(ast.NodeVisitor):
     # or not
     def visit_UnaryOp(self, node):
         name = self.name_pre + \
-               str(node.lineno) + ' value->' + get_string_repr(node)
+            str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1479,7 +1478,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_BinOp(self, node):
         name = self.name_pre + \
-               str(node.lineno) + ' value->' + get_string_repr(node)
+            str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1488,7 +1487,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_BoolOp(self, node):
         name = self.name_pre + \
-               str(node.lineno) + ' value->' + get_string_repr(node)
+            str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1497,7 +1496,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_Compare(self, node):
         name = self.name_pre + \
-               str(node.lineno) + ' value->' + get_string_repr(node)
+            str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1507,7 +1506,7 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node):
         name = self.name_pre + \
-               str(node.lineno) + ' value->' + get_string_repr(node)
+            str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1520,13 +1519,13 @@ class NameAttrVisitor(ast.NodeVisitor):
 
     def visit_Attribute(self, node):
         name = self.name_pre + \
-               str(node.lineno) + ' value->' + get_string_repr(node)
+            str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
     def visit_Name(self, node):
         name = self.name_pre + \
-               str(node.lineno) + ' value->' + get_string_repr(node)
+            str(node.lineno) + ' value->' + get_string_repr(node)
         keyword = ast.keyword(arg=name, value=node)
         self.things.append(keyword)
 
@@ -1608,7 +1607,7 @@ def get_reaching_definitions(tree, flow_store, verbose=False):
 
 def get_pub_srv_calls(tree, src_code, verbose=False, split=False):
     """Return the publish and service calls in the program.
-    If split is passed will return external and internal calls seperatly.
+    If split is passed will return external and internal calls separably.
     Otherwise returns them all as one"""
     if verbose:
         print('Finding interesting calls')
