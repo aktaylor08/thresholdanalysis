@@ -1242,6 +1242,10 @@ class ConstantVisitor(BasicVisitor):
                                    node.attr, node)
                 if cv in self.canidates.class_vars[self.current_class]:
                     self.consts.append(cv)
+        if get_name(node) in self.canidates.known_constants:
+            cv = ClassVariable(self.current_class, self.current_function,
+                               node, node)
+            self.consts.append(cv)
 
     def visit_Name(self, node):
         fv = FunctionVariable(self.current_class,
@@ -1499,7 +1503,7 @@ def get_local_candidates(tree, src_code, verbose=False):
     return candidates
 
 
-def get_candidates(tree, src_code, verbose=False, include_external=True):
+def get_constants(tree, src_code, verbose=False, include_external=True):
     cs = CandidateStore()
     candidates = get_local_candidates(tree, src_code, verbose)
     cs.class_vars = candidates.class_vars
@@ -1569,15 +1573,15 @@ def get_const_whiles(candidates, tree, spcode, verbose=False):
     return while_visit
 
 
-def get_const_control(candidates, tree, spcode, verbose=False, ifs=True, whiles=True):
+def get_const_control(constants, tree, spcode, verbose=False, ifs=True, whiles=True):
     ret_val = {}
     if ifs:
-        v = get_const_ifs(candidates, tree, spcode, verbose)
+        v = get_const_ifs(constants, tree, spcode, verbose)
         # transfer to the return value
         for k in v.ifs:
             ret_val[k] = v.ifs[k]
     if whiles:
-        v = get_const_whiles(candidates, tree, spcode, verbose)
+        v = get_const_whiles(constants, tree, spcode, verbose)
         for k in v.whiles:
             ret_val[k] = v.whiles[k]
     return ret_val
@@ -1603,11 +1607,11 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
         if verbose:
             print('parsing file')
         src_code, tree = get_code_and_tree(fname)
-        candidates = get_candidates(tree, src_code, verbose)
+        constants = get_constants(tree, src_code, verbose)
         flow_store = get_cfg(tree, src_code, verbose)
         rd = get_reaching_definitions(tree, flow_store, verbose)
         calls = get_pub_srv_calls(tree, src_code, verbose)
-        ctrl_statements = get_const_control(candidates, tree, src_code, verbose=verbose, ifs=ifs, whiles=whiles)
+        ctrl_statements = get_const_control(constants, tree, src_code, verbose=verbose, ifs=ifs, whiles=whiles)
         ba = perform_analysis(ctrl_statements, calls, flow_store, tree, rd,
                               verbose=verbose, web=False, src_code=src_code)
 
@@ -1695,7 +1699,7 @@ def list_assigns(fname):
 
 def list_constants(fname):
     src_code, tree = get_code_and_tree(fname)
-    candidates = get_candidates(tree, src_code)
+    candidates = get_constants(tree, src_code)
     print("\nIdentified Constants in {:s}".format(fname))
     for cls in candidates.class_vars:
         print('\tClass: {:s}'.format(cls.name))
@@ -1730,7 +1734,7 @@ def list_pubs(fname):
 
 def list_constant_ifs(fname):
     src_code, tree = get_code_and_tree(fname)
-    candidates = get_candidates(tree, src_code)
+    candidates = get_constants(tree, src_code)
     if_visit = get_const_ifs(candidates, tree, src_code)
     print('\nIf statements with Constant Values in {:s}: '.format(fname))
     for i in if_visit.ifs:
@@ -1739,7 +1743,7 @@ def list_constant_ifs(fname):
 
 def list_constant_whiles(fname):
     src_code, tree = get_code_and_tree(fname)
-    candidates = get_candidates(tree, src_code)
+    candidates = get_constants(tree, src_code)
     while_visit = get_const_whiles(candidates, tree, src_code)
     print('\nWhile statements with Constant Values in {:s}: '.format(fname))
     for i in while_visit.whiles:
