@@ -68,7 +68,10 @@ class ClassVariable(object):
         return self.__str__()
 
     def __str__(self):
-        return '{:s} -> {:s}'.format(self.cls.name, self.name)
+        try:
+            return '{:s} -> {:s}'.format(self.cls.name, self.name)
+        except:
+            return '{:s} -> {:s}'.format('NONE', self.name)
 
     def __eq__(self, other):
         if not isinstance(other, ClassVariable):
@@ -216,7 +219,16 @@ class BasicVisitor(ast.NodeVisitor):
             ast.NodeVisitor.generic_visit(self, node)
 
 
-class CanidateStore(object):
+class CandidateStore(object):
+
+    def __init__(self):
+        self.class_vars = {}
+        self.func_vars = {}
+        self.var_map = {}
+        self.known_constants = []
+
+
+class CandidateCompiler(object):
     """class to hold all of the candidates for
         thresholds.  Will include num literals, class variables,
         and variables within a function"""
@@ -551,7 +563,27 @@ class PublishFinderVisitor(BasicVisitor):
                                self.current_function, self.current_expr, node))
 
 
-class ObjectOutsideMap(object):
+class ImportFinder(ast.NodeVisitor):
+    def __init__(self):
+        # Names is a list of tuples. First element module_names, second names in file, third element is module
+        self.names = []
+
+    def visit_Import(self, node):
+        for i in node.names:
+            if i.asname is None:
+                self.names.append((i.name, i.name, i.name))
+            else:
+                self.names.append((i.name, i.asname, i.name))
+
+    def visit_ImportFrom(self, node):
+        for i in node.names:
+            if i.asname is None:
+                self.names.append((i.name, i.name, node.module))
+            else:
+                self.names.append((i.name, i.asname, node.module))
+
+
+class OutsidePublishMap(object):
     """" This object contains a map that maps variables to outside
     modules/classes and than it maps those modules/classes to functions which
     contain publish calls"""
@@ -629,32 +661,12 @@ class OutsidePubFinder(BasicVisitor):
             self.found = True
 
 
-class ImportFinder(ast.NodeVisitor):
-    def __init__(self):
-        # Names is a list of tuples. First element module_names, second names in file, third element is module
-        self.names = []
-
-    def visit_Import(self, node):
-        for i in node.names:
-            if i.asname is None:
-                self.names.append((i.name, i.name, i.name))
-            else:
-                self.names.append((i.name, i.asname, i.name))
-
-    def visit_ImportFrom(self, node):
-        for i in node.names:
-            if i.asname is None:
-                self.names.append((i.name, i.name, node.module))
-            else:
-                self.names.append((i.name, i.asname, node.module))
-
-
-class OutsideChecker(ast.NodeVisitor):
+class OutsidePublishChecker(ast.NodeVisitor):
     def __init__(self, names, src_code):
         self.names = names
         self.src_code = src_code
         self.objects = []
-        self.outside_class_map = ObjectOutsideMap()
+        self.outside_class_map = OutsidePublishMap()
 
     def visit_Assign(self, node):
         # if it is a call check to see if it came from imports
@@ -671,6 +683,95 @@ class OutsideChecker(ast.NodeVisitor):
             elif isinstance(node.value.func, ast.Name):
                 # TODO: handle pure names
                 pass
+
+        self.generic_visit(node)
+
+
+class OutsideConstantMap(object):
+
+    def __init__(self):
+        self.src_repo = {}
+        self.tree_repo = {}
+        self.known_constants = []
+        self.variable_map = dict()
+        self.constant_map = defaultdict(set)
+        self.total_map = defaultdict(set)
+
+    def add_variable(self, current_class, variable, module, thing):
+        val = __import__(module)
+        attr = getattr(val, thing)
+        src, tree = self.get_src_and_tree(attr)
+        candidates = get_local_candidates(tree, src)
+        for key, value in candidates.class_vars.iteritems():
+            if isinstance(key, ast.ClassDef):
+                if key.name == thing:
+                    cv = ClassVariable(current_class, None, variable, None)
+                    self.variable_map[cv] = thing
+                    for i in value:
+                        self.constant_map[thing].add(i)
+                        self.total_map[cv].add(i)
+
+    def handle_attr(self, name, module, thing):
+        val = __import__(module)
+        attr = getattr(val, thing)
+        if isinstance(attr, int) or isinstance(attr, float):
+            self.known_constants.append(name)
+            return
+        if inspect.isfunction(attr):
+            # Skip functions
+            return
+        if inspect.isclass(attr):
+            src, tree = self.get_src_and_tree(attr)
+            candidates = get_local_candidates(tree, src)
+            print('Not really sure you should be here? Call to class with no assign')
+            print(candidates)
+            print(name)
+
+    def get_src_and_tree(self, attr):
+        """Get the source code and ast tree of the
+        module and object"""
+        try:
+            src_file = inspect.getsourcefile(attr)
+        except Exception:
+            return None
+        if src_file in self.src_repo:
+            return self.src_repo[src_file], self.tree_repo[src_file]
+        else:
+            sc, tree = get_code_and_tree(src_file)
+            self.src_repo[src_file] = sc
+            self.tree_repo[src_file] = tree
+            return sc, tree
+
+
+class OustideConstantChecker(BasicVisitor):
+
+    def __init__(self, names, src_code):
+        super(OustideConstantChecker, self).__init__()
+        self.names = names
+        self.src_code = src_code
+        self.src_dict = {'self': src_code}
+        self.outside_const_map = OutsideConstantMap()
+
+    def visit_Assign(self, node):
+        if isinstance(node.value, ast.Call):
+            t = [get_name(x) for x in node.targets]
+            if isinstance(node.value.func, ast.Attribute):
+                mod, obj = get_call_objects(node.value.func, self.names)
+                if mod is not None:
+                    obj_type = get_obj_type(mod, obj)
+                    if obj_type == 'class':
+                        # store the class type here and map all of the functions that contain outside  values
+                        for target in t:
+                            self.outside_const_map.add_variable(self.current_class, target, mod, obj)
+
+    def visit_Attribute(self, node):
+        full_name = get_name(node)
+
+        if not full_name.startswith('self'):
+            name = get_name(node)
+            module, callobj = get_call_objects(node, self.names)
+            if module is not None:
+                self.outside_const_map.handle_attr(name, module,  callobj)
 
         self.generic_visit(node)
 
@@ -763,7 +864,6 @@ class FindAssigns(BasicVisitor):
 
     def visit_Assign(self, node):
         """visit an assignment definition"""
-
         # we are going to look at all of the assign values here and figure out
         # if it is a constant.  Here we are just looking at __init__ for now but
         # it could be in many other location
@@ -1326,7 +1426,7 @@ def get_outside_calls(tree=None, file_name=None, src_code=None):
     # for i in import_finder.names:
     # print(i)
     # print('Compiling import stuff')
-    oc = OutsideChecker(import_finder.names, src_code)
+    oc = OutsidePublishChecker(import_finder.names, src_code)
     oc.visit(tree)
     # oc.outside_class_map.print_out()
     # print('\nFinding outside calls')
@@ -1381,25 +1481,34 @@ def get_outside_candidates(tree=None, src_code=None, fname=None):
         src_code, tree = get_code_and_tree(fname)
     import_finder = ImportFinder()
     import_finder.visit(tree)
-    print(import_finder.names)
-    return []
+    occ = OustideConstantChecker(import_finder.names, src_code)
+    occ.visit(tree)
+    return occ
 
 
-def get_candidates(tree, src_code, verbose=False, include_external=True):
+def get_local_candidates(tree, src_code, verbose=False):
     if verbose:
         print('finding assignments')
     a = AssignFindVisitor(src_code)
     a.visit(tree)
     if verbose:
         print('done finding assignments')
-
     if verbose:
         print('Pruning to canidate set')
-    canidates = CanidateStore(a.canidates, tree)
+    candidates = CandidateCompiler(a.canidates, tree)
+    return candidates
+
+
+def get_candidates(tree, src_code, verbose=False, include_external=True):
+    cs = CandidateStore()
+    candidates = get_local_candidates(tree, src_code, verbose)
+    cs.class_vars = candidates.class_vars
+    cs.func_vars = candidates.func_vars
     if include_external:
         ext_can = get_outside_candidates(tree=tree, src_code=src_code)
-        print(ext_can)
-    return canidates
+        cs.known_constants = ext_can.outside_const_map.known_constants
+        cs.var_map = ext_can.outside_const_map.total_map
+    return cs
 
 
 def get_cfg(tree, src_code, verbose=False):
@@ -1593,10 +1702,19 @@ def list_constants(fname):
         for cls_var in candidates.class_vars[cls]:
             print('\t\t{:s}'.format(cls_var))
 
+
     print('\tFunction Constants:')
     for cls in candidates.func_vars:
         for func_var in candidates.func_vars[cls]:
             print('\t\t{:s}'.format(func_var))
+
+    print("\tKnown Outside Constants:")
+    for ov in candidates.known_constants:
+        print('\t\t', ov)
+
+    print("\tOutside Value Calls")
+    for ov in candidates.var_map:
+        print(ov, candidates.var_map[ov])
 
 
 def list_pubs(fname):
