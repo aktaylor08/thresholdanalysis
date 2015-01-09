@@ -420,7 +420,6 @@ class AssignFindVisitor(BasicVisitor):
 
     def visit_Assign(self, node):
         """visit an assignment definition"""
-
         # we are going to look at all of the assign values here and figure out
         # if it is a constant.  Here we are just looking at __init__ for now but
         # it could be in many other location
@@ -451,40 +450,59 @@ class AssignFindVisitor(BasicVisitor):
 class IfOrFuncVisitor(BasicVisitor):
     """finds if the program is part of an if statement"""
 
-    def __init__(self, target):
+    def __init__(self, target, cls, func, src_code):
         BasicVisitor.__init__(self)
         self.target = target
+        self.current_class = cls
+        self.current_func = func
         self.canidates = deque()
         self.res = None
+        self.found = False
+        self.locked = False
+        self.depth = 0
+        self.src_code = src_code
 
     def visit_FunctionDef(self, node):
-        self.canidates.appendleft(node)
-        BasicVisitor.visit_FunctionDef(self, node)
-        self.canidates.popleft()
+        self.depth+=1
+
+        old_func = self.current_function
+        self.current_function = node
+
+        if not self.locked and not self.found:
+            self.generic_visit(node)
+
+        if self.found and not self.locked:
+            self.res = node
+            self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
+            self.locked = True
+
+        self.current_function = old_func
+        self.depth-=1
 
     def visit_If(self, node):
-        self.canidates.appendleft(node)
-        self.generic_visit(node)
-        self.canidates.popleft()
+        self.depth+=1
+        if not self.locked and not self.found:
+            self.generic_visit(node)
+        if self.found and not self.locked:
+            self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
+            self.locked = True
+        self.depth-=1
+
+    def visit_While(self, node):
+        self.depth+=1
+        if not self.locked and not self.found:
+            self.generic_visit(node)
+        if self.found and not self.locked:
+            self.res = node
+            self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
+            self.locked = True
+        self.depth-=1
 
     def generic_visit(self, node):
-        popped = []
         if node == self.target:
-            found = False
-            while not found:
-                temp = self.canidates.popleft()
-                popped.append(temp)
-                if temp == node:
-                    continue
-                else:
-                    self.res = TreeObject(self.current_class, self.current_function,
-                                          self.current_expr, temp)
-                    break
-            # WTF?
-            for _ in reversed(popped):
-                self.canidates.append(popped)
-        else:
-            BasicVisitor.generic_visit(self, node)
+            self.found = True
+            return
+        BasicVisitor.generic_visit(self, node)
 
 
 class ServiceFinderVisitor(BasicVisitor):
@@ -721,11 +739,12 @@ class OutsideConstantMap(object):
             # Skip functions
             return
         if inspect.isclass(attr):
-            src, tree = self.get_src_and_tree(attr)
-            candidates = get_local_candidates(tree, src)
-            print('Not really sure you should be here? Call to class with no assign')
-            print(candidates)
-            print(name)
+            # For Now we are skipping the candidates that arise in this manner because we do
+            # not care if it is not assigned to anything
+            # src, tree = self.get_src_and_tree(attr)
+            # candidates = get_local_candidates(tree, src)
+            pass
+
 
     def get_src_and_tree(self, attr):
         """Get the source code and ast tree of the
@@ -787,6 +806,11 @@ def get_call_objects(node, import_names):
 
 
 def get_obj_type(package, name):
+    print(package, name)
+    if '.' in name:
+        package = package + '.' + name[:name.rindex('.')]
+        name = name[name.rindex('.')+1:]
+        print(package, name)
     pkg = __import__(package)
     obj = getattr(pkg, name)
     if inspect.isclass(obj):
@@ -1033,7 +1057,11 @@ class BackwardAnalysis(object):
         class_vars = set()
         func_vars = set()
 
-        rd = self.reaching_defs[current.statement.cls][current.statement.func]
+        try:
+            rd = self.reaching_defs[current.statement.cls][current.statement.func]
+        except KeyError as ke:
+            return to_return
+
         if current.statement.node in rd:
             rd = rd[current.statement.node]
 
@@ -1092,6 +1120,12 @@ class BackwardAnalysis(object):
             for i in fv:
                 func_vars.add(i)
 
+        elif isinstance(current.statement.node, ast.While):
+            cv, fv = self.get_vars(
+                current.statement, current.statement.node.test)
+            class_vars = cv
+            func_vars = fv
+
         else:
             print('\nwhy are you here', file=sys.stderr)
             print(ast.dump(current.statement.node), file=sys.stderr)
@@ -1122,10 +1156,16 @@ class BackwardAnalysis(object):
 
     def find_flow_dependencies(self, current):
         """find flow dependencies"""
-        visitor = IfOrFuncVisitor(current.statement.node)
-        visitor.visit(self.tree)
+        visitor = IfOrFuncVisitor(current.statement.node, current.statement.cls, current.statement.func, self.src_code)
+        visitor.visit(current.statement.func)
         to_return = []
+        if visitor.res is None:
+            return to_return
         if isinstance(visitor.res.node, ast.If):
+            obj = SearchStruct(
+                visitor.res, current.publisher, current, current.distance + 1)
+            to_return.append(obj)
+        elif isinstance(visitor.res.node, ast.While):
             obj = SearchStruct(
                 visitor.res, current.publisher, current, current.distance + 1)
             to_return.append(obj)
@@ -1149,16 +1189,26 @@ class FindCallVisitor(BasicVisitor):
         BasicVisitor.__init__(self)
         self.target_class = target_class
         self.target_func = target_func
+        self.target_name = target_func.name
         self.calls = []
 
     def visit_Call(self, node):
         if self.current_class == self.target_class:
-            if isinstance(node.func, ast.Attribute):
-                if isinstance(node.func.value, ast.Name):
-                    if node.func.value.id == 'self' and node.func.attr == self.target_func.name:
-                        # save this for use
-                        self.calls.append(TreeObject(self.current_class,
-                                                     self.current_function, self.current_expr, node))
+            name = get_name(node.func)
+            if name.startswith('self.'):
+                name = name[5:]
+                if name == self.target_name:
+                    self.calls.append(TreeObject(self.current_class,
+                                                 self.current_function, self.current_expr, node))
+            elif name == self.target_name:
+                self.calls.append(TreeObject(self.current_class,
+                                             self.current_function, self.current_expr, node))
+
+            # Commented out to keep old logic here for possible revert.
+            # if isinstance(node.func, ast.Attribute):
+            #     if isinstance(node.func.value, ast.Name):
+            #         if node.func.value.id == 'self' and node.func.attr == self.target_func.name:
+            #             # save this for uskkk
         self.generic_visit(node)
 
 
