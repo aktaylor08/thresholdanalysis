@@ -477,26 +477,26 @@ class IfOrFuncVisitor(BasicVisitor):
             self.locked = True
 
         self.current_function = old_func
-        self.depth-=1
+        self.depth -= 1
 
     def visit_If(self, node):
-        self.depth+=1
+        self.depth += 1
         if not self.locked and not self.found:
             self.generic_visit(node)
         if self.found and not self.locked:
             self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
             self.locked = True
-        self.depth-=1
+        self.depth -= 1
 
     def visit_While(self, node):
-        self.depth+=1
+        self.depth += 1
         if not self.locked and not self.found:
             self.generic_visit(node)
         if self.found and not self.locked:
             self.res = node
             self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
             self.locked = True
-        self.depth-=1
+        self.depth -= 1
 
     def generic_visit(self, node):
         if node == self.target:
@@ -589,16 +589,18 @@ class ImportFinder(ast.NodeVisitor):
     def visit_Import(self, node):
         for i in node.names:
             if i.asname is None:
-                self.names.append((i.name, i.name, i.name))
+                self.names.append((i.name, i.name))
             else:
-                self.names.append((i.name, i.asname, i.name))
+                self.names.append((i.name, i.asname))
 
     def visit_ImportFrom(self, node):
         for i in node.names:
+            print('module: ', node.module)
+            print('\t', i.name)
             if i.asname is None:
-                self.names.append((i.name, i.name, node.module))
+                self.names.append((node.module + '.' + i.name, i.name))
             else:
-                self.names.append((i.name, i.asname, node.module))
+                self.names.append((node.module + '.' + i.name, i.asname))
 
 
 class OutsidePublishMap(object):
@@ -716,8 +718,7 @@ class OutsideConstantMap(object):
         self.total_map = defaultdict(set)
 
     def add_variable(self, current_class, variable, module, thing):
-        val = __import__(module)
-        attr = getattr(val, thing)
+        attr = get_objectect_from_mod_name(module, thing)
         src, tree = self.get_src_and_tree(attr)
         candidates = get_local_candidates(tree, src)
         for key, value in candidates.class_vars.iteritems():
@@ -730,8 +731,7 @@ class OutsideConstantMap(object):
                         self.total_map[cv].add(i)
 
     def handle_attr(self, name, module, thing):
-        val = __import__(module)
-        attr = getattr(val, thing)
+        attr = get_objectect_from_mod_name(module, thing)
         if isinstance(attr, int) or isinstance(attr, float):
             self.known_constants.append(name)
             return
@@ -744,7 +744,6 @@ class OutsideConstantMap(object):
             # src, tree = self.get_src_and_tree(attr)
             # candidates = get_local_candidates(tree, src)
             pass
-
 
     def get_src_and_tree(self, attr):
         """Get the source code and ast tree of the
@@ -775,9 +774,9 @@ class OustideConstantChecker(BasicVisitor):
         if isinstance(node.value, ast.Call):
             t = [get_name(x) for x in node.targets]
             if isinstance(node.value.func, ast.Attribute):
-                mod, obj = get_call_objects(node.value.func, self.names)
-                if mod is not None:
-                    obj_type = get_obj_type(mod, obj)
+                obj = get_call_objects(node.value.func, self.names)
+                if obj is not None:
+                    obj_type = get_obj_type(obj)
                     if obj_type == 'class':
                         # store the class type here and map all of the functions that contain outside  values
                         for target in t:
@@ -795,24 +794,28 @@ class OustideConstantChecker(BasicVisitor):
         self.generic_visit(node)
 
 
+def get_objectect_from_mod_name(module, name):
+    thing = __import__(module)
+    for i in name.split('.'):
+        # print(i)
+        thing = getattr(thing, i)
+    return thing
+
+
 def get_call_objects(node, import_names):
     """Get the objects involved with a call"""
     nn = get_name(node)
     for i in import_names:
         if nn.startswith(i[1]):
             obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
-            return i[2], obj
+            print(i[0], obj)
+            return i[0] + '.' +  obj
     return None, None
 
 
 def get_obj_type(package, name):
-    print(package, name)
-    if '.' in name:
-        package = package + '.' + name[:name.rindex('.')]
-        name = name[name.rindex('.')+1:]
-        print(package, name)
-    pkg = __import__(package)
-    obj = getattr(pkg, name)
+    obj, vals = 
+    obj = get_objectect_from_mod_name(package, name)
     if inspect.isclass(obj):
         return 'class'
     elif inspect.isfunction(obj):
@@ -1059,7 +1062,7 @@ class BackwardAnalysis(object):
 
         try:
             rd = self.reaching_defs[current.statement.cls][current.statement.func]
-        except KeyError as ke:
+        except KeyError:
             return to_return
 
         if current.statement.node in rd:
@@ -1501,8 +1504,7 @@ def get_local_pub_srv(tree):
 
 
 def get_code_from_pkg_class(package, cls):
-    val = __import__(package)
-    attr = getattr(val, cls)
+    attr = get_objectect_from_mod_name(package, cls)
     src_file = inspect.getsourcefile(attr)
     with open(src_file) as f:
         code = f.read()
@@ -1613,7 +1615,7 @@ def get_const_ifs(candidates, tree, spcode, verbose=False):
 
 def get_const_whiles(candidates, tree, spcode, verbose=False):
     if verbose:
-        print('\nFinding while statements with constant values')
+        print('\nFinding while statements with constanclst values')
     while_visit = WhileConstantVisitor(candidates)
     while_visit.visit(tree)
     if verbose:
@@ -1755,7 +1757,6 @@ def list_constants(fname):
         print('\tClass: {:s}'.format(cls.name))
         for cls_var in candidates.class_vars[cls]:
             print('\t\t{:s}'.format(cls_var))
-
 
     print('\tFunction Constants:')
     for cls in candidates.func_vars:
