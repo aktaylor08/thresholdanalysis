@@ -455,53 +455,48 @@ class IfOrFuncVisitor(BasicVisitor):
         self.target = target
         self.current_class = cls
         self.current_func = func
-        self.canidates = deque()
         self.res = None
         self.found = False
-        self.locked = False
         self.depth = 0
+        self.parent = None
         self.src_code = src_code
 
     def visit_FunctionDef(self, node):
         self.depth += 1
-
+        op = self.parent
+        self.parent = node
         old_func = self.current_function
         self.current_function = node
 
-        if not self.locked and not self.found:
+        if not self.found:
             self.generic_visit(node)
 
-        if self.found and not self.locked:
-            self.res = node
-            self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
-            self.locked = True
-
         self.current_function = old_func
+        self.parent = op
         self.depth -= 1
 
     def visit_If(self, node):
         self.depth += 1
-        if not self.locked and not self.found:
+        op = self.parent
+        self.parent = node
+        if not self.found:
             self.generic_visit(node)
-        if self.found and not self.locked:
-            self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
-            self.locked = True
         self.depth -= 1
+        self.parent = op
 
     def visit_While(self, node):
         self.depth += 1
-        if not self.locked and not self.found:
+        op = self.parent
+        self.parent = node
+        if not self.found:
             self.generic_visit(node)
-        if self.found and not self.locked:
-            self.res = node
-            self.res = TreeObject(self.current_class, self.current_function, self.current_expr, node)
-            self.locked = True
         self.depth -= 1
+        self.parent = op
 
     def generic_visit(self, node):
         if node == self.target:
             self.found = True
-            return
+            self.res = TreeObject(self.current_class, self.current_function, self.current_expr, self.parent)
         BasicVisitor.generic_visit(self, node)
 
 
