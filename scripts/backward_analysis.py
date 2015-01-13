@@ -1088,8 +1088,7 @@ class BackwardAnalysis(object):
                         current.statement.get_repr(self.src_code), file=sys.stderr)
                     print(current.get_repr(self.src_code), file=sys.stderr)
                     print(current.statement.expr, file=sys.stderr)
-                    print('reaching definition exceptions', file=sys.stderr)
-                    full_print(current)
+                    full_print(current, error=True)
                     assert False
 
         if isinstance(current.statement.node, ast.If):
@@ -1302,8 +1301,9 @@ class ConstantVisitor(BasicVisitor):
             if node.value.id == 'self':
                 cv = ClassVariable(self.current_class, self.current_function,
                                    node.attr, node)
-                if cv in self.canidates.class_vars[self.current_class]:
-                    self.consts.append(cv)
+                if self.current_class in self.canidates.class_vars:
+                    if cv in self.canidates.class_vars[self.current_class]:
+                        self.consts.append(cv)
         if get_name(node) in self.canidates.known_constants:
             cv = ClassVariable(self.current_class, self.current_function,
                                node, node)
@@ -1723,18 +1723,25 @@ class PrintWhileVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def full_print(obj, tabs=0, visited=None, code=None):
+def full_print(obj, tabs=0, visited=None, code=None, error=False):
     if code is not None:
-        print('\t' * tabs, obj.get_repr(code))
+        if error:
+            print('\t' * tabs, obj.get_repr(code), file=sys.stderr)
+        else:
+            print('\t' * tabs, obj.get_repr(code))
+
     else:
-        print('\t' * tabs, obj)
+        if error:
+            print('\t' * tabs, obj, file=sys.stderr)
+        else:
+            print('\t' * tabs, obj)
     if visited is None:
         visited = set()
     visited.add(obj)
 
     for child in obj.children:
         if child not in visited:
-            full_print(child, tabs + 1, visited, code)
+            full_print(child, tabs + 1, visited, code, error=error)
     visited.remove(obj)
 
 

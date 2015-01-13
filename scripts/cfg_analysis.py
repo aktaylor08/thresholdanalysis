@@ -6,6 +6,7 @@ import os
 import argparse
 
 import ast_tools
+import pprinter
 
 
 class FunctionCFGStore(object):
@@ -52,6 +53,7 @@ class CFGVisitor(ast.NodeVisitor):
         # the last one is the function itself
         # now start the cfg by adding one to the end
         self._last = node
+        print pprinter.dump(node)
 
         # one node body is also different
         self.add_edge(node.body[-1], self._last)
@@ -96,6 +98,7 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_TryExcept(self, node):
         """try excpts"""
+        print(ast.dump(node))
         target = self.get_target(node)
         # point to some of the right things
         self._init_map[node].clear()
@@ -122,6 +125,9 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         # remove them
         self._try_targets = self._try_targets[:-1]
+
+    def visit_Try(self, node):
+        print node
 
     def visit_ExceptHandler(self, node):
         """here we visit an exception handler"""
