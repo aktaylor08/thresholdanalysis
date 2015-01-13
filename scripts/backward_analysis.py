@@ -463,7 +463,7 @@ class IfOrFuncVisitor(BasicVisitor):
         self.src_code = src_code
 
     def visit_FunctionDef(self, node):
-        self.depth+=1
+        self.depth += 1
 
         old_func = self.current_function
         self.current_function = node
@@ -595,8 +595,6 @@ class ImportFinder(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node):
         for i in node.names:
-            print('module: ', node.module)
-            print('\t', i.name)
             if i.asname is None:
                 self.names.append((node.module + '.' + i.name, i.name))
             else:
@@ -633,14 +631,14 @@ class OutsidePublishMap(object):
             for func in list(v):
                 print('\t', func)
 
-    def populate_map(self, variable, module, cls):
+    def populate_map(self, variable, cls):
         """Populate the map with the variable name, the module, and any functions
         that publish within the class"""
-        src_code = get_code_from_pkg_class(module, cls)
+        src_code = get_code_from_pkg_class(cls)
         tree = ast.parse(src_code)
         vals = self.get_outside_pub_svr(tree)
         for i in vals:
-            if i.cls.name == cls:
+            if cls[::-1].startswith(i.cls.name[::-1]):
                 for var in variable:
                     self.variable_map[var] = cls
                     self.function_map[cls].add(i.func.name)
@@ -693,12 +691,12 @@ class OutsidePublishChecker(ast.NodeVisitor):
         if isinstance(node.value, ast.Call):
             t = [get_name(x) for x in node.targets]
             if isinstance(node.value.func, ast.Attribute):
-                mod, obj = get_call_objects(node.value.func, self.names)
-                if mod is not None:
-                    obj_type = get_obj_type(mod, obj)
+                obj = get_call_objects(node.value.func, self.names)
+                if obj is not None:
+                    obj_type = get_obj_type(obj)
                     if obj_type == 'class':
                         # store the class type here and map all of the functions that contain outside  values
-                        self.outside_class_map.populate_map(t, mod, obj)
+                        self.outside_class_map.populate_map(t, obj)
 
             elif isinstance(node.value.func, ast.Name):
                 # TODO: handle pure names
@@ -717,8 +715,8 @@ class OutsideConstantMap(object):
         self.constant_map = defaultdict(set)
         self.total_map = defaultdict(set)
 
-    def add_variable(self, current_class, variable, module, thing):
-        attr = get_objectect_from_mod_name(module, thing)
+    def add_variable(self, current_class, variable, thing):
+        attr = get_objectect_from_mod_name(thing)
         src, tree = self.get_src_and_tree(attr)
         candidates = get_local_candidates(tree, src)
         for key, value in candidates.class_vars.iteritems():
@@ -730,8 +728,8 @@ class OutsideConstantMap(object):
                         self.constant_map[thing].add(i)
                         self.total_map[cv].add(i)
 
-    def handle_attr(self, name, module, thing):
-        attr = get_objectect_from_mod_name(module, thing)
+    def handle_attr(self, name, thing):
+        attr = get_objectect_from_mod_name(thing)
         if isinstance(attr, int) or isinstance(attr, float):
             self.known_constants.append(name)
             return
@@ -780,24 +778,25 @@ class OustideConstantChecker(BasicVisitor):
                     if obj_type == 'class':
                         # store the class type here and map all of the functions that contain outside  values
                         for target in t:
-                            self.outside_const_map.add_variable(self.current_class, target, mod, obj)
+                            self.outside_const_map.add_variable(self.current_class, target, obj)
 
     def visit_Attribute(self, node):
         full_name = get_name(node)
 
         if not full_name.startswith('self'):
             name = get_name(node)
-            module, callobj = get_call_objects(node, self.names)
-            if module is not None:
-                self.outside_const_map.handle_attr(name, module,  callobj)
+            callobj = get_call_objects(node, self.names)
+            if callobj is not None:
+                self.outside_const_map.handle_attr(name, callobj)
 
         self.generic_visit(node)
 
 
-def get_objectect_from_mod_name(module, name):
+def get_objectect_from_mod_name(name):
+    module = name.split('.')[0]
+    rest = '.'.join(name.split('.')[1:])
     thing = __import__(module)
-    for i in name.split('.'):
-        # print(i)
+    for i in rest.split('.'):
         thing = getattr(thing, i)
     return thing
 
@@ -808,14 +807,12 @@ def get_call_objects(node, import_names):
     for i in import_names:
         if nn.startswith(i[1]):
             obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
-            print(i[0], obj)
             return i[0] + '.' +  obj
-    return None, None
+    return None
 
 
-def get_obj_type(package, name):
-    obj, vals = 
-    obj = get_objectect_from_mod_name(package, name)
+def get_obj_type(thing):
+    obj = get_objectect_from_mod_name(thing)
     if inspect.isclass(obj):
         return 'class'
     elif inspect.isfunction(obj):
@@ -1503,8 +1500,8 @@ def get_local_pub_srv(tree):
     return call_finder.calls + publish_finder.publish_calls
 
 
-def get_code_from_pkg_class(package, cls):
-    attr = get_objectect_from_mod_name(package, cls)
+def get_code_from_pkg_class(cls):
+    attr = get_objectect_from_mod_name(cls)
     src_file = inspect.getsourcefile(attr)
     with open(src_file) as f:
         code = f.read()
