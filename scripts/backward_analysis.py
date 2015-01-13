@@ -784,15 +784,32 @@ class OustideConstantChecker(BasicVisitor):
             if callobj is not None:
                 self.outside_const_map.handle_attr(name, callobj)
 
-        self.generic_visit(node)
+        # self.generic_visit(node)
 
 
 def get_objectect_from_mod_name(name):
-    module = name.split('.')[0]
-    rest = '.'.join(name.split('.')[1:])
-    thing = __import__(module)
-    for i in rest.split('.'):
-        thing = getattr(thing, i)
+    okay = False
+    thing = None
+    level = 1
+    backtrack = False
+    while not okay:
+        try:
+            module = '.'.join(name.split('.')[:level])
+            if backtrack:
+                rest = '.'.join(name.split('.')[level-1:])
+            else:
+                rest = '.'.join(name.split('.')[level:])
+            thing = __import__(module)
+            for i in rest.split('.'):
+                thing = getattr(thing, i)
+            okay = True
+        except ImportError:
+            if backtrack == True:
+                raise
+            backtrack = True
+            level -= 1
+        except AttributeError:
+            level += 1
     return thing
 
 
@@ -800,9 +817,9 @@ def get_call_objects(node, import_names):
     """Get the objects involved with a call"""
     nn = get_name(node)
     for i in import_names:
-        if nn.startswith(i[1]):
+        if nn.startswith(i[1] + '.'):
             obj = nn[nn.index(i[1]) + len(i[1]) + 1:]
-            return i[0] + '.' +  obj
+            return i[0] + '.' + obj
     return None
 
 
