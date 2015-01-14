@@ -5,9 +5,6 @@ import ast
 import os
 import argparse
 
-import ast_tools
-import pprinter
-
 
 class FunctionCFGStore(object):
     """Store for the CFG information instead of the actual visitor itself"""
@@ -24,7 +21,7 @@ class CFGVisitor(ast.NodeVisitor):
     """build the CFG for a function in python"""
 
     def __init__(self, func):
-        """initilize the function"""
+        """initialize the function"""
         self._statements = set()
         self._init_map = dict()
         self._func = func
@@ -59,16 +56,14 @@ class CFGVisitor(ast.NodeVisitor):
         self.handleBlock(node.body)
         self.generic_visit(node)
         self.buildCFG(set(), self._start)
-        # add the start node to the pred graph so we have a close one
-        self._preds[self._start] = set([node])
+        # add the start node to the predecessor graph so we have a close one
+        self._preds[self._start] = {node}
         store = FunctionCFGStore()
         store.succs = self._succs
         store.preds = self._preds
         store.start = self._start
         store.last = self._last
         self.stores[node] = store
-
-
 
     def visit_While(self, node):
         """pass it to the loop handler"""
@@ -96,7 +91,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_TryExcept(self, node):
-        """try excpts"""
+        """try excepts"""
         target = self.get_target(node)
         # point to some of the right things
         self._init_map[node].clear()
@@ -126,14 +121,13 @@ class CFGVisitor(ast.NodeVisitor):
 
         # visit
         self.handleBlock(node.body)
-        # problems arise if you handle the orelse block with the try targets still on there
+        # problems arise if you handle the orelee block with the try targets still on there
         self._try_targets = self._try_targets[:-1]
         self.handleBlock(node.orelse)
         self._try_targets.append(node.handlers[0])
         self.generic_visit(node)
         # remove them
         self._try_targets = self._try_targets[:-1]
-
 
     def visit_ExceptHandler(self, node):
         """here we visit an exception handler"""
@@ -195,7 +189,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def buildCFG(self, visited, statement):
-        """build the final CFG with boths succsessors and predicenents"""
+        """build the final CFG with baths successors and predicaments"""
         if statement in visited:
             return
         visited.add(statement)
@@ -225,7 +219,7 @@ class CFGVisitor(ast.NodeVisitor):
             return
         # handle weird break case to make sure it doesn't go back to loop
         nlt = list(self._next_loop_target)
-        # no next loop target. get off of the because you dont want to add yet
+        # no next loop target. get off of the because you don't want to add yet
         if len(nlt) == 0 and isinstance(from_node, ast.Break):
             return
         # make sure we are sending a break to the correct node only
@@ -233,7 +227,7 @@ class CFGVisitor(ast.NodeVisitor):
             return
             # handle weird break case to make sure it doesn't go back to loop
         nlt = list(self._current_loop)
-        # no next loop target. get off of the because you dont want to add yet
+        # no next loop target. get off of the because you dent want to add yet
         if len(nlt) == 0 and isinstance(from_node, ast.Continue):
             return
         if isinstance(from_node, ast.Continue) and to_node != nlt[-1]:
@@ -263,6 +257,7 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             # otherwise we need to loop through them all and add edges
             from_node = node_list[0]
+            to_node = None
             for to_node in node_list[1:]:
                 if isinstance(from_node, ast.Break):
                     pass
@@ -283,7 +278,7 @@ class CFGVisitor(ast.NodeVisitor):
     def handle_loop(self, node):
         """handle a loop construct"""
         # some housekeeping here to handel current loop and next loop for break
-        # and continue statemnts
+        # and continue statements
         # keep track of these for break and continue statements
         nnode = self.get_target(node)
         self._current_loop.append(node)
@@ -292,7 +287,7 @@ class CFGVisitor(ast.NodeVisitor):
         if len(node.orelse) > 0:
             self.add_edge(node, node.orelse[0])
             self.add_edge(node.orelse[-1], nnode)
-        # handle excpetions
+        # handle excretions
         for eh in self._try_targets:
             self.add_edge(node, eh)
         # point the loop to the right stuff
@@ -343,6 +338,7 @@ class BuildAllCFG(ast.NodeVisitor):
         self.current_key = node
         self.store[node] = dict()
         self.generic_visit(node)
+        self.current_key = old_key
 
     def visit_FunctionDef(self, node):
         func_visit = CFGVisitor(node)
@@ -375,7 +371,8 @@ class BuildAllCFG(ast.NodeVisitor):
             for target in edges:
                 print '\t', target.lineno, self.code[target.lineno - 1].lstrip().strip()
 
-    def print_graph(self, thing):
+    @staticmethod
+    def print_graph(thing):
         vals = []
         for k, v in thing.iteritems():
             vals.append((k, sorted(v, key=lambda x: x.lineno)))
@@ -406,10 +403,9 @@ def build_files_cfgs(tree=None, fname=None, verbose=False, src_code=None):
         return None
 
 
-def main(fname, verbose):
+def main(fname):
     """main function
     :type fname: String
-    :type verbose: Boolean
     """
 
     if os.path.isfile(fname):
@@ -430,4 +426,4 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose', action='store_true')
 
     args = parser.parse_args()
-    main(args.file, args.verbose)
+    main(args.file)
