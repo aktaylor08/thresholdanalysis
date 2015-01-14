@@ -53,7 +53,6 @@ class CFGVisitor(ast.NodeVisitor):
         # the last one is the function itself
         # now start the cfg by adding one to the end
         self._last = node
-        print pprinter.dump(node)
 
         # one node body is also different
         self.add_edge(node.body[-1], self._last)
@@ -98,12 +97,17 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_TryExcept(self, node):
         """try excpts"""
-        print(ast.dump(node))
         target = self.get_target(node)
         # point to some of the right things
         self._init_map[node].clear()
         self.add_edge(node, node.body[0])
-        self.add_edge(node.body[-1], target)
+
+        if len(node.orelse) > 0:
+            print target
+            self.add_edge(node.body[-1], node.orelse[0])
+            self.add_edge(node.orelse[-1], target)
+        else:
+            self.add_edge(node.body[-1], target)
 
         if len(node.handlers) == 1:
             # if only once except than point that one to the target
@@ -122,12 +126,14 @@ class CFGVisitor(ast.NodeVisitor):
 
         # visit
         self.handleBlock(node.body)
+        # problems arise if you handle the orelse block with the try targets still on there
+        self._try_targets = self._try_targets[:-1]
+        self.handleBlock(node.orelse)
+        self._try_targets.append(node.handlers[0])
         self.generic_visit(node)
         # remove them
         self._try_targets = self._try_targets[:-1]
 
-    def visit_Try(self, node):
-        print node
 
     def visit_ExceptHandler(self, node):
         """here we visit an exception handler"""
