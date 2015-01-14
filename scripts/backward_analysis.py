@@ -804,8 +804,8 @@ def get_objectect_from_mod_name(name):
                 thing = getattr(thing, i)
             okay = True
         except ImportError:
-            if backtrack == True:
-                raise
+            if backtrack:
+                return None
             backtrack = True
             level -= 1
         except AttributeError:
@@ -1288,13 +1288,15 @@ class ConstantVisitor(BasicVisitor):
 
     def __init__(self, canidates, cls, func):
         BasicVisitor.__init__(self)
+        self.exclude = False
         self.canidates = canidates
         self.consts = []
         self.current_class = cls
         self.current_function = func
 
     def visit_Num(self, node):
-        self.consts.append(node)
+        if not self.exclude:
+            self.consts.append(node)
 
     def visit_Attribute(self, node):
         if isinstance(node.value, ast.Name):
@@ -1315,6 +1317,16 @@ class ConstantVisitor(BasicVisitor):
         if self.current_class in self.canidates.func_vars:
             if fv in self.canidates.func_vars[self.current_class]:
                 self.consts.append(fv)
+
+    def visit_Call(self, node):
+        self.exclude = True
+        self.generic_visit(node)
+        self.exclude = False
+
+    def visit_Subscript(self, node):
+        self.exclude = True
+        self.generic_visit(node)
+        self.exclude = False
 
 
 class ModCalls(ast.NodeTransformer):
@@ -1573,6 +1585,25 @@ def get_constants(tree, src_code, verbose=False, include_external=True):
         ext_can = get_outside_candidates(tree=tree, src_code=src_code)
         cs.known_constants = ext_can.outside_const_map.known_constants
         cs.var_map = ext_can.outside_const_map.total_map
+    if verbose:
+        print("\nIdentified Constants")
+        for cls in cs.class_vars:
+            print('\tClass: {:s}'.format(cls.name))
+            for cls_var in cs.class_vars[cls]:
+                print('\t\t{:s}'.format(cls_var))
+
+        print('\tFunction Constants:')
+        for cls in cs.func_vars:
+            for func_var in cs.func_vars[cls]:
+                print('\t\t{:s}'.format(func_var))
+
+        print("\tKnown Outside Constants:")
+        for ov in cs.known_constants:
+            print('\t\t', ov)
+
+        print("\tOutside Value Calls")
+        for ov in cs.var_map:
+            print(ov, cs.var_map[ov])
     return cs
 
 
@@ -1624,7 +1655,7 @@ def get_const_ifs(candidates, tree, spcode, verbose=False):
 
 def get_const_whiles(candidates, tree, spcode, verbose=False):
     if verbose:
-        print('\nFinding while statements with constanclst values')
+        print('\nFinding while statements with constant values')
     while_visit = WhileConstantVisitor(candidates)
     while_visit.visit(tree)
     if verbose:
@@ -1669,7 +1700,7 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
             print('parsing file')
         src_code, tree = get_code_and_tree(fname)
         constants = get_constants(tree, src_code, verbose)
-        flow_store = get_cfg(tree, src_code, verbose)
+        flow_store = get_cfg(tree, src_code, False)
         rd = get_reaching_definitions(tree, flow_store, verbose)
         calls = get_pub_srv_calls(tree, src_code, verbose)
         ctrl_statements = get_const_control(constants, tree, src_code, verbose=verbose, ifs=ifs, whiles=whiles)
