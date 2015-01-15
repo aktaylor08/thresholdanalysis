@@ -1437,12 +1437,14 @@ class NameAttrVisitor(ast.NodeVisitor):
 
 
 # Replacement stuff to modify and exit the code.
-def replace_values(tree, back_analysis, fname, code, verbose):
+def replace_values(tree, back_analysis, fname, code, verbose, args):
     tree = ModCalls(back_analysis, fname, code, verbose).visit(tree)
     tree = add_import_statement(tree)
     ast.fix_missing_locations(tree)
 
+    print(ast.dump(tree))
     code = compile(tree, fname, mode='exec')
+    sys.argv = [fname] +  args
     ns = {'__name__': '__main__'}
     exec (code, ns)
 
@@ -1740,7 +1742,7 @@ class FuncDefFinder(BasicVisitor):
                 self.res = node
 
 
-def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
+def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True, rest_args=list()):
     """new main function...get CFG and find pubs first"""
     if os.path.isfile(fname):
         print('File: ', fname)
@@ -1762,7 +1764,7 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
 
         if execute:
             print('\nnow modifying source code\n')
-            replace_values(tree, ba, fname, src_code, verbose)
+            replace_values(tree, ba, fname, src_code, verbose, rest_args)
 
     else:
         print('error no file')
@@ -1910,7 +1912,6 @@ if __name__ == '__main__':
                         action='store_true', )
     parser.add_argument('-v', '--verbose', help='Verbose mode',
                         action='store_true', )
-    parser.add_argument('rest', nargs='*')
     parser.add_argument(
         '--list-ifs', help='List all if statements and exit', action='store_true')
     parser.add_argument(
@@ -1933,6 +1934,7 @@ if __name__ == '__main__':
         '--exclude-whiles', help='Do Not include while statements in the threshold identification', action='store_true')
     parser.add_argument(
         '--exclude-ifs', help='Do Not include if statements in the threshold identification', action='store_true')
+    parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
     no_analysis = False
     if args.list_ifs:
@@ -1963,8 +1965,9 @@ if __name__ == '__main__':
     if args.list_cfg:
         list_cfg(args.file)
         no_analysis = True
+    print(args.rest)
 
     if not no_analysis:
         analyze_file(
             args.file, verbose=args.verbose, execute=not args.no_execute, ifs=not args.exclude_ifs,
-            whiles=not args.exclude_whiles)
+            whiles=not args.exclude_whiles, rest_args=args.rest)
