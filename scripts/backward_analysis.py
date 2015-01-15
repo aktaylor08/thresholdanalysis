@@ -1692,6 +1692,54 @@ def perform_analysis(ctrl_statements, calls, flow_store, tree, rd, verbose=False
     return ba
 
 
+def build_call_graph(tree, src_code):
+    cgb = CallGraphBuilder(src_code, tree)
+    cgb.visit(tree)
+    for key in cgb.call_dict:
+        print(key.name, ':')
+        for func in cgb.call_dict[key]:
+            print('\t', func.name)
+            for call in list(cgb.call_dict[key][func]):
+                try:
+                    print('\t\t', call.name)
+                except:
+                    print("error")
+
+
+class CallGraphBuilder(BasicVisitor):
+
+    def __init__(self, src_code, tree):
+        self.src_code = src_code
+        self.tree = tree
+        self.call_dict = {}
+        BasicVisitor.__init__(self)
+
+    def visit_Call(self, node):
+        name = get_name(node.func)
+        if name.startswith('self.'):
+            fdf = FuncDefFinder(name[5:], self.current_class)
+            fdf.visit(self.tree)
+            if self.current_class in self.call_dict:
+                self.call_dict[self.current_class][self.current_function].add(fdf.res)
+            else:
+                self.call_dict[self.current_class] = defaultdict(set)
+
+
+
+class FuncDefFinder(BasicVisitor):
+
+    def __init__(self, function, cls):
+        BasicVisitor.__init__(self)
+        self.cls = cls
+        self.f_name = function
+        self.res = None
+
+    def visit_FunctionDef(self, node):
+        if self.current_class == self.cls:
+            if node.name == self.f_name:
+                self.res = node
+
+
 def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
     """new main function...get CFG and find pubs first"""
     if os.path.isfile(fname):
@@ -1699,6 +1747,7 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True):
         if verbose:
             print('parsing file')
         src_code, tree = get_code_and_tree(fname)
+        build_call_graph(tree, src_code)
         constants = get_constants(tree, src_code, verbose)
         flow_store = get_cfg(tree, src_code, False)
         rd = get_reaching_definitions(tree, flow_store, verbose)
