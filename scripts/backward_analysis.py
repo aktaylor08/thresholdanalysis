@@ -810,6 +810,8 @@ def get_objectect_from_mod_name(name):
             level -= 1
         except AttributeError:
             level += 1
+        except ValueError:
+            return None
     return thing
 
 
@@ -1441,8 +1443,6 @@ def replace_values(tree, back_analysis, fname, code, verbose, args):
     tree = ModCalls(back_analysis, fname, code, verbose).visit(tree)
     tree = add_import_statement(tree)
     ast.fix_missing_locations(tree)
-
-    print(ast.dump(tree))
     code = compile(tree, fname, mode='exec')
     sys.argv = [fname] +  args
     ns = {'__name__': '__main__'}
@@ -1452,6 +1452,7 @@ def replace_values(tree, back_analysis, fname, code, verbose, args):
 def add_import_statement(node):
     new_node = ast.Import(names=[ast.alias(name='reporting', asname=None)])
     new_node = ast.copy_location(new_node, node.body[0])
+
     ast.increment_lineno(node.body[0], 1)
     node.body = [new_node] + node.body
     return node
@@ -1749,7 +1750,7 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True, res
         if verbose:
             print('parsing file')
         src_code, tree = get_code_and_tree(fname)
-        build_call_graph(tree, src_code)
+        # build_call_graph(tree, src_code)
         constants = get_constants(tree, src_code, verbose)
         flow_store = get_cfg(tree, src_code, False)
         rd = get_reaching_definitions(tree, flow_store, verbose)
@@ -1965,7 +1966,6 @@ if __name__ == '__main__':
     if args.list_cfg:
         list_cfg(args.file)
         no_analysis = True
-    print(args.rest)
 
     if not no_analysis:
         analyze_file(

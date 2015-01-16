@@ -5,6 +5,35 @@ import ast
 import os
 import argparse
 
+from ast_tools import get_name
+
+
+class FunctionEntrance(object):
+    """Simple place holder for a function exit"""
+
+    def __init__(self, func_def):
+        self.function_node = func_def
+        self.name = func_def.name
+        self.lineno = func_def.lineno
+        self.node_first = func_def.body[0]
+
+
+class FunctionExit(object):
+    """Simple place holder for a function entrance"""
+
+    def __init__(self, func_def):
+        self.function_node = func_def
+        self.name = func_def.name
+        self.lineno = func_def.lineno
+
+class CallReturn(object):
+
+    def __init__(self, call, func_def):
+        self.function_node = func_def
+        self.call = call
+        self.name = get_name(call.func)
+        self.lineno = call.lineno
+
 
 class FunctionCFGStore(object):
     """Store for the CFG information instead of the actual visitor itself"""
@@ -46,16 +75,18 @@ class CFGVisitor(ast.NodeVisitor):
     def start_visit(self, node):
         """ here lies the start of it all.  Add some bookkeeping edges"""
         # set the start to be the first node in body
-        self._start = node.body[0]
+        # self._start = node.body[0]
+        self._start = FunctionEntrance(node)
         # the last one is the function itself
         # now start the cfg by adding one to the end
-        self._last = node
+        # self._last = node
+        self._last = FunctionExit(node)
 
         # one node body is also different
         self.add_edge(node.body[-1], self._last)
         self.handleBlock(node.body)
         self.generic_visit(node)
-        self.buildCFG(set(), self._start)
+        self.buildCFG(set(), self._start.node_first)
         # add the start node to the predecessor graph so we have a close one
         self._preds[self._start] = {node}
         store = FunctionCFGStore()
@@ -367,9 +398,9 @@ class BuildAllCFG(ast.NodeVisitor):
             vals.append((k, sorted(v, key=lambda x: x.lineno)))
             vals = sorted(vals, key=lambda x: x[0].lineno)
         for node, edges in vals:
-            print node.lineno, self.code[node.lineno - 1].lstrip().strip(), node
+            print node.lineno, node, self.code[node.lineno - 1].lstrip().strip()
             for target in edges:
-                print '\t', target.lineno, self.code[target.lineno - 1].lstrip().strip()
+                print '\t', target.lineno, target, self.code[target.lineno - 1].lstrip().strip()
 
     @staticmethod
     def print_graph(thing):
