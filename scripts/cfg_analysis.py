@@ -26,13 +26,39 @@ class FunctionExit(object):
         self.name = func_def.name
         self.lineno = func_def.lineno
 
-class CallReturn(object):
+
+class FunctionCall(object):
 
     def __init__(self, call, func_def):
         self.function_node = func_def
         self.call = call
         self.name = get_name(call.func)
         self.lineno = call.lineno
+
+    def __eq__(self, other):
+        if not isinstance(other, FunctionCall):
+            return False
+        return self.call == other.call and self.function_node == other.function_node and self.lineno == other.lineno
+
+    def __hash__(self):
+        return hash(self.call) + hash(self.function_node) + hash(self.lineno)
+
+
+class FunctionReturn(object):
+
+    def __init__(self, call, func_def):
+        self.function_node = func_def
+        self.call = call
+        self.name = get_name(call.func)
+        self.lineno = call.lineno
+
+    def __eq__(self, other):
+        if not isinstance(other, FunctionReturn):
+            return False
+        return self.call == other.call and self.function_node == other.function_node and self.lineno == other.lineno
+
+    def __hash__(self):
+        return hash(self.call) + hash(self.function_node) + hash(self.lineno)
 
 
 class FunctionCFGStore(object):
@@ -91,7 +117,10 @@ class CFGVisitor(ast.NodeVisitor):
         self._preds[self._start] = {node}
         store = FunctionCFGStore()
         store.succs = self._succs
+        store.succs[self._start] = set([self._start.node_first])
         store.preds = self._preds
+        store.preds[self._start.node_first] = set([self._start])
+        store.preds[self._start].clear()
         store.start = self._start
         store.last = self._last
         self.stores[node] = store

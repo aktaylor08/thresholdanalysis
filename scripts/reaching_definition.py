@@ -44,6 +44,7 @@ class ReachingDefinition(object):
                 else:
                     outs[func].add((arg.id, arg))
             else:
+                print(func.lineno, arg)
                 print('ERROR line 325ish', file=sys.stderr)
 
         changed = True

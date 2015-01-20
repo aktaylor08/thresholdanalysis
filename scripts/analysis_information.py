@@ -1,6 +1,6 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 import sys
-from cfg_analysis import BuildAllCFG
+from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn
 from ast_tools import get_name
 import ast
 
@@ -16,7 +16,7 @@ class AnalysisGraph(object):
 
     def __init__(self, file_name):
         self.file_name = file_name
-        self.classes = {"__GLOBAL__" : ClassGraph(None)}
+        self.classes = {"__GLOBAL__": ClassGraph(None)}
 
     def import_cfg(self, cfg_store):
         for cls in cfg_store:
@@ -47,6 +47,7 @@ class ClassGraph(object):
         self.first_last_store = {}
         self.cfg_store = {}
         self.rd = None
+        self.calls = []
 
     def is_global(self):
         """Return true if this is in the global namespace and not a class per se"""
@@ -60,6 +61,7 @@ class ClassGraph(object):
 
             # Add all of the nodes and all of the connections in the original cfg
             self.cfg_store[func] = cfg[func]
+
             store = cfg[func]
             self.first_last_store[func] = (store.start, store.last)
             self.nodes.add(store.start)
@@ -76,15 +78,15 @@ class ClassGraph(object):
 
         # Make links between functions to make the call graph nice and crazy :)
         for pos_call in list(self.nodes):
-            #check for all calls
+            # check for all calls
             call = None
             if isinstance(pos_call, ast.Call):
-                call = pos_call.func
+                call = pos_call
             if isinstance(pos_call, ast.Expr):
                 if isinstance(pos_call.value, ast.Call):
-                    call = pos_call.value.func
+                    call = pos_call.value
             if call is not None:
-                name = get_name(call)
+                name = get_name(call.func)
                 start = None
                 end = None
                 if self.is_global():
@@ -96,13 +98,61 @@ class ClassGraph(object):
                 # Not in the class or namespace so we are good and done
                 if start is None:
                     continue
-                print self.cfg_forward[pos_call]
-                old_targets = self.cfg_forward[pos_call]
 
+                # take care of the forward cfg first
+                func_call_obj = FunctionCall(call, None)
+                func_return_obj = FunctionReturn(call, None)
+                old_targets = list(self.cfg_forward[pos_call])
+                if func_call_obj not in self.calls:
+                    # clear the old targets and point at the call
+                    self.cfg_forward[pos_call].clear()
+                    self.cfg_forward[pos_call].add(func_call_obj)
 
+                    # point it at the start of the function
+                    self.cfg_forward[func_call_obj].add(start)
 
+                    # take care of return values
+                    self.cfg_forward[end].add(func_return_obj)
+                    for target in old_targets:
+                        self.cfg_forward[func_return_obj].add(target)
+                    self.calls.append(func_call_obj)
 
+                    # now do backwards stuff
+                    for i in old_targets:
+                        self.cfg_backward[i].remove(pos_call)
+                        self.cfg_backward[i].add(func_return_obj)
+                    self.cfg_backward[func_call_obj].add(pos_call)
+                    self.cfg_backward[start].add(func_call_obj)
+                    self.cfg_backward[func_return_obj].add(end)
 
+    def print_cfg(self, func):
+        to_visit = deque()
+        visited = set()
+        to_visit.append(self.get_start(func))
+        print "Forward CFG for:", func
+        while len(to_visit) > 0:
+            next_node = to_visit.popleft()
+            targets = self.cfg_forward[next_node]
+            print '\t', next_node.lineno, next_node
+            for i in targets:
+                if i not in visited:
+                    to_visit.append(i)
+                print '\t\t', i.lineno, i
+            visited.add(next_node)
+        visited.clear()
+        to_visit.append(self.get_last(func))
+
+        print "Backward CFG for:", func
+        while len(to_visit) > 0:
+            next_node = to_visit.popleft()
+            targets = self.cfg_backward[next_node]
+            print '\t', next_node.lineno, next_node
+            for i in targets:
+                if i not in visited:
+                    to_visit.append(i)
+                print '\t\t', i.lineno, i
+            visited.add(next_node)
+        visited.clear()
 
     def get_start(self, function):
         """Get the start of the functions CFG"""
@@ -128,22 +178,18 @@ class ClassGraph(object):
             return None
 
 
-
-
-
-def main(fname):
-    with open(fname) as openf:
+def main(file_name):
+    with open(file_name) as openf:
         code = openf.read()
         tree = ast.parse(code)
         cfgvisit = BuildAllCFG(False, code=code.split('\n'))
         cfgvisit.visit(tree)
 
-        ag = AnalysisGraph(fname)
+        ag = AnalysisGraph(file_name)
         ag.import_cfg(cfgvisit.store)
-        print ag.classes['Gripper'].get_start('set_parameters')
+        ag.classes['Example'].print_cfg('t1callback')
 
 
 if __name__ == "__main__":
     fname = sys.argv[1]
     main(fname)
-
