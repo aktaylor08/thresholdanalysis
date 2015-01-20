@@ -90,7 +90,8 @@ class ClassGraph(object):
                 start = None
                 end = None
                 if self.is_global():
-                    pass
+                    start = self.get_start(name)
+                    end = self.get_last(name)
                 elif name.startswith('self.'):
                     start = self.get_start(name[5:])
                     end = self.get_last(name[5:])
@@ -102,9 +103,9 @@ class ClassGraph(object):
                 # take care of the forward cfg first
                 func_call_obj = FunctionCall(call, None)
                 func_return_obj = FunctionReturn(call, None)
-                old_targets = list(self.cfg_forward[pos_call])
                 if func_call_obj not in self.calls:
                     # clear the old targets and point at the call
+                    old_targets = list(self.cfg_forward[pos_call])
                     self.cfg_forward[pos_call].clear()
                     self.cfg_forward[pos_call].add(func_call_obj)
 
@@ -142,7 +143,7 @@ class ClassGraph(object):
         visited.clear()
         to_visit.append(self.get_last(func))
 
-        print "Backward CFG for:", func
+        print "\n\nBackward CFG for:", func
         while len(to_visit) > 0:
             next_node = to_visit.popleft()
             targets = self.cfg_backward[next_node]
@@ -187,7 +188,7 @@ def main(file_name):
 
         ag = AnalysisGraph(file_name)
         ag.import_cfg(cfgvisit.store)
-        ag.classes['Example'].print_cfg('t1callback')
+        ag.classes['__GLOBAL__'].print_cfg('call_1')
 
 
 if __name__ == "__main__":

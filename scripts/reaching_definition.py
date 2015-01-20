@@ -34,7 +34,8 @@ class ReachingDefinition(object):
         ins = {}
         for i in cfg.preds:
             outs[i] = set()
-        func = list(cfg.preds[cfg.start])[0]
+        func = cfg.start.function_node
+        # func = list(cfg.preds[cfg.start])[0]
         # handle the arguments
         arguments = func.args.args
         for arg in arguments:
@@ -42,10 +43,10 @@ class ReachingDefinition(object):
                 if arg.id == 'self':
                     pass
                 else:
-                    outs[func].add((arg.id, arg))
+                    outs[cfg.start].add((arg.id, arg))
             else:
                 print(func.lineno, arg)
-                print('ERROR line 325ish', file=sys.stderr)
+                print('ERROR argument unsupported type', file=sys.stderr)
 
         changed = True
         while changed:
