@@ -60,21 +60,32 @@ class ClassGraph(object):
         self.cfg_backward = defaultdict(set)
         self.first_last_store = {}
         self.cfg_store = {}
-        self.rd = None
+        self.rd = {}
         self.calls = []
 
     def is_global(self):
         """Return true if this is in the global namespace and not a class per se"""
         return self.node is None
 
-    def import_rd(self, rd):
-        for i in rd:
-            print i.lineno, i
-            for j in rd[i]:
+    def import_rd(self, class_rd):
+        function_defs = defaultdict(set)
+        for function in class_rd:
+            for statement in class_rd[function]:
+                rd = self.rd.get(statement, dict())
+                for var, deff in class_rd[function][statement]:
+                    var_defs = rd.get(var, list())
+                    var_defs.append(deff)
+                    rd[var] = var_defs
+                    if var.startswith('self.'):
+                        function_defs[var].add(deff)
+                self.rd[statement] = rd
+        for i in function_defs.keys():
+            print i
+            for j in list(function_defs[i]):
                 print '\t', j.lineno, j
-                for k in rd[i][j]:
-                    print '\t\t', k[1].lineno, k
-            print '\n'
+
+        # now add class rd's so self.x are correctly linked everywhere that is not a direct sign
+        exclude = {}
 
 
     def import_cfg(self, cfg):
