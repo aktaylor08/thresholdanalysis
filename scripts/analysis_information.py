@@ -3,6 +3,7 @@ import sys
 from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn
 from ast_tools import get_name
 import ast
+from reaching_definition import ReachingDefinition
 
 __author__ = 'ataylor'
 
@@ -32,6 +33,19 @@ class AnalysisGraph(object):
                 class_graph.import_cfg(cfg_store[cls])
 
 
+    def import_rd(self, reach_defs):
+        """THIS MUST BE RAN AFTER CONTROL FLOW ANALYSIS"""
+        for i in reach_defs.keys():
+            if isinstance(i, ast.Module):
+                class_graph = self.classes["__GLOBAL__"]
+                class_graph.import_rd(reach_defs[i])
+            else:
+                class_graph = self.classes[i.name]
+                class_graph.import_rd(reach_defs[i])
+
+
+
+
 class ClassGraph(object):
     """Class Graph.  This contains the cfg, and rd for the classes and
     functions within a class.  Makes searching these two objects easy
@@ -52,6 +66,9 @@ class ClassGraph(object):
     def is_global(self):
         """Return true if this is in the global namespace and not a class per se"""
         return self.node is None
+
+    def import_rd(self, rd):
+        print rd
 
     def import_cfg(self, cfg):
         """Given a cfg store import it
@@ -185,10 +202,12 @@ def main(file_name):
         tree = ast.parse(code)
         cfgvisit = BuildAllCFG(False, code=code.split('\n'))
         cfgvisit.visit(tree)
+        rd = ReachingDefinition(tree, cfgvisit.store)
+        rd.compute()
 
         ag = AnalysisGraph(file_name)
         ag.import_cfg(cfgvisit.store)
-        ag.classes['__GLOBAL__'].print_cfg('call_1')
+        ag.import_rd(rd.rds_in)
 
 
 if __name__ == "__main__":
