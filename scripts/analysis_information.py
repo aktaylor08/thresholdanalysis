@@ -68,7 +68,14 @@ class ClassGraph(object):
         return self.node is None
 
     def import_rd(self, rd):
-        print rd
+        for i in rd:
+            print i.lineno, i
+            for j in rd[i]:
+                print '\t', j.lineno, j
+                for k in rd[i][j]:
+                    print '\t\t', k[1].lineno, k
+            print '\n'
+
 
     def import_cfg(self, cfg):
         """Given a cfg store import it
