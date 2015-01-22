@@ -16,6 +16,7 @@ class FunctionEntrance(object):
         self.name = func_def.name
         self.lineno = func_def.lineno
         self.node_first = func_def.body[0]
+        self._fields = []
 
 
 class FunctionExit(object):
@@ -25,6 +26,7 @@ class FunctionExit(object):
         self.function_node = func_def
         self.name = func_def.name
         self.lineno = func_def.lineno
+        self._fields = []
 
 
 class FunctionCall(object):
@@ -34,6 +36,7 @@ class FunctionCall(object):
         self.call = call
         self.name = get_name(call.func)
         self.lineno = call.lineno
+        self._fields = []
 
     def __eq__(self, other):
         if not isinstance(other, FunctionCall):
@@ -51,6 +54,7 @@ class FunctionReturn(object):
         self.call = call
         self.name = get_name(call.func)
         self.lineno = call.lineno
+        self._fields = []
 
     def __eq__(self, other):
         if not isinstance(other, FunctionReturn):

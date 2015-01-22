@@ -4,6 +4,8 @@ from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn
 from ast_tools import get_name
 import ast
 from reaching_definition import ReachingDefinition
+from backward_analysis import get_constants, get_const_control
+from backward_analysis import get_pub_srv_calls
 
 __author__ = 'ataylor'
 
@@ -43,6 +45,39 @@ class AnalysisGraph(object):
                 class_graph = self.classes[i.name]
                 class_graph.import_rd(reach_defs[i])
 
+    def get_class(self, cls):
+        if isinstance(cls, ast.ClassDef):
+            return self.classes[cls.name]
+        elif isinstance(cls, ast.Module):
+            return self.classes['__GLOBAL__']
+        elif isinstance(cls, str):
+            return self.classes[cls]
+        else:
+            print "Error on class lookup"
+            return None
+
+    def add_constant_ctrl(self, key, values):
+        for cls, graph in self.classes.iteritems():
+            graph.add_constant(key, values)
+
+    def add_pub_srv(self, call):
+        for cls, graph in self.classes.iteritems():
+            graph.add_pub_srv(call)
+
+    def do_analysis(self, call):
+        cls_graph = None
+        for i in self.classes.values():
+            if call.node in i.nodes:
+                cls_graph = i
+                call = call.node
+                break
+            elif call.expr in i.nodes:
+                cls_graph = i
+                call = call.expr
+                break
+        cls_graph.do_analysis(call)
+
+
 
 
 
@@ -62,6 +97,8 @@ class ClassGraph(object):
         self.cfg_store = {}
         self.rd = {}
         self.calls = []
+        self.const_flow = defaultdict(list)
+        self.pub_srvs = []
 
     def is_global(self):
         """Return true if this is in the global namespace and not a class per se"""
@@ -79,22 +116,14 @@ class ClassGraph(object):
                     if stmt.startswith('self.'):
                         function_defs[stmt].add(deff)
                 self.rd[statement] = rd
-        for i in function_defs.keys():
-            print i
-            for j in list(function_defs[i]):
-                print '\t', j.lineno, j
-
 
         # now add class rd's so self.x are correctly linked everywhere that is not a direct sign
-        for c in self.rd:
-            for stmt, keys in self.rd.iteritems():
-                print stmt,keys
+        for stmt, keys in self.rd.iteritems():
                 for name, org_things in keys.iteritems():
-                    print name, org_things
-
-        exclude = {}
-
-
+                    if name in function_defs:
+                        for x in function_defs[name]:
+                            if x not in org_things:
+                                org_things.append(x)
 
     def import_cfg(self, cfg):
         """Given a cfg store import it
@@ -169,6 +198,17 @@ class ClassGraph(object):
                     self.cfg_backward[start].add(func_call_obj)
                     self.cfg_backward[func_return_obj].add(end)
 
+    def do_analysis(self, node):
+        to_visit = deque()
+        to_visit.append(node)
+        visited = set()
+        while len(to_visit) > 0:
+            next_node = to_visit.popleft()
+            print next_node
+            print self.cfg_backward[node]
+            print self.rd[node]
+
+
     def print_cfg(self, func):
         to_visit = deque()
         visited = set()
@@ -221,6 +261,35 @@ class ClassGraph(object):
         except KeyError:
             return None
 
+    def add_constant(self, key, values):
+        for node in self.nodes:
+            if node == key:
+                for val in values:
+                    if isinstance(val, ast.Num):
+                        const = val.n
+                    else:
+                        const = val.name
+                    if const not in self.const_flow[node]:
+                        self.const_flow[node].append(const)
+
+    def add_pub_srv(self, call):
+        for node in self.nodes:
+            if node == call.node or node == call.expr:
+                if node not in self.pub_srvs:
+                    self.pub_srvs.append(node)
+
+
+class NameVisitor(ast.NodeVisitor):
+
+    def __init__(self):
+        self.names = []
+
+    def visit_Attribute(self, node):
+        self.names.append(get_name(node))
+
+    def visit_Name(self, node):
+        self.names.append(get_name(node))
+
 
 def main(file_name):
     with open(file_name) as openf:
@@ -235,6 +304,17 @@ def main(file_name):
         ag.import_cfg(cfgvisit.store)
         ag.import_rd(rd.rds_in)
 
+        constants = get_constants(tree, code, False)
+        const_control = get_const_control(constants, tree, code)
+        for key, values in const_control.iteritems():
+            ag.add_constant_ctrl(key, values)
+
+        pubs = get_pub_srv_calls(tree, code)
+        for i in pubs:
+            ag.add_pub_srv(i)
+
+        for i in pubs:
+            ag.do_analysis(i)
 
 if __name__ == "__main__":
     fname = sys.argv[1]
