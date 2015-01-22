@@ -72,20 +72,28 @@ class ClassGraph(object):
         for function in class_rd:
             for statement in class_rd[function]:
                 rd = self.rd.get(statement, dict())
-                for var, deff in class_rd[function][statement]:
-                    var_defs = rd.get(var, list())
+                for stmt, deff in class_rd[function][statement]:
+                    var_defs = rd.get(stmt, list())
                     var_defs.append(deff)
-                    rd[var] = var_defs
-                    if var.startswith('self.'):
-                        function_defs[var].add(deff)
+                    rd[stmt] = var_defs
+                    if stmt.startswith('self.'):
+                        function_defs[stmt].add(deff)
                 self.rd[statement] = rd
         for i in function_defs.keys():
             print i
             for j in list(function_defs[i]):
                 print '\t', j.lineno, j
 
+
         # now add class rd's so self.x are correctly linked everywhere that is not a direct sign
+        for c in self.rd:
+            for stmt, keys in self.rd.iteritems():
+                print stmt,keys
+                for name, org_things in keys.iteritems():
+                    print name, org_things
+
         exclude = {}
+
 
 
     def import_cfg(self, cfg):
