@@ -43,7 +43,7 @@ class ReachingDefinition(object):
                 if arg.id == 'self':
                     pass
                 else:
-                    outs[cfg.start].add((arg.id, arg))
+                    outs[cfg.start].add((arg.id, cfg.start))
             else:
                 print(func.lineno, arg)
                 print('ERROR argument unsupported type', file=sys.stderr)
@@ -51,7 +51,7 @@ class ReachingDefinition(object):
         changed = True
         while changed:
             seen = set()
-            node = cfg.start
+            node = cfg.start.node_first
             changed = self.iterate(seen, node, outs, cfg)
 
         # ins are just the union of the preceding outs.

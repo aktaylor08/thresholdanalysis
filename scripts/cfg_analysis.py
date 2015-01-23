@@ -36,7 +36,6 @@ class FunctionCall(object):
         self.call = call
         self.name = get_name(call.func)
         self.lineno = call.lineno
-        self._fields = []
 
     def __eq__(self, other):
         if not isinstance(other, FunctionCall):
@@ -54,7 +53,6 @@ class FunctionReturn(object):
         self.call = call
         self.name = get_name(call.func)
         self.lineno = call.lineno
-        self._fields = []
 
     def __eq__(self, other):
         if not isinstance(other, FunctionReturn):

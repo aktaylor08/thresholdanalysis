@@ -340,7 +340,7 @@ class CandidateCompiler(object):
         return False
 
     def is_const(self, node):
-        """given a node of an ast return if it is
+        """given 'loc', a node of an ast return if it is
         a constant candidate -> looks up name and  other stuff"""
         cls, func = self.get_class_and_func(node)
 

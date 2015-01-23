@@ -2,10 +2,12 @@ import ast
 
 
 def get_node_code(node, code):
+    """Get code of a node"""
     return str(node.lineno) + ' ' + code[node.lineno - 1].lstrip().rstrip()
 
 
 def print_code_node(node, code):
+    """Print code of a node"""
     print get_node_code(node, code)
 
 
@@ -20,6 +22,61 @@ def get_name(attr, start=str()):
     else:
         name = ''
     return name
+
+
+def get_node_names(node):
+    """Get names involved with a node"""
+    nv = NameVisitor()
+    nv.visit(node)
+    return nv.names
+
+
+def get_node_variables(node):
+    """Get the variables involved within a node
+    By this we mean the rhs of assignments, tests in if statements,
+    and all of that stuff"""
+    names = []
+    if isinstance(node, ast.If):
+        cur_names = get_node_names(node.test)
+        for i in cur_names:
+            names.append(i)
+    elif isinstance(node, ast.While):
+        cur_names = get_node_names(node.test)
+        for i in cur_names:
+            names.append(i)
+    elif isinstance(node, ast.Call):
+        for arg in node.args:
+            cur_names = get_node_names(arg)
+            for i in cur_names:
+                names.append(i)
+    elif isinstance(node, ast.Assign):
+        cur_names = get_node_names(node.value)
+        for i in cur_names:
+            names.append(i)
+    elif isinstance(node, ast.AugAssign):
+        cur_names = get_node_names(node.value)
+        for i in cur_names:
+            names.append(i)
+        cur_names = get_node_names(node.target)
+        for i in cur_names:
+            names.append(i)
+
+    elif isinstance(node, ast.Expr):
+        if isinstance(node.value, ast.Call):
+            for i in node.value.args:
+                cur_names = get_node_names(i)
+                for j in cur_names:
+                    names.append(j)
+            for i in node.value.keywords:
+                cur_names = get_node_names(i.value)
+                for j in cur_names:
+                    names.append(j)
+                    # skipping STARARGS AND KWARGS for now
+        else:
+            print "UNKNOWN EXPRESSION. DON'T KNOW WHAT TO DO"
+    else:
+        print "Unsupported type of node....", type(node)
+    return names
 
 
 def get_string_repr(node):
@@ -134,3 +191,82 @@ def get_string_repr(node):
 
     if isinstance(node, ast.Str):
         return node.s
+
+
+class NameVisitor(ast.NodeVisitor):
+    """Super simple visitor to get the the names in a node"""
+
+    def __init__(self):
+        self.names = []
+
+    def visit_Attribute(self, node):
+        self.names.append(get_name(node))
+
+    def visit_Name(self, node):
+        self.names.append(get_name(node))
+
+    def visit_Call(self, node):
+        # Skip function name but go on to everything else
+        for i in node.args:
+            self.generic_visit(i)
+        for i in node.keywords:
+            self.generic_visit(i)
+
+        if node.starargs is not None:
+            if isinstance(node.starargs, list):
+                for i in node.starargs:
+                    self.generic_visit(i)
+            else:
+                self.generic_visit(node.starargs)
+
+        if node.kwargs is not None:
+            if isinstance(node.kwargs, list):
+                for i in node.kwargs:
+                    self.generic_visit(i)
+            else:
+                self.generic_visit(node.kwargs)
+            self.generic_visit(node.starargs)
+
+
+class ContainingVisitor(ast.NodeVisitor):
+    """finds if the program is part of an if statement"""
+
+    def __init__(self, target):
+        self.target = target
+        self.res = None
+        self.found = False
+        self.depth = 0
+        self.parent = None
+
+    def visit_FunctionDef(self, node):
+        self.depth += 1
+        op = self.parent
+        self.parent = node
+        if not self.found:
+            self.generic_visit(node)
+        self.parent = op
+        self.depth -= 1
+
+    def visit_If(self, node):
+        self.depth += 1
+        op = self.parent
+        self.parent = node
+        if not self.found:
+            self.generic_visit(node)
+        self.depth -= 1
+        self.parent = op
+
+    def visit_While(self, node):
+        self.depth += 1
+        op = self.parent
+        self.parent = node
+        if not self.found:
+            self.generic_visit(node)
+        self.depth -= 1
+        self.parent = op
+
+    def generic_visit(self, node):
+        if node == self.target:
+            self.found = True
+            self.res = self.parent
+        ast.NodeVisitor.generic_visit(self, node)

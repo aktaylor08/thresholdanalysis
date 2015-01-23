@@ -1,31 +1,20 @@
 from collections import defaultdict, deque
 import sys
-from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn
-from ast_tools import get_name
+from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn, FunctionEntrance
+from ast_tools import get_name, get_node_variables, ContainingVisitor
 import ast
 from reaching_definition import ReachingDefinition
 from backward_analysis import get_constants, get_const_control
 from backward_analysis import get_pub_srv_calls
 
-__author__ = 'ataylor'
-
-class NameVisitor(ast.NodeVisitor):
-
-    def __init__(self):
-        self.names = []
-
-    def visit_Attribute(self, node):
-        self.names.append(get_name(node))
-
-    def visit_Name(self, node):
-        self.names.append(get_name(node))
-
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 class AnalysisGraph(object):
     """"Graph which contains links to all of the classes
     in a file that have been analyzed using the program
-    basically a dictonary with some functionality that may be
+    basically a dictionary with some functionality that may be
     added to it depending on what is needed.
     """
 
@@ -37,6 +26,7 @@ class AnalysisGraph(object):
         for cls in cfg_store:
             if isinstance(cls, ast.Module):
                 class_graph = self.classes["__GLOBAL__"]
+                class_graph.cls_node = cls
                 class_graph.import_cfg(cfg_store[cls])
             elif cls.name in self.classes:
                 class_graph = self.classes[cls.name]
@@ -45,7 +35,6 @@ class AnalysisGraph(object):
                 class_graph = ClassGraph(cls)
                 self.classes[cls.name] = class_graph
                 class_graph.import_cfg(cfg_store[cls])
-
 
     def import_rd(self, reach_defs):
         """THIS MUST BE RAN AFTER CONTROL FLOW ANALYSIS"""
@@ -90,9 +79,6 @@ class AnalysisGraph(object):
         cls_graph.do_analysis(call)
 
 
-
-
-
 class ClassGraph(object):
     """Class Graph.  This contains the cfg, and rd for the classes and
     functions within a class.  Makes searching these two objects easy
@@ -100,7 +86,7 @@ class ClassGraph(object):
     """
 
     def __init__(self, node):
-        self.node = node
+        self.cls_node = node
         self.functions = set()
         self.nodes = set()
         self.cfg_forward = defaultdict(set)
@@ -111,10 +97,12 @@ class ClassGraph(object):
         self.calls = []
         self.const_flow = defaultdict(list)
         self.pub_srvs = []
+        self.thresholds = set()
+        self.ba_paths = {}
 
     def is_global(self):
         """Return true if this is in the global namespace and not a class per se"""
-        return self.node is None
+        return self.cls_node is None
 
     def import_rd(self, class_rd):
         function_defs = defaultdict(set)
@@ -211,66 +199,65 @@ class ClassGraph(object):
                     self.cfg_backward[func_return_obj].add(end)
 
     def do_analysis(self, node):
+        self.ba_paths[node] = set()
+
         to_visit = deque()
         to_visit.append(node)
         visited = set()
+
         while len(to_visit) > 0:
             next_node = to_visit.popleft()
-            print self.get_vars(next_node)
+            print next_node.lineno, next_node
+
+            new_nodes = []
+            # Get data dependencies
+            used_variables = get_node_variables(next_node)
+            for used_var in used_variables:
+                locations = self.rd[next_node][used_var]
+                for assignment in locations:
+                    if isinstance(assignment, FunctionEntrance):
+                        self.handle_function_data_flow(assignment, used_var)
+                    elif assignment not in visited and assignment not in to_visit and assignment != next_node:
+                        new_nodes.append(assignment)
+
+            # get data flow dependencies
+            cf_nodes = self.get_flow(next_node)
+            for i in cf_nodes:
+                if i not in visited and i not in to_visit and i != next_node:
+                    new_nodes.append(i)
+
+            # Deal with new nodes
+            for i in new_nodes:
+                print '\t', i.lineno, i
+                self.ba_paths[node].add((next_node, i))
+                to_visit.append(i)
+            if next_node in self.const_flow:
+                self.thresholds.add(next_node)
+                print '!!!Threshold!!!!', next_node
+            visited.add(next_node)
+            print 'moving on\n'
 
 
-    def get_node_names(selfself, node):
-        return NameVisitor.visit(node).names
-
-
-    def get_vars(self, node):
-        names = []
-        if isinstance(node, ast.If):
-            nv = NameVisitor()
-            nv.visit(node.test)
-            for i in nv.names:
-                names.append(i)
-        elif isinstance(current.statement.node, ast.Call):
-            for arg in node.args:
-                nv
-
-        elif isinstance(current.statement.node, ast.Assign):
-            cv, fv = self.get_vars(
-                current.statement, current.statement.node.value)
-            for i in cv:
-                class_vars.add(i)
-            for i in fv:
-                func_vars.add(i)
-
-        elif isinstance(current.statement.node, ast.Expr):
-            if isinstance(current.statement.node.value, ast.Call):
-                for arg in current.statement.node.value.args:
-                    cv, fv = self.get_vars(current.statement, arg)
-                    for i in cv:
-                        class_vars.add(i)
-                    for i in fv:
-                        func_vars.add(i)
-            else:
-                print('Weird you should not be here', file=sys.stderr)
-            elif isinstance(current.statement.node, ast.AugAssign):
-            cv, fv = self.get_vars(
-                current.statement, current.statement.node.value)
-            for i in cv:
-                class_vars.add(i)
-            for i in fv:
-                func_vars.add(i)
-
-        elif isinstance(current.statement.node, ast.While):
-            cv, fv = self.get_vars(
-                current.statement, current.statement.node.test)
-            class_vars = cv
-            func_vars = fv
-
+    def get_flow(self, node):
+        cv = ContainingVisitor(node)
+        cv.visit(self.cls_node)
+        if isinstance(cv.res, ast.FunctionDef):
+            call = self.get_start(cv.res)
+            ret_val = []
+            for i in self.cfg_backward[call]:
+                self.cfg_backward[call]
+                for j in self.cfg_backward[i]:
+                    ret_val.append(j)
+            return ret_val
         else:
-            print('\nwhy are you here', file=sys.stderr)
-            print(ast.dump(current.statement.node), file=sys.stderr)
-            print('\n', file=sys.stderr)
+            return [cv.res]
 
+
+
+    def handle_function_data_flow(self, assignment, used_var):
+        # TODO Handle data across functions?
+        # print 'Functional data flow', assignment, used_var
+        pass
 
     def print_cfg(self, func):
         to_visit = deque()
@@ -341,9 +328,22 @@ class ClassGraph(object):
                 if node not in self.pub_srvs:
                     self.pub_srvs.append(node)
 
-
-
-
+    def draw_graph(self, forward=True):
+        G =nx.DiGraph()
+        G.add_nodes_from(self.nodes)
+        if forward:
+            cfg = self.cfg_forward
+        else:
+            cfg = self.cfg_backward
+        for i,j in cfg.iteritems():
+            for k in list(j):
+                G.add_edge(i,k)
+        a = nx.draw_networkx(G)
+        print a
+        # for i in a:
+        #     j = a[i]
+        #     j.set_text(i.lineno)
+        plt.show()
 
 def main(file_name):
     with open(file_name) as openf:
@@ -367,8 +367,11 @@ def main(file_name):
         for i in pubs:
             ag.add_pub_srv(i)
 
-        for i in pubs:
-            ag.do_analysis(i)
+        # for i in pubs:
+        #     ag.do_analysis(i)
+
+        for i,k in ag.classes.iteritems():
+            k.draw_graph()
 
 if __name__ == "__main__":
     fname = sys.argv[1]
