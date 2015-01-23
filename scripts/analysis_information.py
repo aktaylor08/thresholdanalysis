@@ -9,6 +9,18 @@ from backward_analysis import get_pub_srv_calls
 
 __author__ = 'ataylor'
 
+class NameVisitor(ast.NodeVisitor):
+
+    def __init__(self):
+        self.names = []
+
+    def visit_Attribute(self, node):
+        self.names.append(get_name(node))
+
+    def visit_Name(self, node):
+        self.names.append(get_name(node))
+
+
 
 class AnalysisGraph(object):
     """"Graph which contains links to all of the classes
@@ -204,9 +216,60 @@ class ClassGraph(object):
         visited = set()
         while len(to_visit) > 0:
             next_node = to_visit.popleft()
-            print next_node
-            print self.cfg_backward[node]
-            print self.rd[node]
+            print self.get_vars(next_node)
+
+
+    def get_node_names(selfself, node):
+        return NameVisitor.visit(node).names
+
+
+    def get_vars(self, node):
+        names = []
+        if isinstance(node, ast.If):
+            nv = NameVisitor()
+            nv.visit(node.test)
+            for i in nv.names:
+                names.append(i)
+        elif isinstance(current.statement.node, ast.Call):
+            for arg in node.args:
+                nv
+
+        elif isinstance(current.statement.node, ast.Assign):
+            cv, fv = self.get_vars(
+                current.statement, current.statement.node.value)
+            for i in cv:
+                class_vars.add(i)
+            for i in fv:
+                func_vars.add(i)
+
+        elif isinstance(current.statement.node, ast.Expr):
+            if isinstance(current.statement.node.value, ast.Call):
+                for arg in current.statement.node.value.args:
+                    cv, fv = self.get_vars(current.statement, arg)
+                    for i in cv:
+                        class_vars.add(i)
+                    for i in fv:
+                        func_vars.add(i)
+            else:
+                print('Weird you should not be here', file=sys.stderr)
+            elif isinstance(current.statement.node, ast.AugAssign):
+            cv, fv = self.get_vars(
+                current.statement, current.statement.node.value)
+            for i in cv:
+                class_vars.add(i)
+            for i in fv:
+                func_vars.add(i)
+
+        elif isinstance(current.statement.node, ast.While):
+            cv, fv = self.get_vars(
+                current.statement, current.statement.node.test)
+            class_vars = cv
+            func_vars = fv
+
+        else:
+            print('\nwhy are you here', file=sys.stderr)
+            print(ast.dump(current.statement.node), file=sys.stderr)
+            print('\n', file=sys.stderr)
 
 
     def print_cfg(self, func):
@@ -279,16 +342,7 @@ class ClassGraph(object):
                     self.pub_srvs.append(node)
 
 
-class NameVisitor(ast.NodeVisitor):
 
-    def __init__(self):
-        self.names = []
-
-    def visit_Attribute(self, node):
-        self.names.append(get_name(node))
-
-    def visit_Name(self, node):
-        self.names.append(get_name(node))
 
 
 def main(file_name):
