@@ -2,7 +2,6 @@
 
 from collections import defaultdict, deque
 import sys
-from itertools import islice
 from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn, FunctionEntrance, FunctionExit
 from ast_tools import get_name, get_node_variables, ContainingVisitor
 import ast
@@ -242,7 +241,6 @@ class ClassGraph(object):
                 #
                 #
                 # locations = list(locations)
-                print locations
                 # get next handled nodes
                 for assignment in locations:
                     if isinstance(assignment, FunctionEntrance):
@@ -265,7 +263,6 @@ class ClassGraph(object):
                 self.thresholds.add(next_node)
                 print 'Threshold!'
             visited.add(next_node)
-        print '\n'
 
     def get_flow(self, node):
         cv = ContainingVisitor(node)
@@ -437,7 +434,7 @@ def main(file_name):
 
         for i, k in ag.classes.iteritems():
             k.graph_ba()
-            k.draw_graph()
+            # k.draw_graph()
 
 
 if __name__ == "__main__":
