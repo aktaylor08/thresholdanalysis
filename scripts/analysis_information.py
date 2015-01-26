@@ -1,6 +1,7 @@
 from collections import defaultdict, deque
 import sys
-from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn, FunctionEntrance
+from itertools import islice
+from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn, FunctionEntrance, FunctionExit
 from ast_tools import get_name, get_node_variables, ContainingVisitor
 import ast
 from reaching_definition import ReachingDefinition
@@ -105,7 +106,7 @@ class ClassGraph(object):
         return self.cls_node is None
 
     def import_rd(self, class_rd):
-        function_defs = defaultdict(set)
+        class_reach_defs = defaultdict(set)
         for function in class_rd:
             for statement in class_rd[function]:
                 rd = self.rd.get(statement, dict())
@@ -114,16 +115,18 @@ class ClassGraph(object):
                     var_defs.append(deff)
                     rd[stmt] = var_defs
                     if stmt.startswith('self.'):
-                        function_defs[stmt].add(deff)
+                        class_reach_defs[stmt].add(deff)
                 self.rd[statement] = rd
 
         # now add class rd's so self.x are correctly linked everywhere that is not a direct sign
-        for stmt, keys in self.rd.iteritems():
-                for name, org_things in keys.iteritems():
-                    if name in function_defs:
-                        for x in function_defs[name]:
-                            if x not in org_things:
-                                org_things.append(x)
+        for stmt, reaching_defs in self.rd.iteritems():
+            for class_var, class_rd in class_reach_defs.iteritems():
+                if class_var in reaching_defs:
+                    for i in class_rd:
+                        reaching_defs[class_var].append(i)
+                else:
+                    nv = class_rd
+                    reaching_defs[class_var] = set(nv)
 
     def import_cfg(self, cfg):
         """Given a cfg store import it
@@ -207,13 +210,23 @@ class ClassGraph(object):
 
         while len(to_visit) > 0:
             next_node = to_visit.popleft()
-            print next_node.lineno, next_node
-
             new_nodes = []
-            # Get data dependencies
+            print next_node.lineno, next_node
+            # get data dependencies
             used_variables = get_node_variables(next_node)
             for used_var in used_variables:
-                locations = self.rd[next_node][used_var]
+
+                # get reaching definitions
+                rd = self.rd[next_node]
+                split = used_var.split('.')
+                locations = []
+                for i in range(len(split)):
+                    key = '.'.join(list(islice(split, i+1)))
+                    if key in rd:
+                        locations = rd[key]
+                        break
+
+                # get next handled nodes
                 for assignment in locations:
                     if isinstance(assignment, FunctionEntrance):
                         self.handle_function_data_flow(assignment, used_var)
@@ -226,17 +239,15 @@ class ClassGraph(object):
                 if i not in visited and i not in to_visit and i != next_node:
                     new_nodes.append(i)
 
-            # Deal with new nodes
+            # deal with new nodes
             for i in new_nodes:
-                print '\t', i.lineno, i
                 self.ba_paths[node].add((next_node, i))
                 to_visit.append(i)
+
             if next_node in self.const_flow:
                 self.thresholds.add(next_node)
-                print '!!!Threshold!!!!', next_node
             visited.add(next_node)
-            print 'moving on\n'
-
+        print '\n'
 
     def get_flow(self, node):
         cv = ContainingVisitor(node)
@@ -329,7 +340,10 @@ class ClassGraph(object):
                     self.pub_srvs.append(node)
 
     def draw_graph(self, forward=True):
-        G =nx.DiGraph()
+        G = nx.DiGraph()
+
+
+
         G.add_nodes_from(self.nodes)
         if forward:
             cfg = self.cfg_forward
@@ -338,12 +352,42 @@ class ClassGraph(object):
         for i,j in cfg.iteritems():
             for k in list(j):
                 G.add_edge(i,k)
-        a = nx.draw_networkx(G)
-        print a
-        # for i in a:
-        #     j = a[i]
-        #     j.set_text(i.lineno)
+        pos=nx.graphviz_layout(G, prog='dot')
+
+
+
+        nx.draw_networkx_edges(G,pos)
+        nx.draw_networkx_nodes(G,pos)
+        labs = nx.draw_networkx_labels(G,pos)
+        for k,v in labs.iteritems():
+            if isinstance(k, FunctionCall):
+                v.set_text('call: ' + str(k.lineno))
+            elif isinstance(k, FunctionReturn):
+                v.set_text('return: ' + str(k.lineno))
+            elif isinstance(k, FunctionEntrance):
+                v.set_text('entrance: ' + str(k.lineno))
+            elif isinstance(k, FunctionExit):
+                v.set_text('exit: ' + str(k.lineno))
+            else:
+                v.set_text(k.lineno)
+
         plt.show()
+
+    def graph_ba(self):
+        for i,k in self.ba_paths.iteritems():
+            nodes = set()
+            edges = set()
+            G = nx.DiGraph()
+            for link in list(k):
+                G.add_node(link[0].lineno)
+                G.add_node(link[1].lineno)
+                G.add_edge(link[0].lineno, link[1].lineno)
+            pos=nx.graphviz_layout(G, prog='dot')
+            nx.draw_networkx_edges(G,pos)
+            nx.draw_networkx_nodes(G,pos)
+            nx.draw_networkx_labels(G,pos)
+            plt.show()
+
 
 def main(file_name):
     with open(file_name) as openf:
@@ -367,11 +411,13 @@ def main(file_name):
         for i in pubs:
             ag.add_pub_srv(i)
 
-        # for i in pubs:
-        #     ag.do_analysis(i)
+        for i in pubs:
+            ag.do_analysis(i)
 
         for i,k in ag.classes.iteritems():
-            k.draw_graph()
+            k.graph_ba()
+            k.draw_graph(False)
+
 
 if __name__ == "__main__":
     fname = sys.argv[1]

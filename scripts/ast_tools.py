@@ -98,7 +98,6 @@ def get_string_repr(node):
             return '~ ' + get_string_repr(node.operand)
 
     if isinstance(node, ast.Subscript):
-        print node.slice
         val = get_string_repr(node.value)
         slc = get_string_repr(node.slice)
         return val + '[' + slc + ']'
@@ -203,7 +202,10 @@ class NameVisitor(ast.NodeVisitor):
         self.names.append(get_name(node))
 
     def visit_Name(self, node):
-        self.names.append(get_name(node))
+        if node.id == 'True' or node.id == 'False':
+            pass
+        else:
+            self.names.append(get_name(node))
 
     def visit_Call(self, node):
         # Skip function name but go on to everything else
@@ -253,6 +255,8 @@ class ContainingVisitor(ast.NodeVisitor):
         self.parent = node
         if not self.found:
             self.generic_visit(node)
+            if self.found and node == self.target:
+                self.res = op
         self.depth -= 1
         self.parent = op
 
@@ -262,6 +266,8 @@ class ContainingVisitor(ast.NodeVisitor):
         self.parent = node
         if not self.found:
             self.generic_visit(node)
+            if self.found and node == self.target:
+                self.res = op
         self.depth -= 1
         self.parent = op
 
