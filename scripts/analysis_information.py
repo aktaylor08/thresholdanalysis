@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from collections import defaultdict, deque
 import sys
 from itertools import islice
@@ -211,7 +213,6 @@ class ClassGraph(object):
         while len(to_visit) > 0:
             next_node = to_visit.popleft()
             new_nodes = []
-            print next_node.lineno, next_node
             # get data dependencies
             used_variables = get_node_variables(next_node)
             for used_var in used_variables:
@@ -220,12 +221,28 @@ class ClassGraph(object):
                 rd = self.rd[next_node]
                 split = used_var.split('.')
                 locations = []
-                for i in range(len(split)):
-                    key = '.'.join(list(islice(split, i+1)))
-                    if key in rd:
-                        locations = rd[key]
-                        break
-
+                keys = [x for x in rd]
+                locations = set()
+                for pos in keys:
+                    if pos == used_var:
+                        for x in rd[pos]:
+                            locations.add(x)
+                    if pos.startswith(used_var):
+                        for x in rd[pos]:
+                            locations.add(x)
+                # for i in range(len(split)+1):
+                #     key = '.'.join(list(islice(split, i+1)))
+                #     for pos in keys:
+                #         if pos.startswith(key + '.'):
+                #             for x in rd[pos]:
+                #                 locations.add(x)
+                #     if key in rd:
+                #         for x in rd[key]:
+                #             locations.add(x)
+                #
+                #
+                # locations = list(locations)
+                print locations
                 # get next handled nodes
                 for assignment in locations:
                     if isinstance(assignment, FunctionEntrance):
@@ -246,6 +263,7 @@ class ClassGraph(object):
 
             if next_node in self.const_flow:
                 self.thresholds.add(next_node)
+                print 'Threshold!'
             visited.add(next_node)
         print '\n'
 
@@ -262,8 +280,6 @@ class ClassGraph(object):
             return ret_val
         else:
             return [cv.res]
-
-
 
     def handle_function_data_flow(self, assignment, used_var):
         # TODO Handle data across functions?
@@ -341,9 +357,6 @@ class ClassGraph(object):
 
     def draw_graph(self, forward=True):
         G = nx.DiGraph()
-
-
-
         G.add_nodes_from(self.nodes)
         if forward:
             cfg = self.cfg_forward
@@ -352,13 +365,11 @@ class ClassGraph(object):
         for i,j in cfg.iteritems():
             for k in list(j):
                 G.add_edge(i,k)
-        pos=nx.graphviz_layout(G, prog='dot')
-
-
-
+        pos = nx.graphviz_layout(G, prog='dot')
         nx.draw_networkx_edges(G,pos)
         nx.draw_networkx_nodes(G,pos)
         labs = nx.draw_networkx_labels(G,pos)
+
         for k,v in labs.iteritems():
             if isinstance(k, FunctionCall):
                 v.set_text('call: ' + str(k.lineno))
@@ -374,18 +385,28 @@ class ClassGraph(object):
         plt.show()
 
     def graph_ba(self):
+        thresh_lines = [x.lineno for x in self.thresholds]
         for i,k in self.ba_paths.iteritems():
-            nodes = set()
-            edges = set()
             G = nx.DiGraph()
+            temp_thresh = set()
+            others = set()
             for link in list(k):
+                if link[0].lineno in thresh_lines:
+                    temp_thresh.add(link[0].lineno)
+                else:
+                    others.add(link[0].lineno)
+                if link[1].lineno in thresh_lines:
+                    temp_thresh.add(link[1].lineno)
+                else:
+                    others.add(link[1].lineno)
                 G.add_node(link[0].lineno)
                 G.add_node(link[1].lineno)
                 G.add_edge(link[0].lineno, link[1].lineno)
             pos=nx.graphviz_layout(G, prog='dot')
-            nx.draw_networkx_edges(G,pos)
-            nx.draw_networkx_nodes(G,pos)
-            nx.draw_networkx_labels(G,pos)
+            nx.draw_networkx_edges(G, pos)
+            nx.draw_networkx_nodes(G, pos, nodelist=list(temp_thresh), node_color='b')
+            nx.draw_networkx_nodes(G, pos, nodelist=list(others), node_color='r')
+            nx.draw_networkx_labels(G, pos)
             plt.show()
 
 
@@ -414,9 +435,9 @@ def main(file_name):
         for i in pubs:
             ag.do_analysis(i)
 
-        for i,k in ag.classes.iteritems():
+        for i, k in ag.classes.iteritems():
             k.graph_ba()
-            k.draw_graph(False)
+            k.draw_graph()
 
 
 if __name__ == "__main__":
