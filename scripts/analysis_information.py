@@ -230,19 +230,19 @@ class ClassGraph(object):
                 for assignment in locations:
                     if isinstance(assignment, FunctionEntrance):
                         self.handle_function_data_flow(assignment, used_var)
-                    elif assignment not in visited and assignment not in to_visit and assignment != next_node:
+                    else:
                         new_nodes.append(assignment)
 
             # get data flow dependencies
             cf_nodes = self.get_flow(next_node)
             for i in cf_nodes:
-                if i not in visited and i not in to_visit and i != next_node:
-                    new_nodes.append(i)
+                new_nodes.append(i)
 
             # deal with new nodes
             for i in new_nodes:
                 self.ba_paths[node].add((next_node, i))
-                to_visit.append(i)
+                if i not in visited and i not in to_visit:
+                    to_visit.append(i)
 
             if next_node in self.const_flow:
                 self.thresholds.add(next_node)
