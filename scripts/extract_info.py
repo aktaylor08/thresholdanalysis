@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # encoding: utf-8
+import argparse
 
 import rosbag_pandas as rbp
 import datetime
@@ -289,16 +290,16 @@ def find_close(df, thresh, cutoff=.25):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print 'need file'
-        sys.exit()
+    parser = argparse.ArgumentParser(prog='Extracting Data', usage='Use to extract threshold infomation',)
+    parser.add_argument('-b', '--bag', help='The bag to extract information from', required=True)
+    parser.add_argument('--namespace', help='Namespace of the data topic')
+    args = parser.parse_args()
 
-    f = sys.argv[1]
-    if len(sys.argv) > 2:
-        ns = sys.argv[2]
+    if args.namespace is not None:
+        ns = args.namespace
     else:
         ns = ''
-    df = rbp.bag_to_dataframe(f)
+    df = rbp.bag_to_dataframe(args.bag, include=['/a/threshold_information'])
 
     if ns == '':
         data = df['threshold_information__data']
@@ -306,6 +307,7 @@ if __name__ == '__main__':
         data = df[ns + '_threshold_information__data']
 
     thresh = to_dataframe(data.dropna())
+    thresh.to_csv('/home/ataylor/current_data.csv', )
     # check_bad_vs_good(df,thresh)
     # last_flop(df, thresh)
-    find_close(df, thresh)
+    #find_close(df, thresh)

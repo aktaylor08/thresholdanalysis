@@ -20,8 +20,8 @@ class CtrlNode:
     def __init__(self):
         #do all ros stuff
         rospy.init_node('gui_tool')
-        self.bad_pub = rospy.Publisher('mark_bad', Time)
-        self.good_pub = rospy.Publisher('mark_good', Time)
+        self.bad_pub = rospy.Publisher('mark_no_action', Time)
+        self.good_pub = rospy.Publisher('mark_action', Time)
 
     
 
@@ -43,13 +43,13 @@ class PyApp(gtk.Window):
         vert_origizer = gtk.VBox(False, 10)
 
     
-        self.bad_button = gtk.Button("Bad")
+        self.bad_button = gtk.Button("Should Be Doing Something")
         self.bad_button.connect("clicked", self.on_bad_clicked)
         box = gtk.HBox(False, 5)
         box.add(self.bad_button)
         vert_origizer.add(box)
 
-        self.good_button = gtk.Button("Good")
+        self.good_button = gtk.Button("Did something when shouldn't")
         self.good_button.connect("clicked", self.on_good_clicked)
         box = gtk.HBox(False, 5)
         box.add(self.good_button)

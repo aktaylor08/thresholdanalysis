@@ -48,7 +48,7 @@ class XmlVisit(object):
             path = self.rpkg.get_path(package)
             path = self.get_relative_path(path, fname)
             xml_node.attrib['pkg'] = 'thresholdanalysis'
-            xml_node.attrib['type'] = 'backward_analysis.py'
+            xml_node.attrib['type'] = 'analysis_information.py'
 
             # does it have command line args?
             if 'args' in xml_node.attrib:

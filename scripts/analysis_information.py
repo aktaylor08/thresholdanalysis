@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import argparse
 
 from collections import defaultdict, deque
 import sys
@@ -8,6 +9,7 @@ import ast
 from reaching_definition import ReachingDefinition
 from backward_analysis import get_constants, get_const_control
 from backward_analysis import get_pub_srv_calls
+from instrumentation import replace_values
 
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -408,7 +410,16 @@ class ClassGraph(object):
 
 
 def main(file_name):
-    with open(file_name) as openf:
+    parser = argparse.ArgumentParser(description=("This is a program to find"
+                                                  " constant thresholds in a python program"))
+    parser.add_argument('file', help='path to file')
+    parser.add_argument('-n', '--no_execute', help='Set execution to false',
+                        action='store_true', )
+    parser.add_argument('-g', '--graph', help='Graph the thresholds and stuff',
+                        action='store_true', )
+    parser.add_argument('rest', nargs='*')
+    args = parser.parse_args()
+    with open(args.file) as openf:
         code = openf.read()
         tree = ast.parse(code)
         cfgvisit = BuildAllCFG(False, code=code.split('\n'))
@@ -432,9 +443,18 @@ def main(file_name):
         for i in pubs:
             ag.do_analysis(i)
 
+        if args.graph:
+            for i, k in ag.classes.iteritems():
+                k.graph_ba()
+        thresholds = []
+
         for i, k in ag.classes.iteritems():
-            k.graph_ba()
-            # k.draw_graph()
+            for thresh in k.thresholds:
+                print thresh
+                thresholds.append(thresh)
+
+        if not args.no_execute:
+            replace_values(tree, thresholds, args.file, code.split(), False, args.rest)
 
 
 if __name__ == "__main__":
