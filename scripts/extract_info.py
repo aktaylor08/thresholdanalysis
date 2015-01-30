@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # encoding: utf-8
 import argparse
+from collections import defaultdict
 
+import os
 import rosbag_pandas as rbp
 import datetime
 import matplotlib.pyplot as plt
@@ -15,7 +17,8 @@ from IPython import embed
 def add_to_store(store, key, idx, value, length):
     try:
         value = float(value)
-    except:
+    except ValueError:
+        # Not a float
         pass
     if key in store:
         store[key][idx] = value
@@ -30,6 +33,7 @@ def add_to_store(store, key, idx, value, length):
 
 
 def to_dataframe(series):
+    errors = dict()
     length = len(series)
     datastore = {}
     index = np.array([None] * length)
@@ -52,6 +56,8 @@ def to_dataframe(series):
         fname = vals[1]
         lineno = vals[2]
         thresh_id = fname + str(lineno)
+        thresh_key = fname + ':' + lineno
+        add_to_store(datastore, 'key', idx, thresh_key, length)
         add_to_store(datastore, 'id', idx, thresh_id, length)
         add_to_store(datastore, 'file_name', idx, fname, length)
         add_to_store(datastore, 'line_number', idx, lineno, length)
@@ -60,19 +66,16 @@ def to_dataframe(series):
         add_to_store(datastore, 'line', idx, line, length)
         truth = vals[4]
         add_to_store(datastore, 'result', idx, truth, length)
-        rest = vals[5:]
+        thresholds = vals[5]
+        add_to_store(datastore, 'thresholds', idx, thresholds, length)
+        rest = vals[6:]
         for i in rest:
             try:
                 key, val = i.split(':')
-            except:
-                pass
-                # print i
-                # vals = i.split(':')
-                # key = vals[0]
-                # print key
-                # val = ''.join(vals[1:])
+                add_to_store(datastore, key, idx, val, length)
+            except ValueError as e:
+                errors['Value Error: ' + thresh_key] = errors.get('Value Error: ' + thresh_key, 0) + 1
 
-            add_to_store(datastore, key, idx, val, length)
         if duplicate:
             idx = old_idx
         else:
@@ -81,6 +84,9 @@ def to_dataframe(series):
     for i, v in datastore.iteritems():
         datastore[i] = v[:idx]
     df = pd.DataFrame(data=datastore, index=index)
+    print 'Errors: '
+    for key, count in errors.iteritems():
+        print count, key
     return df
 
 
@@ -290,24 +296,36 @@ def find_close(df, thresh, cutoff=.25):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='Extracting Data', usage='Use to extract threshold infomation',)
+    parser = argparse.ArgumentParser(prog='Extracting Data', usage='Use to extract threshold information',)
     parser.add_argument('-b', '--bag', help='The bag to extract information from', required=True)
-    parser.add_argument('--namespace', help='Namespace of the data topic')
+    parser.add_argument('-e', '--extract_thresholds', help='Extract and save the thresholds to disk', action='store_true')
+    parser.add_argument('-o', '--output', help='prefix to add to output files')
+    parser.add_argument('-n', '--namespace', help='Namespace of the threshold topic')
     args = parser.parse_args()
 
     if args.namespace is not None:
         ns = args.namespace
     else:
         ns = ''
-    df = rbp.bag_to_dataframe(args.bag, include=['/a/threshold_information'])
+    fname,_ = os.path.splitext(args.bag)
+    if args.output is not None:
+        fname = args.output
+    if args.extract_thresholds:
+        df = rbp.bag_to_dataframe(args.bag, include=['/a/threshold_information'])
 
-    if ns == '':
-        data = df['threshold_information__data']
-    else:
-        data = df[ns + '_threshold_information__data']
+        if ns == '':
+            data = df['threshold_information__data']
+        else:
+            data = df[ns + '_threshold_information__data']
 
-    thresh = to_dataframe(data.dropna())
-    thresh.to_csv('/home/ataylor/current_data.csv', )
+        thresh = to_dataframe(data.dropna())
+
+        thresh.to_csv( fname + '_thresh.csv', )
+
+    df = rbp.bag_to_dataframe(args.bag, include=['/mark_action', '/mark_no_action'])
+    print df
+
+
     # check_bad_vs_good(df,thresh)
     # last_flop(df, thresh)
     #find_close(df, thresh)

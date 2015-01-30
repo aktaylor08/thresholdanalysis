@@ -220,8 +220,6 @@ class ClassGraph(object):
 
                 # get reaching definitions
                 rd = self.rd[next_node]
-                split = used_var.split('.')
-                locations = []
                 keys = [x for x in rd]
                 locations = set()
                 for pos in keys:
@@ -231,19 +229,6 @@ class ClassGraph(object):
                     if pos.startswith(used_var):
                         for x in rd[pos]:
                             locations.add(x)
-                # for i in range(len(split)+1):
-                #     key = '.'.join(list(islice(split, i+1)))
-                #     for pos in keys:
-                #         if pos.startswith(key + '.'):
-                #             for x in rd[pos]:
-                #                 locations.add(x)
-                #     if key in rd:
-                #         for x in rd[key]:
-                #             locations.add(x)
-                #
-                #
-                # locations = list(locations)
-                # get next handled nodes
                 for assignment in locations:
                     if isinstance(assignment, FunctionEntrance):
                         self.handle_function_data_flow(assignment, used_var)
@@ -263,7 +248,6 @@ class ClassGraph(object):
 
             if next_node in self.const_flow:
                 self.thresholds.add(next_node)
-                print 'Threshold!'
             visited.add(next_node)
 
     def get_flow(self, node):
@@ -342,9 +326,9 @@ class ClassGraph(object):
             if node == key:
                 for val in values:
                     if isinstance(val, ast.Num):
-                        const = val.n
+                        const = val
                     else:
-                        const = val.name
+                        const = val
                     if const not in self.const_flow[node]:
                         self.const_flow[node].append(const)
 
@@ -446,15 +430,14 @@ def main(file_name):
         if args.graph:
             for i, k in ag.classes.iteritems():
                 k.graph_ba()
-        thresholds = []
+        thresholds = dict()
 
         for i, k in ag.classes.iteritems():
             for thresh in k.thresholds:
-                print thresh
-                thresholds.append(thresh)
+                thresholds[thresh] = k.const_flow[thresh]
 
         if not args.no_execute:
-            replace_values(tree, thresholds, args.file, code.split(), False, args.rest)
+            replace_values(tree, thresholds, args.file, code.split('\n'), False, args.rest)
 
 
 if __name__ == "__main__":

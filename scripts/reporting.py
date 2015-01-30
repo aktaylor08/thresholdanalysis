@@ -7,10 +7,10 @@ import datetime
 from std_msgs.msg import String
 
 
-def report(expr, f_name, line, check, *args,  **kwargs):
+def report(expr, f_name, line, check, thresholds, *args,  **kwargs):
 
     vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), str(
-        f_name), str(line), str(check), str(expr)]
+        f_name), str(line), str(check), str(expr), str(thresholds)]
     for key in kwargs:
         if type(kwargs[key]) is bytes:
             vals.append(str(key) + ':' + binascii.hexlify(kwargs[key]))

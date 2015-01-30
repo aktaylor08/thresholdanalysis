@@ -1307,18 +1307,18 @@ class ConstantVisitor(BasicVisitor):
                                    node.attr, node)
                 if self.current_class in self.canidates.class_vars:
                     if cv in self.canidates.class_vars[self.current_class]:
-                        self.consts.append(cv)
+                        self.consts.append(node)
         if get_name(node) in self.canidates.known_constants:
             cv = ClassVariable(self.current_class, self.current_function,
                                node, node)
-            self.consts.append(cv)
+            self.consts.append(node)
 
     def visit_Name(self, node):
         fv = FunctionVariable(self.current_class,
                               self.current_function, node.id, node)
         if self.current_class in self.canidates.func_vars:
             if fv in self.canidates.func_vars[self.current_class]:
-                self.consts.append(fv)
+                self.consts.append(node)
 
     def visit_Call(self, node):
         self.exclude = True
