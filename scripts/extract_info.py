@@ -319,12 +319,10 @@ if __name__ == '__main__':
             data = df[ns + '_threshold_information__data']
 
         thresh = to_dataframe(data.dropna())
+        thresh['line'] = thresh['line'].apply(lambda x: x.replace(',', ' '))
+
 
         thresh.to_csv( fname + '_thresh.csv', )
-
-    df = rbp.bag_to_dataframe(args.bag, include=['/mark_action', '/mark_no_action'])
-    print df
-
 
     # check_bad_vs_good(df,thresh)
     # last_flop(df, thresh)
