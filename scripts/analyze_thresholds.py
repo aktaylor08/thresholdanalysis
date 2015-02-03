@@ -89,7 +89,7 @@ def add_times(thresh, key, flops):
     vals['last'] = vals['last'].apply(ts_to_sec)
     vals['last'] = cur_time - vals['last'].ffill()
     for idx, val in vals['last'].iteritems():
-        thresh.ix['last', idx] = val
+        thresh.loc['last', idx] = val
     return thresh
 
 def ts_to_sec(ts):
