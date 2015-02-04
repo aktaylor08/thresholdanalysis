@@ -32,13 +32,19 @@ class ThreshInfoStore(object):
         self._thresh_map = {}
         self._graph_map = {}
         self.thresh_list = []
+        self.sorted = False
 
     def import_data(self, thresholds):
         for i in thresholds:
             self.import_thresh(i)
 
+    def sort(self):
+        self.thresh_list = sorted(self.thresh_list, key=lambda x: x.score)
+        self.sorted = True
+
     def import_thresh(self, incoming):
         self.thresh_list.append(incoming)
+        self.sorted = False
 
         # put it in this map
         if incoming.stmt_key in self._stmt_map:
@@ -50,7 +56,7 @@ class ThreshInfoStore(object):
         if incoming.threshold in self._thresh_map:
             self._thresh_map[incoming.threshold].append(incoming)
         else:
-            self._thresh_map[incoming.threshold].append(incoming)
+            self._thresh_map[incoming.threshold] = [incoming]
 
 
 def get_thresholds(fname):
@@ -175,8 +181,10 @@ def get_times(fname):
 
 def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
     groups = thresh_df.groupby('key')
+    results = {}
     for marked_time in no_advances:
         scores = []
+        thresh_store = ThreshInfoStore()
         et = marked_time + datetime.timedelta(seconds=time_limit)
         st = marked_time - datetime.timedelta(seconds=time_limit)
         for key, data in groups:
@@ -244,10 +252,13 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
                 scores.append((key, i['threshold'], s))
 
         values = sorted(scores, key=lambda x: x[2])
-        print marked_time
         for i in values:
             ts = ThreshStatement(i[1], i[0], i[2])
-            print ts
+            thresh_store.import_thresh(ts)
+        print marked_time
+        thresh_store.sort()
+        for i in thresh_store.thresh_list:
+            print i
         print '\n\n\n'
     return
 
