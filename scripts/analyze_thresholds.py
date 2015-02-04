@@ -130,17 +130,23 @@ def handle_no_advance(thresh, flops, no_adv):
     pass
 
 
-def handle_advance(thresh, flops, adv, time_limit=3.0):
+def handle_advance(thresh, flops, adv, time_limit=8.0):
     groups = thresh.groupby('key')
-    for i in adv:
+    for marked_time in adv:
+        et = marked_time + datetime.timedelta(seconds=time_limit)
+        st = marked_time - datetime.timedelta(seconds=time_limit)
         last_flops = {}
         # get the time from the last flop
         for key, data in groups:
-            idx = data.index.asof(i)
+            idx = data.index.asof(marked_time)
+
+
+
             if not isinstance(idx, float):
-                time = data.loc[idx, 'last_flop']
-                if not math.isnan(time):
-                    last_flops[key] = time
+                if idx > st:
+                    time = data.loc[idx, 'last_flop']
+                    if not math.isnan(time):
+                        last_flops[key] = time
 
         # sort and filter
         x = [(k, v) for k, v in last_flops.iteritems()]
@@ -148,22 +154,40 @@ def handle_advance(thresh, flops, adv, time_limit=3.0):
         x = sorted(x, key=lambda arg: arg[1])
 
         # report
-        et = i + datetime.timedelta(seconds=3.0)
-        st = i - datetime.timedelta(seconds=3.0)
         in_limits = thresh.between_time(st, et)
-        print 'Advance:', i
+        print 'Advance:', marked_time
         if len(x) > 0:
             for flop in x:
-                print '\t', flop[1], flop[0]
+                values = in_limits[in_limits['key'] == flop[0]]
+                size = len([k for k in values.columns if k.startswith('res_') and len(values[k].dropna() > 1)])
+                if size > 1:
+                    fig, ax = plt.subplots(size)
+                    for i in range(size):
+                        k1 = 'cmp_{:d}_0'.format(i)
+                        k2 = 'const_{:d}_0'.format(i)
+                        ax[i].plot(values[k1])
+                        ax[i].plot(values[k2])
+                        a = ax[i].get_ylim()
+                        mid = (a[0] + a[1]) / 2.0
+                        # ax[i].scatter([marked_time], [mid], marker='*', c='g', s=40)
+                    plt.show()
+
+                else:
+                    fig, ax = plt.subplots()
+                    print values['cmp_0_0'].values.head(4)
+                    ax.plot(values['cmp_0_0']) # .index, values['cmp_0_0'].values)
+                    ax.plot(values['const_0_0']) #.index, values['const_0_0'].values)
+                    a = ax.get_ylim()
+                    mid = (a[0] + a[1]) / 2.0
+                    s = pd.Series(data=[mid], index=[marked_time])
+                    ax.scatter(s.index, s.values)
+                    plt.show()
+
+                print '\t', size
+                print '\t', flop[1], flop[0], len(in_limits[in_limits['key'] == flop[0]])
+
         else:
-            print 'No flops within {:d}'.time_limit
-        print '\n'
-        print len(in_limits)
-        in_limits[in_limits['key']]
-
-
-
-
+            print 'No flops within {:f}'.format(time_limit)
 
 
 if __name__ == '__main__':
