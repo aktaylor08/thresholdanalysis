@@ -260,7 +260,8 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
         for i in thresh_store.thresh_list:
             print i
         print '\n\n\n'
-    return
+        results[marked_time] = thresh_store
+    return results
 
 
 def handle_advance(thresh_info, flops, advances, time_limit=5.0):
