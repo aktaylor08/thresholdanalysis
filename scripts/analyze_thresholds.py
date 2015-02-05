@@ -41,9 +41,8 @@ class ThresholdGraphPanel(wx.Panel):
     def update_graphic(self, info_store):
         size = len(info_store)
         self.figure.clear()
-        axes = []
         if size == 0:
-            axes = self.figure.add_subplot(111)
+            self.figure.add_subplot(111)
         else:
             for i in range(size):
                 ax = self.figure.add_subplot(size, 1, i+1)
@@ -100,8 +99,6 @@ class UserMarkPanel(wx.Panel):
 
     def __init__(self, parent, notify_window):
         wx.Panel.__init__(self, parent)
-
-
         self._notify_window = notify_window
         self._list_ctrl = wx.ListCtrl(self, size=(-1, -1), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
 
@@ -227,7 +224,6 @@ class ThresholdFrame(wx.Frame):
 
     def on_threshold_selected(self, event):
         g = self.mark_panel.get_graphical_information(event.threshold)
-        print g
         self.graph_area.update_graphic(g)
 
 
@@ -573,7 +569,7 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
                 graph_list = []
                 windowed_threshold = in_limits[in_limits['key'] == flop[0]]
                 size = len([k for k in windowed_threshold.columns if
-                            k.startswith('res_') and len(windowed_threshold[k].dropna() > 1)])
+                            k.startswith('res_') and len(windowed_threshold[k].dropna()) > 1])
                 if size > 1:
                     code_thresh = windowed_threshold['thresholds'].values[0].split(':')
                     for i in range(size):
