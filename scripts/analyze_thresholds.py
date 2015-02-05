@@ -11,12 +11,23 @@ import numpy as np
 import sys
 
 
+class GraphInfo(object):
+
+    def __init__(self, index, series, names, scatter_data, suggestion):
+        self.index = index
+        self.series = series
+        self.names = names
+        self.scatter_data = scatter_data
+        self.suggestion = suggestion
+
+
 class ThreshStatement(object):
 
     def __init__(self, threshold, stmt_key, score, suggestion=None):
         self.threshold = threshold
         self.stmt_key = stmt_key
         self.score = score
+        self.suggestion=suggestion
 
     def __repr__(self):
         return self.__str__()
@@ -30,7 +41,7 @@ class ThreshInfoStore(object):
     def __init__(self):
         self._stmt_map = {}
         self._thresh_map = {}
-        self._graph_map = {}
+        self.graph_map = {}
         self.thresh_list = []
         self.sorted = False
 
@@ -57,6 +68,19 @@ class ThreshInfoStore(object):
             self._thresh_map[incoming.threshold].append(incoming)
         else:
             self._thresh_map[incoming.threshold] = [incoming]
+
+    def get_entries(self, key, threshold):
+        vals = []
+        for i in self.thresh_list:
+            if i.stmt_key == key and i.threshold == threshold:
+                vals.append(i)
+        return vals
+
+    def add_graph(self, key, info):
+        self.graph_map[key] = info
+
+    def drop_low_scores(self, req_score):
+        self.thresh_list = filter(lambda x: x.score > req_score, self.thresh_list)
 
 
 def get_thresholds(fname):
@@ -179,7 +203,7 @@ def get_times(fname):
     return action, no_action
 
 
-def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
+def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=15.0):
     groups = thresh_df.groupby('key')
     results = {}
     for marked_time in no_advances:
@@ -190,18 +214,29 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
         for key, data in groups:
             idx = data.index.asof(marked_time)
             needed_info = []
+            graph_list = []
             if not isinstance(idx, float):
                 before = data.between_time(st, idx)
-                after = data.between_time(idx, et)
                 total = data.between_time(st, et)
                 cols = [x for x in total.columns if x.startswith('res_') and len(total[x].dropna()) > 0]
+                if len(cols) == 0:
+                    continue
                 for count, val in enumerate(cols):
                     try:
                         info = {'threshold': data['thresholds'].values[0].split(':')[count]}
 
-                        #scale the data to make the distance resonable
-                        comp = before['cmp_{:d}_0'.format(count)].astype('float')
-                        const = before['const_{:d}_0'.format(count)].astype('float')
+                        k1 = 'cmp_{:d}_0'.format(count)
+                        k2 = 'const_{:d}_0'.format(count)
+                        if len(cols) > 1:
+                            suggestion, graph_info = plot_and_analyze(total, k1, k2, marked_time, info['threshold'], st,
+                                                                      et)
+                        else:
+                            suggestion, graph_info = plot_and_analyze(total, k1, k2, marked_time, info['threshold'], st,
+                                                                      et)
+
+                        # scale the data to make the distance resonable
+                        comp = before[k1].astype('float')
+                        const = before[k2].astype('float')
                         v1 = comp.max(), comp.min()
                         v2 = const.max(), const.min()
                         maxval = max(v1[0], v2[0])
@@ -242,6 +277,7 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
                         needed_info.append(info)
                     except ValueError as ve:
                         print ve
+                plt.show()
             for i in needed_info:
                 match_count = 0
                 for j in needed_info:
@@ -253,8 +289,11 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
 
         values = sorted(scores, key=lambda x: x[2])
         for i in values:
-            ts = ThreshStatement(i[1], i[0], i[2])
+            ts = ThreshStatement(i[1], i[0], i[2], suggestion)
+            graph_list.append(graph_info)
             thresh_store.import_thresh(ts)
+
+
         print marked_time
         thresh_store.sort()
         for i in thresh_store.thresh_list:
@@ -266,7 +305,9 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
 
 def handle_advance(thresh_info, flops, advances, time_limit=5.0):
     groups = thresh_info.groupby('key')
+    results = []
     for marked_time in advances:
+        thresh_store = ThreshInfoStore()
         et = marked_time + datetime.timedelta(seconds=time_limit)
         st = marked_time - datetime.timedelta(seconds=time_limit)
         last_flops = {}
@@ -282,38 +323,53 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
 
         # sort and filter
         x = [(k, v) for k, v in last_flops.iteritems()]
-        x = filter(lambda arg: arg[1] < time_limit, x)
-        x = sorted(x, key=lambda arg: arg[1])
+        # x = filter(lambda arg: arg[1] < time_limit, x)
+        # x = sorted(x, key=lambda arg: arg[1])
 
         # report
         in_limits = thresh_info.between_time(st, et)
         print 'Advance:', marked_time
         if len(x) > 0:
             for flop in x:
+                graph_list = []
                 windowed_threshold = in_limits[in_limits['key'] == flop[0]]
                 size = len([k for k in windowed_threshold.columns if
                             k.startswith('res_') and len(windowed_threshold[k].dropna() > 1)])
                 if size > 1:
                     code_thresh = windowed_threshold['thresholds'].values[0].split(':')
-                    fig, ax = plt.subplots(size)
                     for i in range(size):
-                        k1 = 'cmp_{:d}_0'.format(i)
-                        k2 = 'const_{:d}_0'.format(i)
-                        plot_and_analyze(windowed_threshold, k1, k2, marked_time, ax[i], code_thresh[i], st, et)
-                    plt.show()
+                        stuff = get_series_flops(windowed_threshold.between_time(st, marked_time)['res_{:d}'.format(i)])
+                        if len(stuff) > 0:
+                            score = (marked_time).total_seconds()
+                            k1 = 'cmp_{:d}_0'.format(i)
+                            k2 = 'const_{:d}_0'.format(i)
+                            sugestion, graph_info = plot_and_analyze(windowed_threshold, k1, k2, marked_time,
+                                                                     code_thresh[i], st, et)
+                            ts = ThreshStatement(code_thresh[i], key, score, sugestion)
+                            thresh_store.import_thresh(ts)
+                            graph_list.append(graph_info)
                 else:
                     thresh_name = windowed_threshold['thresholds'].values[0]
-                    fig, ax = plt.subplots()
-                    plot_and_analyze(windowed_threshold, 'cmp_0_0', 'const_0_0', marked_time, ax, thresh_name, st, et)
-                    plt.show()
-                print '\t', size
-                print '\t', flop[1], flop[0], len(in_limits[in_limits['key'] == flop[0]])
-
+                    stuff = get_series_flops(windowed_threshold.between_time(st, marked_time)['res_0'])
+                    if len(stuff) > 0:
+                        score = (marked_time - stuff[-1]).total_seconds()
+                        sugestion, graph_info = plot_and_analyze(windowed_threshold, 'cmp_0_0', 'const_0_0',
+                                                                 marked_time, thresh_name, st, et)
+                        ts = ThreshStatement(thresh_name, key, score, sugestion)
+                        thresh_store.import_thresh(ts)
+                        graph_list.append(graph_info)
+                thresh_store.add_graph(key, graph_list)
         else:
             print 'No flops within {:f}'.format(time_limit)
+        thresh_store.sort()
+        for i in thresh_store.thresh_list:
+            print i
+        results[marked_time] = thresh_store
+    return results
 
 
-def plot_and_analyze(windowed_threshold, k1, k2, marked_time, ax, thresh_name, st, et):
+def plot_and_analyze(windowed_threshold, k1, k2, marked_time, thresh_name, st, et):
+    """Add graphics to the graph and also return if the value should be raised or lowered"""
     # get if the value is high or low
     # before
     before = windowed_threshold.between_time(st, marked_time)
@@ -324,32 +380,24 @@ def plot_and_analyze(windowed_threshold, k1, k2, marked_time, ax, thresh_name, s
     diff_after = diff_after.mean()
     if diff_b > 0:
         if diff_after > 0:
-            confidence = 'high'
             sugestion = 'Raise!'
         else:
-            confidence = 'low'
             sugestion = 'raise'
     else:
         if diff_after < 0:
-            confidence = 'high'
             sugestion = 'Lower!'
         else:
-            confidence = 'low'
             sugestion = 'lower'
 
-    ax.plot(windowed_threshold.loc[:, k1].index, [float(x) for x in windowed_threshold.loc[:, k1].values],
-            label='Compare Value')
-    ax.plot(windowed_threshold.loc[:, k2].index, [float(x) for x in windowed_threshold.loc[:, k2].values],
-            label=thresh_name)
-    a = ax.get_ylim()
-    mid = (a[0] + a[1]) / 2.0
-    ax_range = a[1] - a[0]
-    ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
-    ax.scatter([marked_time], [mid], marker='*', c='g', s=40, label='Marked Action')
-    ax.text(0.95, 0.01, sugestion, verticalalignment='bottom', horizontalalignment='right',
-            transform=ax.transAxes, color='g', fontsize=16)
+    idx = windowed_threshold.loc[:, k1].index
+    s = [windowed_threshold.loc[:, k1].astype('float').values, windowed_threshold.loc[:, k2].astype('float').values]
+    mid = (max(s[0]) + min(s[0])) / 2.0
+    snames = ['Compare Value', thresh_name]
+    graph_info = GraphInfo(idx, s, snames, [[marked_time], [mid]], sugestion)
 
-    ax.legend()
+
+
+    return sugestion, graph_info
 
 
 if __name__ == '__main__':
@@ -361,5 +409,11 @@ if __name__ == '__main__':
     thresh = get_thresholds(args.thresholds)
     flops, thresh = get_thresh_info(thresh)
     adv, no_adv = get_times(args.bag)
-    handle_no_advance(thresh, flops, no_adv)
-    handle_advance(thresh, flops, adv)
+    no_adv_analysis = handle_no_advance(thresh, flops, no_adv)
+    adv_analysis = handle_advance(thresh, flops, adv)
+    print no_adv_analysis
+    print adv_analysis
+    for i in no_adv_analysis.itervalues():
+        for j in i.graph_map.iteritems():
+            print i[0]
+            print i[1]
