@@ -33,12 +33,15 @@ ThresholdSelected, THRESHOLD_SELECTED_EVENT = wx.lib.newevent.NewEvent()
 
 class ThresholdGraphPanel(wx.Panel):
     def __init__(self, parent):
-        wx.Panel.__init__(self, parent, -1, size=(50, 50))
+        wx.Panel.__init__(self, parent, -1)#), size=(50, 50))
+
         self.figure = matplotlib.figure.Figure()
         self.figure.add_subplot(111)
         self.canvas = FigureCanvas(self, -1, self.figure)
+
+
         hbox = wx.BoxSizer(wx.HORIZONTAL)
-        hbox.Add(self.canvas, 1, wx.EXPAND)
+        hbox.Add(self.canvas, proportion=1, flag=wx.EXPAND)
         self.SetSizer(hbox)
 
     def update_graphic(self, info_store):
@@ -60,29 +63,34 @@ class ThresholdGraphPanel(wx.Panel):
                 a = ax.get_ylim()
                 ax_range = a[1] - a[0]
                 ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
-                ax.scatter(gi.scatter_data[0], gi.scatter_data[1], c='r', s=50)#, label='Marked Action')
+                # ax.scatter(gi.scatter_data[0], gi.scatter_data[1], c='r', s=50, zorder=10)#, label='Marked Action',)
+                ax.axvline(x=gi.scatter_data[0], linestyle='--', linewidth=2, c='r')
                 ax.text(0.95, 0.01, gi.suggestion, verticalalignment='bottom', horizontalalignment='right',
                         transform=ax.transAxes, color='g', fontsize=16)
+                ax.set_title(gi.threshold_name)
 
                 if i != size -1:
-                    ax.xaxis.get
-
+                    for tick in ax.xaxis.get_major_ticks():
+                        tick.label.set_label('')
+                        tick.label.set_visible(False)
+                    ax.get_xaxis().set_ticks([])
                 else:
                     for tick in ax.xaxis.get_major_ticks():
-                        tick.label.set_fontsize(12)
+                        tick.label.set_fontsize(13)
                         # specify integer or one of preset strings, e.g.
                         tick.label.set_rotation(-45)
                     for tick in ax.yaxis.get_major_ticks():
-                        tick.label.set_fontsize(12)
+                        tick.label.set_fontsize(14)
                     # specify integer or one of preset strings, e.g.
-                ax.legend()
-        self.canvas = FigureCanvas(self, -1, self.figure)
+                # ax.legend()
+        # self.canvas.figure = self.figure #= FigureCanvas(self, -1, self.figure)
+        self.canvas.draw()
 
 
     def clear_graphic(self):
         self.figure.clear()
         self.figure.add_subplot(111)
-        self.canvas = FigureCanvas(self, -1, self.figure)
+        self.canvas.draw()
 
 
 class AnalysisThread(Thread):
@@ -264,12 +272,13 @@ class ThresholdFrame(wx.Frame):
 class GraphInfo(object):
     """Simple class that holds information that is needed to quickly create graphics"""
 
-    def __init__(self, index, series, names, scatter_data, suggestion):
+    def __init__(self, index, series, names, scatter_data, suggestion, threshold_name):
         self.index = index
         self.series = series
         self.names = names
         self.scatter_data = scatter_data
         self.suggestion = suggestion
+        self.threshold_name = threshold_name
 
 
 class ThreshStatement(object):
@@ -468,7 +477,7 @@ def get_times(fname):
     return action, no_action
 
 
-def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=15.0):
+def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
     groups = thresh_df.groupby('key')
     results = {}
     for marked_time in no_advances:
@@ -661,8 +670,7 @@ def plot_and_analyze(windowed_threshold, k1, k2, marked_time, thresh_name, st, e
     mid = windowed_threshold.loc[v, k1]
     mid = float(mid)
 
-
-    graph_info = GraphInfo(idx, s, snames, [[marked_time], [mid]], suggestion)
+    graph_info = GraphInfo(idx, s, snames, [[marked_time], [mid]], suggestion, thresh_name)
     return suggestion, graph_info
 
 
