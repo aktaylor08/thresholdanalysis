@@ -15,8 +15,12 @@ import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
 
+# noinspection PyUnresolvedReferences
 import wx
+# noinspection PyUnresolvedReferences
 import wx.lib.newevent
+# noinspection PyUnresolvedReferences
+from wx.lib.mixins.listctrl import ListCtrlAutoWidthMixin
 
 
 # Set up the custom event for background processing of the data
@@ -28,9 +32,8 @@ ThresholdSelected, THRESHOLD_SELECTED_EVENT = wx.lib.newevent.NewEvent()
 
 
 class ThresholdGraphPanel(wx.Panel):
-
     def __init__(self, parent):
-        wx.Panel.__init__(self, parent, -1, size=(50,50))
+        wx.Panel.__init__(self, parent, -1, size=(50, 50))
         self.figure = matplotlib.figure.Figure()
         self.figure.add_subplot(111)
         self.canvas = FigureCanvas(self, -1, self.figure)
@@ -45,18 +48,40 @@ class ThresholdGraphPanel(wx.Panel):
             self.figure.add_subplot(111)
         else:
             for i in range(size):
-                ax = self.figure.add_subplot(size, 1, i+1)
+                if i == 0:
+                    ax = self.figure.add_subplot(size, 1, i + 1)
+                    old_ax = ax
+                else:
+                    ax = self.figure.add_subplot(size, 1, i+1, sharex=old_ax)
                 gi = info_store[i]
                 index = gi.index
-                for i in zip(gi.names, gi.series):
-                    ax.plot(index, i[1], label=i[0])
+                for z_val in zip(gi.names, gi.series):
+                    ax.plot(index, z_val[1], label=z_val[0], linewidth=3)
                 a = ax.get_ylim()
                 ax_range = a[1] - a[0]
                 ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
-                ax.scatter(gi.scatter_data[0], gi.scatter_data[1], marker='*', c='g', s=40, label='Marked Action')
+                ax.scatter(gi.scatter_data[0], gi.scatter_data[1], c='r', s=50)#, label='Marked Action')
                 ax.text(0.95, 0.01, gi.suggestion, verticalalignment='bottom', horizontalalignment='right',
                         transform=ax.transAxes, color='g', fontsize=16)
+
+                if i != size -1:
+                    ax.xaxis.get
+
+                else:
+                    for tick in ax.xaxis.get_major_ticks():
+                        tick.label.set_fontsize(12)
+                        # specify integer or one of preset strings, e.g.
+                        tick.label.set_rotation(-45)
+                    for tick in ax.yaxis.get_major_ticks():
+                        tick.label.set_fontsize(12)
+                    # specify integer or one of preset strings, e.g.
                 ax.legend()
+        self.canvas = FigureCanvas(self, -1, self.figure)
+
+
+    def clear_graphic(self):
+        self.figure.clear()
+        self.figure.add_subplot(111)
         self.canvas = FigureCanvas(self, -1, self.figure)
 
 
@@ -96,11 +121,10 @@ class AnalysisThread(Thread):
 
 
 class UserMarkPanel(wx.Panel):
-
     def __init__(self, parent, notify_window):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
-        self._list_ctrl = wx.ListCtrl(self, size=(-1, -1), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
+        self._list_ctrl = AutoWidthListCtrl(self) # wx.ListCtrl(self, size=(-1, -1), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
 
         self._list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
         self._list_ctrl.InsertColumn(0, "Type")
@@ -135,25 +159,31 @@ class UserMarkPanel(wx.Panel):
             return None
 
 
-class ThresholdInfoPanel(wx.Panel):
+class AutoWidthListCtrl(wx.ListCtrl, ListCtrlAutoWidthMixin):
+    def __init__(self, parent):
+        wx.ListCtrl.__init__(self, parent, -1, style=wx.LC_REPORT)
+        ListCtrlAutoWidthMixin.__init__(self)
 
+
+class ThresholdInfoPanel(wx.Panel):
     def __init__(self, parent, notify_window):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
 
-        self._list_ctrl = wx.ListCtrl(self, size=(-1, 100), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
+        # self._list_ctrl = wx.ListCtrl(self, size=(-1, 100), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
+        self._list_ctrl = AutoWidthListCtrl(self)
 
         self._list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
-        self._list_ctrl.InsertColumn(0, "Key")
-        self._list_ctrl.InsertColumn(1, "Threshold")
-        self._list_ctrl.InsertColumn(2, "Score")
-        self._list_ctrl.InsertColumn(3, "Suggestion")
+        self._list_ctrl.InsertColumn(0, "Threshold")
+        self._list_ctrl.InsertColumn(1, "Score")
+        self._list_ctrl.InsertColumn(2, "Suggestion")
+        self._list_ctrl.InsertColumn(3, "Location")
 
         self._row_dict = {}
 
-        hbox = wx.BoxSizer(wx.HORIZONTAL)
-        hbox.Add(self._list_ctrl, 1, wx.EXPAND)
-        self.SetSizer(hbox)
+        h_box = wx.BoxSizer(wx.HORIZONTAL)
+        h_box.Add(self._list_ctrl, 1, wx.EXPAND)
+        self.SetSizer(h_box)
         self._selected = None
 
     def add_thresholds(self, store):
@@ -161,12 +191,13 @@ class ThresholdInfoPanel(wx.Panel):
         if not store.sorted:
             store.sort()
         self._row_dict.clear()
+        self._list_ctrl.DeleteAllItems()
         self._selected = None
         for idx, res in enumerate(store.thresh_list):
-            self._list_ctrl.InsertStringItem(idx, res.stmt_key)
-            self._list_ctrl.SetStringItem(idx, 1, str(res.threshold))
-            self._list_ctrl.SetStringItem(idx, 2, str(res.score))
-            self._list_ctrl.SetStringItem(idx, 3, str(res.suggestion))
+            self._list_ctrl.InsertStringItem(idx,str(res.threshold))
+            self._list_ctrl.SetStringItem(idx, 1, str(res.score))
+            self._list_ctrl.SetStringItem(idx, 2, str(res.suggestion))
+            self._list_ctrl.SetStringItem(idx, 3, str(res.stmt_key))
             self._row_dict[idx] = res
 
 
@@ -189,7 +220,7 @@ class ThresholdFrame(wx.Frame):
         self.left_right = wx.SplitterWindow(self)
         self.top_bottom = wx.SplitterWindow(self.left_right)
 
-        #marking list self argument for which panel to notify -- ie this window
+        # marking list self argument for which panel to notify -- ie this window
         self.mark_panel = UserMarkPanel(self.left_right, self)
 
         self.graph_area = ThresholdGraphPanel(self.top_bottom)
@@ -220,6 +251,7 @@ class ThresholdFrame(wx.Frame):
             self.mark_panel.add_marks(self.worker.analysis_results)
 
     def on_mark_selected(self, event):
+        self.graph_area.clear_graphic()
         self.thresh_info_area.add_thresholds(event.store)
 
     def on_threshold_selected(self, event):
@@ -227,11 +259,11 @@ class ThresholdFrame(wx.Frame):
         self.graph_area.update_graphic(g)
 
 
-
 # Analysis classes and functions below here
 
 class GraphInfo(object):
     """Simple class that holds information that is needed to quickly create graphics"""
+
     def __init__(self, index, series, names, scatter_data, suggestion):
         self.index = index
         self.series = series
@@ -243,6 +275,7 @@ class GraphInfo(object):
 class ThreshStatement(object):
     """"Contains information about thresholds and statemetns in the source code in one
     location"""
+
     def __init__(self, threshold, stmt_key, score, suggestion=None):
         self.threshold = threshold
         self.stmt_key = stmt_key
@@ -258,6 +291,7 @@ class ThreshStatement(object):
 
 class ThreshInfoStore(object):
     """Store that will contain all of the information about one marked time of threshold information"""
+
     def __init__(self, mtime, advance):
         self.advance = advance
         if advance:
@@ -439,7 +473,7 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=15.0):
     results = {}
     for marked_time in no_advances:
         scores = []
-        thresh_store = ThreshInfoStore(marked_time,  False)
+        thresh_store = ThreshInfoStore(marked_time, False)
         et = marked_time + datetime.timedelta(seconds=time_limit)
         st = marked_time - datetime.timedelta(seconds=time_limit)
 
@@ -578,9 +612,9 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
                             score = (marked_time).total_seconds()
                             k1 = 'cmp_{:d}_0'.format(i)
                             k2 = 'const_{:d}_0'.format(i)
-                            sugestion, graph_info = plot_and_analyze(windowed_threshold, k1, k2, marked_time,
-                                                                     code_thresh[i], st, et)
-                            ts = ThreshStatement(code_thresh[i], key, score, sugestion)
+                            suggestion, graph_info = plot_and_analyze(windowed_threshold, k1, k2, marked_time,
+                                                                      code_thresh[i], st, et)
+                            ts = ThreshStatement(code_thresh[i], key, score, suggestion)
                             thresh_store.import_thresh(ts)
                             graph_list.append(graph_info)
                 else:
@@ -588,9 +622,9 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
                     stuff = get_series_flops(windowed_threshold.between_time(st, marked_time)['res_0'])
                     if len(stuff) > 0:
                         score = (marked_time - stuff[-1]).total_seconds()
-                        sugestion, graph_info = plot_and_analyze(windowed_threshold, 'cmp_0_0', 'const_0_0',
-                                                                 marked_time, thresh_name, st, et)
-                        ts = ThreshStatement(thresh_name, key, score, sugestion)
+                        suggestion, graph_info = plot_and_analyze(windowed_threshold, 'cmp_0_0', 'const_0_0',
+                                                                  marked_time, thresh_name, st, et)
+                        ts = ThreshStatement(thresh_name, key, score, suggestion)
                         thresh_store.import_thresh(ts)
                         graph_list.append(graph_info)
                 thresh_store.add_graph(key, graph_list)
@@ -611,23 +645,25 @@ def plot_and_analyze(windowed_threshold, k1, k2, marked_time, thresh_name, st, e
     diff_after = diff_after.mean()
     if diff_b > 0:
         if diff_after > 0:
-            sugestion = 'Raise!'
+            suggestion = 'Raise!'
         else:
-            sugestion = 'raise'
+            suggestion = 'raise'
     else:
         if diff_after < 0:
-            sugestion = 'Lower!'
+            suggestion = 'Lower!'
         else:
-            sugestion = 'lower'
+            suggestion = 'lower'
 
     idx = windowed_threshold.loc[:, k1].index
     s = [windowed_threshold.loc[:, k1].astype('float').values, windowed_threshold.loc[:, k2].astype('float').values]
-    mid = (max(s[0]) + min(s[0])) / 2.0
     snames = ['Compare Value', thresh_name]
-    graph_info = GraphInfo(idx, s, snames, [[marked_time], [mid]], sugestion)
-    return sugestion, graph_info
+    v = idx.asof(marked_time)
+    mid = windowed_threshold.loc[v, k1]
+    mid = float(mid)
 
 
+    graph_info = GraphInfo(idx, s, snames, [[marked_time], [mid]], suggestion)
+    return suggestion, graph_info
 
 
 if __name__ == '__main__':
