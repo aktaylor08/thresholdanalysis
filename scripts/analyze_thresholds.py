@@ -31,14 +31,16 @@ AnalysisResultEvent, ANALYSIS_RESULT_EVENT = wx.lib.newevent.NewEvent()
 ThresholdSelected, THRESHOLD_SELECTED_EVENT = wx.lib.newevent.NewEvent()
 
 
+SHOW_CODE_ID = wx.NewId()
+
+
 class ThresholdGraphPanel(wx.Panel):
     def __init__(self, parent):
-        wx.Panel.__init__(self, parent, -1)#), size=(50, 50))
+        wx.Panel.__init__(self, parent, -1)  # ), size=(50, 50))
 
         self.figure = matplotlib.figure.Figure()
         self.figure.add_subplot(111)
         self.canvas = FigureCanvas(self, -1, self.figure)
-
 
         hbox = wx.BoxSizer(wx.HORIZONTAL)
         hbox.Add(self.canvas, proportion=1, flag=wx.EXPAND)
@@ -55,7 +57,8 @@ class ThresholdGraphPanel(wx.Panel):
                     ax = self.figure.add_subplot(size, 1, i + 1)
                     old_ax = ax
                 else:
-                    ax = self.figure.add_subplot(size, 1, i+1, sharex=old_ax)
+                    # noinspection PyUnboundLocalVariable
+                    ax = self.figure.add_subplot(size, 1, i + 1, sharex=old_ax)
                 gi = info_store[i]
                 index = gi.index
                 for z_val in zip(gi.names, gi.series):
@@ -69,7 +72,7 @@ class ThresholdGraphPanel(wx.Panel):
                         transform=ax.transAxes, color='g', fontsize=16)
                 ax.set_title(gi.threshold_name)
 
-                if i != size -1:
+                if i != size - 1:
                     for tick in ax.xaxis.get_major_ticks():
                         tick.label.set_label('')
                         tick.label.set_visible(False)
@@ -81,11 +84,10 @@ class ThresholdGraphPanel(wx.Panel):
                         tick.label.set_rotation(-45)
                     for tick in ax.yaxis.get_major_ticks():
                         tick.label.set_fontsize(14)
-                    # specify integer or one of preset strings, e.g.
-                # ax.legend()
+                        # specify integer or one of preset strings, e.g.
+                        # ax.legend()
         # self.canvas.figure = self.figure #= FigureCanvas(self, -1, self.figure)
         self.canvas.draw()
-
 
     def clear_graphic(self):
         self.figure.clear()
@@ -132,7 +134,8 @@ class UserMarkPanel(wx.Panel):
     def __init__(self, parent, notify_window):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
-        self._list_ctrl = AutoWidthListCtrl(self) # wx.ListCtrl(self, size=(-1, -1), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
+        self._list_ctrl = AutoWidthListCtrl(
+            self)  # wx.ListCtrl(self, size=(-1, -1), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
 
         self._list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
         self._list_ctrl.InsertColumn(0, "Type")
@@ -194,6 +197,36 @@ class ThresholdInfoPanel(wx.Panel):
         self.SetSizer(h_box)
         self._selected = None
 
+        self.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.handle_right_click)
+
+    def handle_right_click(self, event):
+        current_item = event.m_itemIndex
+        menu = wx.Menu()
+        menu.Append(SHOW_CODE_ID, "Show Source Code")
+        wx.EVT_MENU(menu, SHOW_CODE_ID, self.menu_select_callback)
+        self.PopupMenu(menu, event.GetPoint())
+        menu.Destroy()
+
+
+    def menu_select_callback(self, event):
+        op = event.GetId()
+        print self._selected.stmt_key
+
+        if op == SHOW_CODE_ID:
+            fname, line =  self._selected.stmt_key.split(':')
+            code = ''
+            if os.path.exists(fname):
+                with open(fname) as src_file:
+                    lines = src_file.readlines()
+                    code = ''.join(lines[int(line)-3:int(line)+3])
+
+
+            else:
+                code = 'Could not find file {:s}'.format(fname)
+            wx.MessageBox(code, "Source Code", wx.OK)
+        else:
+            print 'sup'
+
     def add_thresholds(self, store):
         # Clear everything out
         if not store.sorted:
@@ -202,12 +235,11 @@ class ThresholdInfoPanel(wx.Panel):
         self._list_ctrl.DeleteAllItems()
         self._selected = None
         for idx, res in enumerate(store.thresh_list):
-            self._list_ctrl.InsertStringItem(idx,str(res.threshold))
+            self._list_ctrl.InsertStringItem(idx, str(res.threshold))
             self._list_ctrl.SetStringItem(idx, 1, str(res.score))
             self._list_ctrl.SetStringItem(idx, 2, str(res.suggestion))
             self._list_ctrl.SetStringItem(idx, 3, str(res.stmt_key))
             self._row_dict[idx] = res
-
 
     def on_item_selected(self, event):
         current_item = event.m_itemIndex
@@ -239,6 +271,7 @@ class ThresholdFrame(wx.Frame):
         self.top_bottom.SplitHorizontally(self.graph_area, self.thresh_info_area, 550)
         self.left_right.SetSashGravity(0.0)
         self.top_bottom.SetSashGravity(1.0)
+        self.worker = None
 
         # set up the status bar
         self.status_bar = self.CreateStatusBar()
@@ -572,7 +605,7 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
                 scores.append((key, i['threshold'], s, i['suggestion']))
             thresh_store.add_graph(key, graph_list)
 
-        values = sorted(scores, key=lambda x: x[2])
+        values = sorted(scores, key=lambda asdf: asdf[2])
         for i in values:
             ts = ThreshStatement(i[1], i[0], i[2], i[3])
             thresh_store.import_thresh(ts)
@@ -618,7 +651,7 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
                     for i in range(size):
                         stuff = get_series_flops(windowed_threshold.between_time(st, marked_time)['res_{:d}'.format(i)])
                         if len(stuff) > 0:
-                            score = (marked_time).total_seconds()
+                            score = (marked_time-stuff[-1]).total_seconds()
                             k1 = 'cmp_{:d}_0'.format(i)
                             k2 = 'const_{:d}_0'.format(i)
                             suggestion, graph_info = plot_and_analyze(windowed_threshold, k1, k2, marked_time,
