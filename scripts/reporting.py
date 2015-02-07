@@ -68,7 +68,7 @@ class Reporter:
     def __init__(self):
         print rospy.get_name()
         self.pub = rospy.Publisher(
-            'threshold_information', String,) #queue_size=100)
+            '/threshold_information', String,) #queue_size=100)
 
     def publish(self, msg):
         self.pub.publish(msg)

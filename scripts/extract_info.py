@@ -4,11 +4,14 @@ import argparse
 from collections import defaultdict
 
 import os
+import warnings
+import subprocess
+import yaml
 import rosbag_pandas as rbp
 import datetime
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from roslib.message import get_message_class
 import sys
 
 from IPython import embed
@@ -23,7 +26,9 @@ def add_to_store(store, key, idx, value, length):
     if key in store:
         store[key][idx] = value
     else:
-        if isinstance(value, int) or isinstance(value, float):
+        if key == 'thresholds':
+            arr = np.array([None] * length)
+        elif isinstance(value, int) or isinstance(value, float):
             arr = np.empty(length)
             arr.fill(np.NAN)
         else:
@@ -39,6 +44,8 @@ def to_dataframe(series):
     index = np.array([None] * length)
     idx = 0
     for bag_time, i in series.iteritems():
+        if idx % 100:
+            print 'Progress: ', float(idx) / length
         duplicate = False
         vals = i.split(',')
         time = pd.to_datetime(float(vals[0]), unit='s')
@@ -295,13 +302,21 @@ def find_close(df, thresh, cutoff=.25):
     embed()
 
 
+
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='Extracting Data', usage='Use to extract threshold information',)
     parser.add_argument('-b', '--bag', help='The bag to extract information from', required=True)
-    parser.add_argument('-e', '--extract_thresholds', help='Extract and save the thresholds to disk', action='store_true')
     parser.add_argument('-o', '--output', help='prefix to add to output files')
     parser.add_argument('-n', '--namespace', help='Namespace of the threshold topic')
     args = parser.parse_args()
+    topics = ['/mark_no_action', '/mark_action', '/threshold_information']
+    good_bad = ['/mark_no_action','/mark_action']
+
+
+
 
     if args.namespace is not None:
         ns = args.namespace
@@ -310,20 +325,15 @@ if __name__ == '__main__':
     fname,_ = os.path.splitext(args.bag)
     if args.output is not None:
         fname = args.output
-    if args.extract_thresholds:
-        df = rbp.bag_to_dataframe(args.bag, include=['/a/threshold_information'])
+    # df = rbp.bag_to_dataframe(args.bag, include=['/threshold_information'])
+    df = rbp.bag_to_dataframe(args.bag, include=topics)
 
-        if ns == '':
-            data = df['threshold_information__data']
-        else:
-            data = df[ns + '_threshold_information__data']
+    if ns == '':
+        data = df['threshold_information__data']
+    else:
+        data = df[ns + '_threshold_information__data']
 
-        thresh = to_dataframe(data.dropna())
-        thresh['line'] = thresh['line'].apply(lambda x: x.replace(',', ' '))
-
-
-        thresh.to_csv( fname + '_thresh.csv', )
-
-    # check_bad_vs_good(df,thresh)
-    # last_flop(df, thresh)
-    #find_close(df, thresh)
+    thresh = to_dataframe(data.dropna())
+    thresh['line'] = thresh['line'].apply(lambda x: x.replace(',', ' '))
+    thresh.to_csv( fname + '_thresh.csv', )
+    df[good_bad].to_csv(fname + '_marked.csv')
