@@ -17,25 +17,15 @@ import sys
 from IPython import embed
 
 
-def add_to_store(store, key, idx, value, length):
-    try:
-        value = float(value)
-    except ValueError:
-        # Not a float
-        pass
-    if key in store:
-        store[key][idx] = value
+def add_to_data(key, idx, value, indexes, data):
+    if key in data:
+        data[key].append(value)
     else:
-        if key == 'thresholds':
-            arr = np.array([None] * length)
-        elif isinstance(value, int) or isinstance(value, float):
-            arr = np.empty(length)
-            arr.fill(np.NAN)
-        else:
-            arr = np.array([None] * length)
-        arr[idx] = value
-        store[key] = arr
-
+        data[key] = [value]
+    if key in indexes:
+        indexes[key].append(idx)
+    else:
+        indexes[key] = [idx]
 
 def to_dataframe(series):
     errors = dict()
@@ -43,58 +33,49 @@ def to_dataframe(series):
     datastore = {}
     index = np.array([None] * length)
     idx = 0
-    for bag_time, i in series.iteritems():
-        if idx % 100:
-            print 'Progress: ', float(idx) / length
-        duplicate = False
+
+    #new stuff here
+    data = {}
+    indexes = {}
+    times = set()
+
+    for BAG_TIME, i in series.iteritems():
         vals = i.split(',')
         time = pd.to_datetime(float(vals[0]), unit='s')
 
-        loc = np.where(index == time)
-        if len(loc[0]) > 0:
-            print 'duplicate index', loc[0][0]
-            new_idx = loc[0][0]
-            old_idx = idx
-            idx = new_idx
-            duplicate = True
-
-        index[idx] = time
+        times.add(time)
 
         fname = vals[1]
         lineno = vals[2]
         thresh_id = fname + str(lineno)
         thresh_key = fname + ':' + lineno
-        add_to_store(datastore, 'key', idx, thresh_key, length)
-        add_to_store(datastore, 'id', idx, thresh_id, length)
-        add_to_store(datastore, 'file_name', idx, fname, length)
-        add_to_store(datastore, 'line_number', idx, lineno, length)
+
+        add_to_data('key', time, thresh_key, indexes, data)
+        add_to_data('id', time, thresh_id, indexes, data)
+        add_to_data('file_name', time, fname, indexes, data)
+        add_to_data('line_number', time, lineno, indexes, data)
 
         line = vals[3]
-        add_to_store(datastore, 'line', idx, line, length)
+        add_to_data('line', time, line, indexes, data)
         truth = vals[4]
-        add_to_store(datastore, 'result', idx, truth, length)
+        add_to_data('result', time, truth, indexes, data)
         thresholds = vals[5]
-        add_to_store(datastore, 'thresholds', idx, thresholds, length)
+        add_to_data('thresholds', time, thresholds, indexes, data)
         rest = vals[6:]
         for i in rest:
             try:
                 key, val = i.split(':')
-                add_to_store(datastore, key, idx, val, length)
+                add_to_data(key, time, val, indexes, data)
             except ValueError as e:
                 errors['Value Error: ' + thresh_key] = errors.get('Value Error: ' + thresh_key, 0) + 1
 
-        if duplicate:
-            idx = old_idx
-        else:
-            idx += 1
-    index = index[:idx]
-    for i, v in datastore.iteritems():
-        datastore[i] = v[:idx]
-    df = pd.DataFrame(data=datastore, index=index)
-    print 'Errors: '
+    df = pd.DataFrame(index=list(times))
+    for i in data.iterkeys():
+        s = pd.Series(data=data[i], index=indexes[i])
+        df[i] = s.groupby(s.index).first().reindex(df.index)
     for key, count in errors.iteritems():
-        print count, key
-    return df
+        warnings.warn(str(count) + ' ' + str(key))
+    return df.sort_index()
 
 
 def from_file(fname, return_both=False):
@@ -116,12 +97,12 @@ def get_goods_bads(df):
     try:
         bads = df.mark_bad__data_nsecs.dropna().index
     except Exception as e:
-        print e
+        warnings.warn(e)
         bads = []
     try:
         goods = df.mark_good__data_nsecs.dropna().index
     except Exception as e:
-        print e
+        warnings.warn(e)
         goods = []
 
     return bads, goods
@@ -167,7 +148,7 @@ def get_bads_time(df):
             time = s + ns / 1000000000.0
             to_ret.append(pd.to_datetime(time, unit='s'))
     except:
-        print 'No bad marked?'
+        warnings.warn('No bad marked?')
     return to_ret
 
 
@@ -304,6 +285,29 @@ def find_close(df, thresh, cutoff=.25):
 
 
 
+def test_time():
+    bag = '/home/ataylor/asctec_ws/src/collab_launch/mybags/_2015-01-30-16-53-42.bag'
+    ns = 'a'
+
+    topics = ['/mark_no_action', '/mark_action', '/' + ns + '/threshold_information']
+    good_bad = [u'mark_action__data_nsecs', u'mark_action__data_secs', u'mark_no_action__data_nsecs', u'mark_no_action__data_secs',]
+    good_bad = [u'mark_action__data_nsecs', u'mark_action__data_secs',]
+
+    good_bad = [u'mark_no_action__data_nsecs', u'mark_no_action__data_secs',]
+    fname,_ = os.path.splitext(bag)
+    # df = rbp.bag_to_dataframe(args.bag, include=['/threshold_information'])
+    df = rbp.bag_to_dataframe(bag, include=topics)
+
+    print df.columns
+    if ns == '':
+        data = df['threshold_information__data']
+    else:
+        data = df[ns + '_threshold_information__data']
+
+    thresh = to_dataframe(data.dropna())
+    thresh['line'] = thresh['line'].apply(lambda x: x.replace(',', ' '))
+    thresh.to_csv( fname + '_thresh.csv', )
+    df[good_bad].to_csv(fname + '_marked.csv')
 
 
 if __name__ == '__main__':
@@ -313,10 +317,7 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--namespace', help='Namespace of the threshold topic')
     args = parser.parse_args()
     topics = ['/mark_no_action', '/mark_action', '/threshold_information']
-    good_bad = ['/mark_no_action','/mark_action']
-
-
-
+    good_bad = [u'mark_action__data_nsecs', u'mark_action__data_secs', u'mark_no_action__data_nsecs', u'mark_no_action__data_secs',]
 
     if args.namespace is not None:
         ns = args.namespace
