@@ -3,7 +3,6 @@
 import argparse
 
 import os
-import math
 import datetime
 import sys
 from threading import Thread
@@ -210,7 +209,6 @@ class ThresholdInfoPanel(wx.Panel):
 
     def menu_select_callback(self, event):
         op = event.GetId()
-        print self._selected.stmt_key
 
         if op == SHOW_CODE_ID:
             fname, line =  self._selected.stmt_key.split(':')
@@ -225,7 +223,7 @@ class ThresholdInfoPanel(wx.Panel):
                 code = 'Could not find file {:s}'.format(fname)
             wx.MessageBox(code, "Source Code", wx.OK)
         else:
-            print 'sup'
+            pass
 
     def add_thresholds(self, store):
         # Clear everything out
@@ -397,17 +395,10 @@ def get_thresholds(fname):
 def get_series_flops(series):
     """Get the flops in a series of values
     Will return times of every time the series changes from True to False"""
-    flopped = False
-    flop_times = []
-    value = series[0]
-    for time, res in series.iteritems():
-        if res != value:
-            if not flopped:
-                flop_times.append(time)
-                flopped = True
-        else:
-            flopped = False
-    return flop_times
+    a = series.dropna()
+    fvals = a[a != a.shift(1)]
+    fvals = fvals.index[1:]
+    return fvals
 
 
 def get_flops(df, key):
@@ -460,21 +451,16 @@ def get_thresh_info(thresh_df):
 def add_times(to_add_df, key, locations):
     """Add the times since the last flop to the dataframe"""
     vals = to_add_df[to_add_df['key'] == key]
-    cur_time = vals.index.to_series().apply(ts_to_sec)
-    data = pd.Series(index=vals.index)
-    for idx in locations:
-        data[idx] = idx
-    data = data.apply(func=lambda x: pd.Timestamp(x))
-    data = data.apply(ts_to_sec)
-    data = data.ffill()
-    for idx, val in data.iteritems():
-        to_add_df.loc[idx, 'last_flop'] = cur_time[idx] - val
+    cur_time = vals.index.to_series()
+    series = pd.Series(data=locations, index=locations)
+    series = series.reindex(cur_time.index)
+    s = (cur_time - series.ffill())
+    to_add_df.ix[s.index, 'last_flop'] = s
     return to_add_df
 
 
-def ts_to_sec(ts):
+def ts_to_sec(ts, epoch=datetime.datetime.utcfromtimestamp(0)):
     """Get a second representation of the timestamp"""
-    epoch = datetime.datetime.utcfromtimestamp(0)
     delta = ts - epoch
     try:
         return delta.total_seconds()
@@ -562,8 +548,8 @@ def handle_no_advance(thresh_df, flop_info, no_advances, time_limit=5.0):
                 maxval = max(v1[0], v2[0])
                 minval = min(v1[1], v2[1])
                 if maxval - minval != 0:
-                    comp = comp - minval / (maxval - minval)
-                    const = const - minval / (maxval - minval)
+                    comp = (comp - minval) / (maxval - minval)
+                    const = (const - minval) / (maxval - minval)
                 else:
                     comp.loc[:] = .5
                     const.loc[:] = .5
@@ -630,7 +616,7 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
             if not isinstance(idx, float):
                 if idx > st:
                     time = data.loc[idx, 'last_flop']
-                    if not math.isnan(time):
+                    if not pd.isnull(time):
                         last_flops[key] = time
 
         # sort and filter
