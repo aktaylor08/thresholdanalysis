@@ -642,7 +642,7 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
                             k2 = 'const_{:d}_0'.format(i)
                             suggestion, graph_info = plot_and_analyze(windowed_threshold, k1, k2, marked_time,
                                                                       code_thresh[i], st, et)
-                            ts = ThreshStatement(code_thresh[i], key, score, suggestion)
+                            ts = ThreshStatement(code_thresh[i], flop[0], score, suggestion)
                             thresh_store.import_thresh(ts)
                             graph_list.append(graph_info)
                 else:
@@ -652,10 +652,10 @@ def handle_advance(thresh_info, flops, advances, time_limit=5.0):
                         score = (marked_time - stuff[-1]).total_seconds()
                         suggestion, graph_info = plot_and_analyze(windowed_threshold, 'cmp_0_0', 'const_0_0',
                                                                   marked_time, thresh_name, st, et)
-                        ts = ThreshStatement(thresh_name, key, score, suggestion)
+                        ts = ThreshStatement(thresh_name, flop[0], score, suggestion)
                         thresh_store.import_thresh(ts)
                         graph_list.append(graph_info)
-                thresh_store.add_graph(key, graph_list)
+                thresh_store.add_graph(flop[0], graph_list)
         thresh_store.sort()
         results[marked_time] = thresh_store
     return results
