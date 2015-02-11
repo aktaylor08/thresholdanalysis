@@ -17,7 +17,7 @@ def instrument_thresholds(tree, thresholds, fname, code, verbose, args):
     code = compile(tree, fname, mode='exec')
     sys.argv = [fname] +  args
     ns = {'__name__': '__main__'}
-    exec (code, ns)
+    # exec (code, ns)
 
 
 def add_import_statement(node):
@@ -55,14 +55,26 @@ class InstrumentVisitor(ast.NodeTransformer):
 
     def handle_node(self, node):
         if node in self.tmap:
+            if isinstance(node.test, ast.Compare):
+                print 'compare'
+            elif isinstance(node.test, ast.BoolOp):
+                print 'bool'
+            elif isinstance(node.test, ast.UnaryOp):
+                print 'unary'
+            else:
+                print 'Unexpected type here'
+                assert False
             ccollector = ComparisionCollector(self.tmap[node])
-            ccollector.visit(node.test)
-            print pprinter.dump(node.test)
-            print node.lineno
+            val = ccollector.visit(node.test)
+            print val
+            print ast.dump(val)
+            for i in ccollector.things:
+                print '\t', ast.dump(i)
+
             print ccollector.things
 
 
-class ComparisionCollector(ast.NodeVisitor):
+class ComparisionCollector(ast.NodeTransformer):
 
     def __init__(self, thresholds):
         self.things = []
@@ -70,6 +82,29 @@ class ComparisionCollector(ast.NodeVisitor):
         self.cnum = 0
         self.tnum = 0
         self.rnum = 0
+        self.vnum = 0
+
+
+    def visit_BoolOp(self, node):
+        for idx, val in  enumerate(node.values):
+            print idx, val
+            child_list = [x for x in ast.walk(val)]
+            for j in self.thresholds:
+                if j in child_list:
+                    new_node = self.visit(val)
+                    print '\t', new_node
+                    node.values[idx] = new_node
+                    break
+            else:
+                n = 'value_{:d}'.format(self.vnum)
+                self.vnum += 1
+                keyword = ast.keyword(arg=n, value=val)
+                self.things.append(keyword)
+                node.values[idx] = ast.Name(id=n, ctx=ast.Load())
+            print '\n\n'
+        return node
+
+
 
     def visit_Compare(self, node):
         thresh = []
@@ -101,8 +136,12 @@ class ComparisionCollector(ast.NodeVisitor):
         keyword = ast.keyword(arg=n, value=node)
         self.things.append(keyword)
         self.generic_visit(node)
+        return ast.Name(id=n, ctx=ast.Load())
+
 
     def visit_UnaryOp(self, node):
+        #TODO Fix this as well
+        values = [x for x in ast.iter_child_nodes(node.operand)]
         if node.operand in self.thresholds:
             n = 'thersh_{:d}'.format(self.tnum)
             self.tnum += 1
@@ -114,7 +153,12 @@ class ComparisionCollector(ast.NodeVisitor):
             self.things.append(keyword)
             n = 'res_{:d}'.format(self.rnum)
             keyword = ast.keyword(arg=n, value=node)
-        self.generic_visit(node)
+            node.operand = ast.Name(id=n, ctx=ast.Load())
+        else:
+            for i in self.thresholds:
+                if i in values:
+                    node.operand = self.visit(node.operand)
+        return node
 
 
 
