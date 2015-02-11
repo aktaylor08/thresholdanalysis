@@ -7,18 +7,22 @@ import datetime
 from std_msgs.msg import String
 
 
-def report(expr, f_name, line, check, thresholds, *args,  **kwargs):
+def report(filename, lineno, result, *args,  **kwargs):
 
     vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), str(
-        f_name), str(line).replace(',', ''), str(check), str(expr), str(thresholds)]
+        filename), str(lineno)]
     for key in kwargs:
+        if key.startswith('res_'):
+            kwargs[key] = kwargs[key](kwargs)
         if type(kwargs[key]) is bytes:
-            vals.append(str(key) + ':' + binascii.hexlify(kwargs[key]))
-        else:
-            vals.append(str(key) + ':' + str(kwargs[key]))
+            kwargs[key] + ':' + binascii.hexlify(kwargs[key])
+    result = result(kwargs)
+    vals.append(result)
+    for key in kwargs:
+        vals.append(kwargs[key])
     vals = ','.join(vals)
     Reporter.Instance().publish(vals)
-    return expr
+    return result
 
 
 class Singleton:
