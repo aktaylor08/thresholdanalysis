@@ -9,7 +9,8 @@ import ast
 from reaching_definition import ReachingDefinition
 from backward_analysis import get_constants, get_const_control
 from backward_analysis import get_pub_srv_calls
-from instrumentation import replace_values
+from instrumentation import replace_values, instrument_thresholds
+
 
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -437,7 +438,8 @@ def main(file_name):
                 thresholds[thresh] = k.const_flow[thresh]
 
         if not args.no_execute:
-            replace_values(tree, thresholds, args.file, code.split('\n'), False, args.rest)
+            #replace_values(tree, thresholds, args.file, code.split('\n'), False, args.rest)
+            instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
 
 
 if __name__ == "__main__":

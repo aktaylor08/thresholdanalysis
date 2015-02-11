@@ -1,11 +1,17 @@
 import ast
+import pprinter
 import sys
 
 from ast_tools import get_string_repr
 
-def replace_values(tree, thresholds, fname, code, verbose, args):
-    """Replacement stuff to modify and exit the code."""
-    tree = ModCalls(thresholds, fname, code, verbose).visit(tree)
+
+# In this module I have botht the older version of instrumentation and the new version of isntrumentation.
+# The old version is the replace values series of calls and is at the bottom of the file.as
+# The new version is at the top and only exports select information that just reports threshold values
+# and comparision values in the code
+
+def instrument_thresholds(tree, thresholds, fname, code, verbose, args):
+    tree = InstrumentVisitor(thresholds, fname, code, verbose).visit(tree)
     tree = add_import_statement(tree)
     ast.fix_missing_locations(tree)
     code = compile(tree, fname, mode='exec')
@@ -22,6 +28,115 @@ def add_import_statement(node):
     ast.increment_lineno(node.body[0], 1)
     node.body = [new_node] + node.body
     return node
+
+
+class InstrumentVisitor(ast.NodeTransformer):
+
+    def __init__(self, thresholds, fname, code, verbose):
+        self.fname = fname
+        self.tmap = {}
+        self.code = code
+        self.verbose = verbose
+        for i in thresholds:
+            self.tmap[i] = thresholds[i]
+        instrumented = set()
+
+
+    def visit_If(self, node):
+        self.handle_node(node)
+        self.generic_visit(node)
+        return node
+
+
+    def visit_While(self, node):
+        self.handle_node(node)
+        self.generic_visit(node)
+        return node
+
+    def handle_node(self, node):
+        if node in self.tmap:
+            ccollector = ComparisionCollector(self.tmap[node])
+            ccollector.visit(node.test)
+            print pprinter.dump(node.test)
+            print node.lineno
+            print ccollector.things
+
+
+class ComparisionCollector(ast.NodeVisitor):
+
+    def __init__(self, thresholds):
+        self.things = []
+        self.thresholds = thresholds
+        self.cnum = 0
+        self.tnum = 0
+        self.rnum = 0
+
+    def visit_Compare(self, node):
+        thresh = []
+        others = []
+        if node.left in self.thresholds:
+            thresh.append(node.left)
+        else:
+            others.append(node.left)
+        for i in node.comparators:
+            if i in self.thresholds:
+                thresh.append(i)
+            else:
+                others.append(i)
+        # Add this comparision to the comparitors
+
+        for idx, val in enumerate(thresh):
+            n = 'thersh_{:d}'.format(self.tnum)
+            self.tnum += 1
+            keyword = ast.keyword(arg=n, value=val)
+            self.things.append(keyword)
+
+        for idx, val in enumerate(others):
+            n = 'cmp_{:d}'.format(self.tnum)
+            self.tnum += 1
+            keyword = ast.keyword(arg=n, value=val)
+            self.things.append(keyword)
+
+        n = 'res_{:d}'.format(self.rnum)
+        keyword = ast.keyword(arg=n, value=node)
+        self.things.append(keyword)
+        self.generic_visit(node)
+
+    def visit_UnaryOp(self, node):
+        if node.operand in self.thresholds:
+            n = 'thersh_{:d}'.format(self.tnum)
+            self.tnum += 1
+            keyword = ast.keyword(arg=n, value=node.operand)
+            self.things.append(keyword)
+            n = 'cmp_{:d}'.format(self.tnum)
+            self.tnum += 1
+            keyword = ast.keyword(arg=n, value=node.operand)
+            self.things.append(keyword)
+            n = 'res_{:d}'.format(self.rnum)
+            keyword = ast.keyword(arg=n, value=node)
+        self.generic_visit(node)
+
+
+
+
+
+#Old call are below here!
+#
+#
+#
+#
+#
+#
+
+def replace_values(tree, thresholds, fname, code, verbose, args):
+    """Replacement stuff to modify and exit the code."""
+    tree = ModCalls(thresholds, fname, code, verbose).visit(tree)
+    tree = add_import_statement(tree)
+    ast.fix_missing_locations(tree)
+    code = compile(tree, fname, mode='exec')
+    sys.argv = [fname] +  args
+    ns = {'__name__': '__main__'}
+    exec (code, ns)
 
 
 class ModCalls(ast.NodeTransformer):

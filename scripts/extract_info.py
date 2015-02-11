@@ -1,41 +1,27 @@
 #!/usr/bin/env python
 # encoding: utf-8
 import argparse
-from collections import defaultdict
 
 import os
 import warnings
-import subprocess
-import yaml
 import rosbag_pandas as rbp
-import datetime
 import pandas as pd
-import numpy as np
-from roslib.message import get_message_class
-import sys
-
-from IPython import embed
 
 
-def add_to_data(key, idx, value, indexes, data):
-    if key in data:
-        data[key].append(value)
+def add_to_data(key, idx, value, indexes, data_store):
+    if key in data_store:
+        data_store[key].append(value)
     else:
-        data[key] = [value]
+        data_store[key] = [value]
     if key in indexes:
         indexes[key].append(idx)
     else:
         indexes[key] = [idx]
 
+
 def to_dataframe(series):
     errors = dict()
-    length = len(series)
-    datastore = {}
-    index = np.array([None] * length)
-    idx = 0
-
-    #new stuff here
-    data = {}
+    data_dict = {}
     indexes = {}
     times = set()
 
@@ -45,289 +31,84 @@ def to_dataframe(series):
 
         times.add(time)
 
-        fname = vals[1]
+        file_name = vals[1]
         lineno = vals[2]
-        thresh_id = fname + str(lineno)
-        thresh_key = fname + ':' + lineno
+        thresh_id = file_name + str(lineno)
+        thresh_key = file_name + ':' + lineno
 
-        add_to_data('key', time, thresh_key, indexes, data)
-        add_to_data('id', time, thresh_id, indexes, data)
-        add_to_data('file_name', time, fname, indexes, data)
-        add_to_data('line_number', time, lineno, indexes, data)
+        add_to_data('key', time, thresh_key, indexes, data_dict)
+        add_to_data('id', time, thresh_id, indexes, data_dict)
+        add_to_data('file_name', time, file_name, indexes, data_dict)
+        add_to_data('line_number', time, lineno, indexes, data_dict)
 
         line = vals[3]
-        add_to_data('line', time, line, indexes, data)
+        add_to_data('line', time, line, indexes, data_dict)
         truth = vals[4]
-        add_to_data('result', time, truth, indexes, data)
+        add_to_data('result', time, truth, indexes, data_dict)
         thresholds = vals[5]
-        add_to_data('thresholds', time, thresholds, indexes, data)
+        add_to_data('thresholds', time, thresholds, indexes, data_dict)
         rest = vals[6:]
-        for i in rest:
+        for values in rest:
             try:
-                key, val = i.split(':')
-                add_to_data(key, time, val, indexes, data)
-            except ValueError as e:
+                key, val = values.split(':')
+                add_to_data(key, time, val, indexes, data_dict)
+            except ValueError:
                 errors['Value Error: ' + thresh_key] = errors.get('Value Error: ' + thresh_key, 0) + 1
 
-    df = pd.DataFrame(index=list(times))
-    for i in data.iterkeys():
-        s = pd.Series(data=data[i], index=indexes[i])
-        df[i] = s.groupby(s.index).first().reindex(df.index)
+    dataframe = pd.DataFrame(index=list(times))
+    for dkey in data_dict.iterkeys():
+        s = pd.Series(data=data_dict[dkey], index=indexes[dkey])
+        dataframe[dkey] = s.groupby(s.index).first().reindex(dataframe.index)
     for key, count in errors.iteritems():
         warnings.warn(str(count) + ' ' + str(key))
-    return df.sort_index()
-
-
-def from_file(fname, return_both=False):
-    df = rbp.bag_to_dataframe(fname)
-    thresh = to_dataframe(df.threshold_information__data.dropna())
-    if return_both:
-        return thresh, df
-    else:
-        return thresh
-
-
-def get_time_window(df, et, length):
-    st = et - datetime.timedelta(0, 2.0)
-    return df.between_time(st, et)
-
-
-def get_goods_bads(df):
-    '''get the good and bad markers'''
-    try:
-        bads = df.mark_bad__data_nsecs.dropna().index
-    except Exception as e:
-        warnings.warn(e)
-        bads = []
-    try:
-        goods = df.mark_good__data_nsecs.dropna().index
-    except Exception as e:
-        warnings.warn(e)
-        goods = []
-
-    return bads, goods
-
-
-def get_total_and_percentage_result(group):
-    '''get the total and percentage for a number of groups'''
-    vc = group['result'].value_counts()
-    try:
-        trues = vc['True']
-    except:
-        trues = 0
-
-    try:
-        falses = vc['False']
-    except:
-        falses = 0
-
-    total = trues + falses
-    percent = float(trues) / total
-    return total, percent
-
-
-def get_thresh_percents(df):
-    '''get percentages and totals for all of the thresholds
-    as a dictonary returned'''
-    total = {}
-    percent = {}
-    all_groups = df.groupby('id')
-    for name, group in all_groups:
-        total[name], percent[name] = get_total_and_percentage_result(group)
-    return total, percent
-
-
-def get_bads_time(df):
-    to_ret = []
-    try:
-        idx = df.mark_bad__data_nsecs.dropna().index
-        vals = df.loc[idx, ['mark_bad__data_secs',  'mark_bad__data_nsecs']]
-        for _, data in vals.iterrows():
-            s = data['mark_bad__data_secs']
-            ns = data['mark_bad__data_nsecs']
-            time = s + ns / 1000000000.0
-            to_ret.append(pd.to_datetime(time, unit='s'))
-    except:
-        warnings.warn('No bad marked?')
-    return to_ret
-
-
-def check_bad_vs_good(df, thresh):
-    bads, goods = get_goods_bads(df)
-    # bads =get_bads_time(df)
-    fstring = '{:s}\t\t{:.2%}\t{:f}'
-    total, percent = get_thresh_percents(thresh)
-    for name in thresh['id'].unique():
-        print fstring.format(name, percent[name],  total[name])
-    print '\n\n'
-
-    for et in bads:
-        print et
-        checks = get_time_window(thresh, et, 1)
-        t, p = get_thresh_percents(checks)
-        for name in t.keys():
-            print '\t', fstring.format(name, p[name], t[name])
-
-
-def ts_to_sec(ts):
-    epoch = datetime.datetime.utcfromtimestamp(0)
-    delta = ts - epoch
-    try:
-        return delta.total_seconds()
-    except:
-        return np.NaN
-
-
-def get_flops(thresh, cutoff):
-    lows = []
-    highs = []
-    totals, percents = get_thresh_percents(thresh)
-    for i in percents:
-        if percents[i] < cutoff:
-            lows.append(i)
-        elif percents[i] > 1.0 - cutoff:
-            highs.append(i)
-
-    flops = {}
-    # store the flops
-    for tid, group in thresh.groupby('id'):
-        if tid in lows:
-            opposite = group[group.result == 'True']
-            flops[tid] = opposite.index
-        elif tid in highs:
-            opposite = group[group.result == 'False']
-            flops[tid] = opposite.index
-    return flops
-
-
-def add_times(thresh, flops):
-    cur_time = thresh.index.to_series().apply(ts_to_sec)
-    for name in flops.keys():
-        thresh[name] = pd.Series(flops[name], flops[name])
-        thresh[name] = thresh[name].apply(func=lambda x: pd.Timestamp(x))
-        thresh[name] = thresh[name].apply(ts_to_sec)
-        thresh[name] = cur_time - thresh[name].ffill()
-    return thresh
-
-
-def last_flop(df, thresh, cutoff=.25):
-    print len(df)
-    print len(thresh)
-    # bads, goods = get_goods_bads(df)
-    bads = get_bads_time(df)
-    flops = get_flops(thresh, cutoff)
-    thresh = add_times(thresh, flops)
-
-    cols = [x for x in thresh.columns if x.startswith('/')]
-    for time in bads:
-        t = thresh.index.asof(time)
-        data = thresh.loc[t, cols]
-        data.sort()
-        for k, v in data.iteritems():
-            print k, v
-
-    # embed()
-
-
-def find_close(df, thresh, cutoff=.25):
-    bads = get_bads_time(df)
-    flops = get_flops(thresh, cutoff)
-    thresh = add_times(thresh, flops)
-
-    thresh['flop'] = None
-    for name in flops:
-        for val in flops[name]:
-            thresh.loc[val, 'flop'] = name
-
-    val_cols = [x for x in thresh.columns if x.find('value->') > 0]
-    for v in val_cols:
-        try:
-            print v, len(thresh[v].value_counts())
-        except:
-            print '\n\n\n\n'
-            print 'error ', v
-            print '\n\n\n\n'
-    # grouped = thresh.groupby('flop')
-    # means =pd.DataFrame()
-    # stds = pd.DataFrame()
-    # for g,d in grouped:
-    #     for col in val_cols:
-    #         try:
-    #             mean = d[col].mean()
-    #             std = d[col].std()
-    #             if pd.notnull(mean) and std != 0 and pd.notnull(std):
-    #                 print g
-    #                 print col
-    #                 print mean
-    #                 print std
-    #                 print ''
-    #                 means.loc[g, col] = mean
-    #                 stds.loc[g, col] = std
-    #         except Exception as e:
-    #            # print d[col]
-    #             print e
-
-    # filled = thresh.ffill()
-    # idx = []
-    # for i in df.mark_bad__data_secs.dropna().index:
-    #     idx.append(filled.index.asof(i))
-    # points =  filled.loc[idx, val_cols]
-
-    # for mark, row in points.iterrows():
-    #     print mark
-    #     for pos_thresh, vals in means.iterrows():
-    #         print '\t', pos_thresh, np.abs((row - vals).dropna()).sum()
-
-    # flop_df = thresh[thresh.flop.notnull()]
-
-    embed()
-
-
+    return dataframe
 
 
 def test_time():
     bag = '/home/ataylor/asctec_ws/src/collab_launch/mybags/_2015-01-30-16-53-42.bag'
-    ns = 'a'
+    name_space = 'a'
 
-    topics = ['/mark_no_action', '/mark_action', '/' + ns + '/threshold_information']
-    good_bad = [u'mark_action__data_nsecs', u'mark_action__data_secs', u'mark_no_action__data_nsecs', u'mark_no_action__data_secs',]
-    good_bad = [u'mark_action__data_nsecs', u'mark_action__data_secs',]
-
-    good_bad = [u'mark_no_action__data_nsecs', u'mark_no_action__data_secs',]
-    fname,_ = os.path.splitext(bag)
+    topic_list = ['/mark_no_action', '/mark_action', '/' + name_space + '/threshold_information']
+    bads_goods = [u'mark_action__data_nsecs', u'mark_action__data_secs', u'mark_no_action__data_nsecs',
+                  u'mark_no_action__data_secs', ]
+    file_name, _ = os.path.splitext(bag)
     # df = rbp.bag_to_dataframe(args.bag, include=['/threshold_information'])
-    df = rbp.bag_to_dataframe(bag, include=topics)
+    data_frame = rbp.bag_to_dataframe(bag, include=topic_list)
 
-    print df.columns
-    if ns == '':
-        data = df['threshold_information__data']
+    print data_frame.columns
+    if name_space == '':
+        threshold_data = data_frame['threshold_information__data']
     else:
-        data = df[ns + '_threshold_information__data']
+        threshold_data = data_frame[name_space + '_threshold_information__data']
 
-    thresh = to_dataframe(data.dropna())
-    thresh['line'] = thresh['line'].apply(lambda x: x.replace(',', ' '))
-    thresh.to_csv( fname + '_thresh.csv', )
-    df[good_bad].to_csv(fname + '_marked.csv')
+    thresh_df = to_dataframe(threshold_data.dropna())
+    thresh_df['line'] = thresh_df['line'].apply(lambda line_str: line_str.replace(',', ' '))
+    thresh_df.to_csv(file_name + '_thresh.csv', )
+    data_frame[bads_goods].to_csv(file_name + '_marked.csv')
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='Extracting Data', usage='Use to extract threshold information',)
+    parser = argparse.ArgumentParser(prog='Extracting Data', usage='Use to extract threshold information', )
     parser.add_argument('-b', '--bag', help='The bag to extract information from', required=True)
     parser.add_argument('-o', '--output', help='prefix to add to output files')
     parser.add_argument('-n', '--namespace', help='Namespace of the threshold topic')
     args = parser.parse_args()
-    topics = ['/mark_no_action', '/mark_action', '/threshold_information']
-    good_bad = [u'mark_action__data_nsecs', u'mark_action__data_secs', u'mark_no_action__data_nsecs', u'mark_no_action__data_secs',]
+    if args.namespace is None:
+        topics = ['/mark_no_action', '/mark_action', '/threshold_information']
+    else:
+        topics = ['/mark_no_action', '/mark_action', '/' + args.namespace + '/threshold_information']
+    good_bad = [u'mark_action__data_nsecs', u'mark_action__data_secs', u'mark_no_action__data_nsecs',
+                u'mark_no_action__data_secs', ]
 
     if args.namespace is not None:
         ns = args.namespace
     else:
         ns = ''
-    fname,_ = os.path.splitext(args.bag)
+    fname, _ = os.path.splitext(args.bag)
     if args.output is not None:
         fname = args.output
-    # df = rbp.bag_to_dataframe(args.bag, include=['/threshold_information'])
     df = rbp.bag_to_dataframe(args.bag, include=topics)
+    print df.columns
 
     if ns == '':
         data = df['threshold_information__data']
@@ -335,6 +116,8 @@ if __name__ == '__main__':
         data = df[ns + '_threshold_information__data']
 
     thresh = to_dataframe(data.dropna())
-    thresh['line'] = thresh['line'].apply(lambda x: x.replace(',', ' '))
-    thresh.to_csv( fname + '_thresh.csv', )
-    df[good_bad].to_csv(fname + '_marked.csv')
+    thresh['line'] = thresh['line'].apply(lambda value: value.replace(',', ' '))
+    thresh.sort_index(inplace=True)
+    thresh.to_csv(fname + '_thresh.csv', )
+
+    df[[x for x in good_bad if x in df.columns]].to_csv(fname + '_marked.csv')

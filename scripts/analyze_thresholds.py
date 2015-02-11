@@ -432,13 +432,19 @@ def get_thresh_info(thresh_df):
         trues.append(t)
         falses.append(f)
         totals.append(t + f)
-        pt = (t / (float(t + f)))
-        pf = (f / (float(t + f)))
+        if t + f == 0:
+            pt = 0
+            pf = 0
+        else:
+            pt = (t / (float(t + f)))
+            pf = (f / (float(t + f)))
         pts.append(pt)
         pfs.append(pf)
 
     df = pd.DataFrame(data={'true_count': trues, 'false_count': falses, 'count': totals,
                             'true_prop': pts, 'false_prop': pfs}, index=keys)
+    print keys
+
     # create the dataframe
     # now add flop_times
     thresh_df['last_flop'] = np.NaN
