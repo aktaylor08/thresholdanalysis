@@ -7,19 +7,20 @@ import datetime
 from std_msgs.msg import String
 
 
-def report(filename, lineno, result, *args,  **kwargs):
-
+def report(filename, lineno, result, arg_dict, *args, **kwargs):
     vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), str(
         filename), str(lineno)]
     for key in kwargs:
         if key.startswith('res_'):
-            kwargs[key] = kwargs[key](kwargs)
+            d = {i : kwargs[i] for i in arg_dict[key]}
+            kwargs[key] = kwargs[key](**d)
         if type(kwargs[key]) is bytes:
             kwargs[key] + ':' + binascii.hexlify(kwargs[key])
-    result = result(kwargs)
-    vals.append(result)
+    d = {i : kwargs[i] for i in arg_dict['result']}
+    result = result(**d)
+    vals.append(str(result))
     for key in kwargs:
-        vals.append(kwargs[key])
+        vals.append(str(kwargs[key]))
     vals = ','.join(vals)
     Reporter.Instance().publish(vals)
     return result
@@ -70,7 +71,6 @@ class Singleton:
 class Reporter:
 
     def __init__(self):
-        print rospy.get_name()
         self.pub = rospy.Publisher(
             '/threshold_information', String,) #queue_size=100)
 

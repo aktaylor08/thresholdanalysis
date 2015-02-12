@@ -13,7 +13,7 @@ from ast_tools import get_string_repr
 def instrument_thresholds(tree, thresholds, fname, code, verbose, args):
     tree = InstrumentVisitor(thresholds, fname, code, verbose).visit(tree)
     tree = add_import_statement(tree)
-    ast.fix_missing_locations(tree)
+    tree = ast.fix_missing_locations(tree)
     code = compile(tree, fname, mode='exec')
     sys.argv = [fname] + args
     ns = {'__name__': '__main__'}
@@ -59,14 +59,11 @@ class InstrumentVisitor(ast.NodeTransformer):
         if node in self.tmap:
             if isinstance(node.test, ast.Compare):
 
-                # print 'compare'
                 pass
             elif isinstance(node.test, ast.BoolOp):
                 pass
-                # print 'bool'
             elif isinstance(node.test, ast.UnaryOp):
                 pass
-                # print 'unary'
             else:
                 print type(node.test)
                 print ast.dump(node.test)
@@ -74,12 +71,14 @@ class InstrumentVisitor(ast.NodeTransformer):
                 assert False
             ccollector = ComparisionCollector(self.tmap[node], node.lineno)
             val = ccollector.visit(node.test)
-
             args = []
+            names = []
             for i in get_names(val):
                 args.append(ast.Name(id=i.id, ctx=ast.Param(), lineno=node.lineno))
-            args = ast.arguments(args=[], varag=[], kwarg=args, defaults=[], kwdefaults=[], lineno=node.lineno)
-            lv = ast.Lambda(args=args, body=node.test, lineno=node.lineno)
+                names.append(i.id)
+            args = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[])
+            lv = ast.Lambda(args=args, body=val, lineno=node.lineno)
+            ccollector.lambda_dic['result'] = names
 
             if self.debug:
                 print pprinter.dump(val)
@@ -94,23 +93,34 @@ class InstrumentVisitor(ast.NodeTransformer):
 
                 print '\n\n\n\n'
 
-            #add the function call
+            keys = []
+            values = []
+            for i in ccollector.lambda_dic:
+                keys.append(ast.Str(s=i))
+                elements = []
+                for val in ccollector.lambda_dic[i]:
+                    elements.append(ast.Str(s=val))
+                values.append(ast.List(elts=elements, ctx=ast.Load()))
+            dict_create = ast.Dict(keys=keys, values=values)
+            # add the function call
             for i in ccollector.things:
                 ast.fix_missing_locations(i)
             ast.fix_missing_locations(lv)
             name = ast.Name(id='reporting', ctx=ast.Load(lineno=node.lineno), lineno=node.lineno)
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load(lineno=node.lineno), lineno=node.lineno)
-            func_args = [ast.Str(s=self.fname, lineno=node.lineno), ast.Num(n=node.lineno, lineno=node.lineno), lv]
+
+            func_args = [ast.Str(s=self.fname, lineno=node.lineno), ast.Num(n=node.lineno, lineno=node.lineno), lv,
+                         dict_create]
 
             call = ast.Call(
                 func=attr, args=func_args, keywords=ccollector.things, starargs=None, kwargs=None, lineno=node.lineno)
 
             node.test = call
-            print pprinter.dump(node.test)
             ast.fix_missing_locations(node)
             #now make the call
 
         return node
+
 
 def get_names(node):
     ret_val = []
@@ -173,15 +183,17 @@ class ComparisionCollector(ast.NodeTransformer):
     def create_res(self, node):
         n = 'res_{:d}'.format(self.rnum)
         args = []
+        names = []
         for i in get_names(node):
             args.append(ast.Name(id=i.id, ctx=ast.Param(), lineno=self.lineno))
-        args = ast.arguments(args=[], varag=[], kwarg=args, defaults=[], kwdefaults=[], lineno=self.lineno)
+            names.append(i.id)
+        args = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[])
         lv = ast.Lambda(args=args, body=node, lineno=self.lineno)
         self.rnum += 1
         keyword = ast.keyword(arg=n, value=lv, lineno=self.lineno)
         self.things.append(keyword)
         self.information['res'].append(keyword)
-        self.lambda_dic[n] = lv
+        self.lambda_dic[n] = names
         return keyword
 
     def visit_BoolOp(self, node):
