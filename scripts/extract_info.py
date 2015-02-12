@@ -28,7 +28,6 @@ def to_dataframe(series):
     for BAG_TIME, i in series.iteritems():
         vals = i.split(',')
         time = pd.to_datetime(float(vals[0]), unit='s')
-
         times.add(time)
 
         file_name = vals[1]
@@ -41,13 +40,9 @@ def to_dataframe(series):
         add_to_data('file_name', time, file_name, indexes, data_dict)
         add_to_data('line_number', time, lineno, indexes, data_dict)
 
-        line = vals[3]
-        add_to_data('line', time, line, indexes, data_dict)
-        truth = vals[4]
-        add_to_data('result', time, truth, indexes, data_dict)
-        thresholds = vals[5]
-        add_to_data('thresholds', time, thresholds, indexes, data_dict)
-        rest = vals[6:]
+        result = bool(vals[3])
+        add_to_data('result', time, result, indexes, data_dict)
+        rest = vals[4:]
         for values in rest:
             try:
                 key, val = values.split(':')
@@ -75,14 +70,12 @@ def test_time():
     # df = rbp.bag_to_dataframe(args.bag, include=['/threshold_information'])
     data_frame = rbp.bag_to_dataframe(bag, include=topic_list)
 
-    print data_frame.columns
     if name_space == '':
         threshold_data = data_frame['threshold_information__data']
     else:
         threshold_data = data_frame[name_space + '_threshold_information__data']
 
     thresh_df = to_dataframe(threshold_data.dropna())
-    thresh_df['line'] = thresh_df['line'].apply(lambda line_str: line_str.replace(',', ' '))
     thresh_df.to_csv(file_name + '_thresh.csv', )
     data_frame[bads_goods].to_csv(file_name + '_marked.csv')
 
@@ -108,7 +101,6 @@ if __name__ == '__main__':
     if args.output is not None:
         fname = args.output
     df = rbp.bag_to_dataframe(args.bag, include=topics)
-    print df.columns
 
     if ns == '':
         data = df['threshold_information__data']
@@ -116,7 +108,6 @@ if __name__ == '__main__':
         data = df[ns + '_threshold_information__data']
 
     thresh = to_dataframe(data.dropna())
-    thresh['line'] = thresh['line'].apply(lambda value: value.replace(',', ' '))
     thresh.sort_index(inplace=True)
     thresh.to_csv(fname + '_thresh.csv', )
 

@@ -9,7 +9,8 @@ import ast
 from reaching_definition import ReachingDefinition
 from backward_analysis import get_constants, get_const_control
 from backward_analysis import get_pub_srv_calls
-from instrumentation import replace_values, instrument_thresholds
+from instrumentation import instrument_thresholds
+import json
 
 
 import networkx as nx
@@ -406,6 +407,7 @@ def main(file_name):
     args = parser.parse_args()
     with open(args.file) as openf:
         code = openf.read()
+        split_code = code.split('\n')
         tree = ast.parse(code)
         cfgvisit = BuildAllCFG(False, code=code.split('\n'))
         cfgvisit.visit(tree)
@@ -437,9 +439,30 @@ def main(file_name):
             for thresh in k.thresholds:
                 thresholds[thresh] = k.const_flow[thresh]
 
+        print thresholds
+        static_information = {}
         if not args.no_execute:
-            #replace_values(tree, thresholds, args.file, code.split('\n'), False, args.rest)
             instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
+        for i in thresholds.iterkeys():
+            info = {}
+            info['lineno'] = i.lineno
+            info['file'] = args.file
+            info['key'] = str(args.file) + ':' + str(info['lineno'])
+            idx = i.lineno - 1
+            line_code = split_code[idx].strip().lstrip()
+            while not line_code.endswith(':'):
+                idx += 1
+                line_code += split_code[idx].strip().lstrip()
+            print line_code
+            info['source_code'] = line_code
+            info['topic'] = ''
+            info['distance'] = 0
+            info['source'] = ''
+            info['comparisons'] = 0
+            info['cmap'] = {}
+            info['relation'] = []
+            static_information[info['key']] = info
+        print json.dumps(static_information)
 
 
 if __name__ == "__main__":

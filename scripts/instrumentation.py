@@ -144,6 +144,7 @@ class ComparisionCollector(ast.NodeTransformer):
     def __init__(self, thresholds, lineno):
         self.things = []
         self.thresholds = thresholds
+        self.lineno = lineno
 
         # keep track of things
         self.information = {'comp': [], 'thresh': [], 'res': [], 'vals': []}
@@ -175,7 +176,7 @@ class ComparisionCollector(ast.NodeTransformer):
     def create_val(self, node):
         n = 'value_{:d}'.format(self.vnum)
         self.vnum += 1
-        keyword = ast.keyword(arg=n, value=node, lineno=self.linenoo)
+        keyword = ast.keyword(arg=n, value=node, lineno=self.lineno)
         self.things.append(keyword)
         self.information['vals'].append(keyword)
         return keyword
