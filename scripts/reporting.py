@@ -15,12 +15,12 @@ def report(filename, lineno, result, arg_dict, *args, **kwargs):
             d = {i : kwargs[i] for i in arg_dict[key]}
             kwargs[key] = kwargs[key](**d)
         if type(kwargs[key]) is bytes:
-            kwargs[key] + ':' + binascii.hexlify(kwargs[key])
+            kwargs[key] = binascii.hexlify(kwargs[key])
     d = {i : kwargs[i] for i in arg_dict['result']}
     result = result(**d)
     vals.append(str(result))
     for key in kwargs:
-        vals.append(str(kwargs[key]))
+        vals.append(key + ':' + str(kwargs[key]).replace(',', ''))
     vals = ','.join(vals)
     Reporter.Instance().publish(vals)
     return result
