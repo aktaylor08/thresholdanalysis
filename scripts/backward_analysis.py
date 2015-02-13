@@ -225,6 +225,7 @@ class CandidateStore(object):
         self.class_vars = {}
         self.func_vars = {}
         self.var_map = {}
+        self.location_map = {}
         self.known_constants = []
 
 
@@ -233,12 +234,14 @@ class CandidateCompiler(object):
         thresholds.  Will include num literals, class variables,
         and variables within a function"""
 
-    def __init__(self, assignments, tree):
+    def __init__(self, assignments, tree, file_name):
         """build the list from found assignments"""
         self.assignments = assignments
         self.tree = tree
         self.class_vars = {}
         self.func_vars = {}
+        self.location_map = {}
+        self.file_name = file_name
         self.compile_canidates()
 
     def compile_canidates(self):
@@ -270,13 +273,17 @@ class CandidateCompiler(object):
                         if isinstance(i.assign.value, ast.Call):
                             if self.is_paramcall(i.assign.value):
                                 for_certain.add(i)
+                                self.location_map[i] = 'Parameter: ' + i.assign.value.args[0].s
 
                         # as of right now we just increment in init but
                         if i.func.name == '__init__':
                             init.add(i)
+                            self.location_map[i] = 'code: ' + self.file_name + ':' + str(i.assign.lineno)
+
                         else:
                             if self.check_only_const(i):
                                 maybe.add(i)
+                                self.location_map[i] = 'code: ' + self.file_name + ':' + str(i.assign.lineno)
                             else:
                                 elsewhere.add(i)
 
@@ -303,6 +310,7 @@ class CandidateCompiler(object):
                     else:
                         const = self.check_only_const(i.assign.value)
                         if const:
+                            self.location_map[i] = 'code: ' + self.file_name + ':' + str(i.assign.lineno)
                             if i in candidates:
                                 candidates[i] += 1
                             else:
@@ -712,8 +720,8 @@ class OutsideConstantMap(object):
 
     def add_variable(self, current_class, variable, thing):
         attr = get_objectect_from_mod_name(thing)
-        src, tree = self.get_src_and_tree(attr)
-        candidates = get_local_candidates(tree, src)
+        src, tree, fname = self.get_src_and_tree(attr)
+        candidates = get_local_candidates(tree, src, fname)
         for key, value in candidates.class_vars.iteritems():
             if isinstance(key, ast.ClassDef):
                 if key.name == thing:
@@ -751,7 +759,7 @@ class OutsideConstantMap(object):
             sc, tree = get_code_and_tree(src_file)
             self.src_repo[src_file] = sc
             self.tree_repo[src_file] = tree
-            return sc, tree
+            return sc, tree, src_file
 
 
 class OustideConstantChecker(BasicVisitor):
@@ -1566,7 +1574,7 @@ def get_outside_candidates(tree=None, src_code=None, fname=None):
     return occ
 
 
-def get_local_candidates(tree, src_code, verbose=False):
+def get_local_candidates(tree, src_code, file_name, verbose=False):
     if verbose:
         print('finding assignments')
     a = AssignFindVisitor(src_code)
@@ -1575,15 +1583,21 @@ def get_local_candidates(tree, src_code, verbose=False):
         print('done finding assignments')
     if verbose:
         print('Pruning to canidate set')
-    candidates = CandidateCompiler(a.canidates, tree)
+    candidates = CandidateCompiler(a.canidates, tree, file_name)
     return candidates
 
 
-def get_constants(tree, src_code, verbose=False, include_external=True):
+def get_constants(tree, src_code, file_name, verbose=False, include_external=True):
     cs = CandidateStore()
-    candidates = get_local_candidates(tree, src_code, verbose)
+    candidates = get_local_candidates(tree, src_code, file_name, verbose)
     cs.class_vars = candidates.class_vars
     cs.func_vars = candidates.func_vars
+    for i in cs.class_vars:
+        for j in cs.class_vars[i]:
+            cs.location_map[j] = candidates.location_map[j]
+    for i in cs.func_vars:
+        for j in cs.func_vars[i]:
+            cs.location_map[j] = candidates.location_map[j]
     if include_external:
         ext_can = get_outside_candidates(tree=tree, src_code=src_code)
         cs.known_constants = ext_can.outside_const_map.known_constants
@@ -1751,7 +1765,7 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True, res
             print('parsing file')
         src_code, tree = get_code_and_tree(fname)
         # build_call_graph(tree, src_code)
-        constants = get_constants(tree, src_code, verbose)
+        constants = get_constants(tree, src_code, fname, verbose)
         flow_store = get_cfg(tree, src_code, False)
         rd = get_reaching_definitions(tree, flow_store, verbose)
         calls = get_pub_srv_calls(tree, src_code, verbose)
@@ -1850,7 +1864,7 @@ def list_assigns(fname):
 
 def list_constants(fname):
     src_code, tree = get_code_and_tree(fname)
-    candidates = get_constants(tree, src_code)
+    candidates = get_constants(tree, src_code, fname)
     print("\nIdentified Constants in {:s}".format(fname))
     for cls in candidates.class_vars:
         print('\tClass: {:s}'.format(cls.name))
@@ -1884,7 +1898,7 @@ def list_pubs(fname):
 
 def list_constant_ifs(fname):
     src_code, tree = get_code_and_tree(fname)
-    candidates = get_constants(tree, src_code)
+    candidates = get_constants(tree, src_code, fname)
     if_visit = get_const_ifs(candidates, tree, src_code)
     print('\nIf statements with Constant Values in {:s}: '.format(fname))
     for i in if_visit.ifs:
@@ -1893,7 +1907,7 @@ def list_constant_ifs(fname):
 
 def list_constant_whiles(fname):
     src_code, tree = get_code_and_tree(fname)
-    candidates = get_constants(tree, src_code)
+    candidates = get_constants(tree, src_code, fname)
     while_visit = get_const_whiles(candidates, tree, src_code)
     print('\nWhile statements with Constant Values in {:s}: '.format(fname))
     for i in while_visit.whiles:

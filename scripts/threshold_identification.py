@@ -418,7 +418,7 @@ def main(file_name):
         ag.import_cfg(cfgvisit.store)
         ag.import_rd(rd.rds_in)
 
-        constants = get_constants(tree, code, False)
+        constants = get_constants(tree, code, args.file, False)
         const_control = get_const_control(constants, tree, code)
         for key, values in const_control.iteritems():
             ag.add_constant_ctrl(key, values)
@@ -444,9 +444,7 @@ def main(file_name):
         if not args.no_execute:
             instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
         for i in thresholds.iterkeys():
-            info = {}
-            info['lineno'] = i.lineno
-            info['file'] = args.file
+            info = {'lineno': i.lineno, 'file': args.file}
             info['key'] = str(args.file) + ':' + str(info['lineno'])
             idx = i.lineno - 1
             line_code = split_code[idx].strip().lstrip()
