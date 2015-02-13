@@ -9,7 +9,7 @@ import ast
 from reaching_definition import ReachingDefinition
 from backward_analysis import get_constants, get_const_control
 from backward_analysis import get_pub_srv_calls
-from instrumentation import instrument_thresholds
+from instrumentation import instrument_thresholds, NodeFinder, get_names
 import json
 
 
@@ -105,10 +105,36 @@ class ClassGraph(object):
         self.pub_srvs = []
         self.thresholds = set()
         self.ba_paths = {}
+        self.fa_paths = {}
 
     def is_global(self):
         """Return true if this is in the global namespace and not a class per se"""
         return self.cls_node is None
+
+    def calc_distances(self, pub):
+        queue = deque()
+        visited = set()
+        found_shortest = set()
+        distances = {}
+        queue.append((pub, 0))
+        links = self.ba_paths[pub]
+        graph = defaultdict(set)
+        for i in links:
+            graph[i[0]].add(i[1])
+        while len(queue) > 0:
+            current, distance = queue.popleft()
+            if current in self.thresholds:
+                if current not in found_shortest:
+                    distances[current] = distance
+                    found_shortest.add(current)
+            for target in graph[current]:
+                if target not in visited:
+                    visited.add(target)
+                    queue.append((target, distance + 1))
+        return distances
+
+
+
 
     def import_rd(self, class_rd):
         class_reach_defs = defaultdict(set)
@@ -394,6 +420,100 @@ class ClassGraph(object):
             nx.draw_networkx_labels(G, pos)
             plt.show()
 
+class TestInfoVisitor(ast.NodeVisitor):
+    """Class to transform the node into something
+        that instead of doing calculations pulls them out into all
+        other
+
+    """
+
+    def __init__(self, thresholds):
+        self.things = []
+        self.thresholds = thresholds
+
+        # keep track of things
+        self.information = {'comp': [], 'thresh': [], 'res': [], 'vals': []}
+        self.lambda_dic = {}
+
+        # keep track of numberings
+        self.cnum = 0
+        self.tnum = 0
+        self.rnum = 0
+        self.vnum = 0
+
+    def create_thresh(self, node):
+        n = 'thresh_{:d}'.format(self.tnum)
+        self.tnum += 1
+        self.information['thresh'].append(n)
+        self.things.append(n)
+        return n
+
+    def create_comp(self, node):
+        n = 'cmp_{:d}'.format(self.tnum)
+        self.cnum += 1
+        self.things.append(n)
+        self.information['comp'].append(n)
+        return n
+
+    def create_val(self, node):
+        n = 'value_{:d}'.format(self.vnum)
+        self.vnum += 1
+        self.things.append(n)
+        self.information['vals'].append(n)
+        return n
+
+    def create_res(self, node):
+        n = 'res_{:d}'.format(self.rnum)
+        self.rnum += 1
+        self.things.append(n)
+        self.information['res'].append(n)
+        return n
+
+    def visit_BoolOp(self, node):
+        for idx, val in enumerate(node.values):
+            # On boolean op if one of the values contains a threshold than we need to visit and transform that node
+            if self.check_contains(val):
+                self.visit(val)
+            # otherwise we can encapsulate the whole value in a name
+            else:
+                v = self.create_val(val)
+                print v
+
+    def visit_Compare(self, node):
+        # Test to see if there is any part of the node that contains the thershold.  If not just replace the node
+        if not self.check_contains(node):
+            print 'Its not in there?'
+            v = self.create_val(node)
+        # now we need to loop through and replace stuff
+        if node.left in self.thresholds:
+            t = self.create_thresh(node.left)
+        elif self.check_contains(node.left):
+            self.visit(node.left)
+        else:
+            c = self.create_comp(node.left)
+        for idx, val in enumerate(node.comparators):
+            if val in self.thresholds:
+                t = self.create_thresh(val)
+            elif self.check_contains(val):
+                self.visit(val)
+            else:
+                c = self.create_comp(node.left)
+        r = self.create_res(node)
+
+    def visit_UnaryOp(self, node):
+        if node.operand in self.thresholds:
+            self.create_thresh(node.operand)
+            self.create_comp(node.operand)
+            res = self.create_res(node.operand)
+        elif self.check_contains(node.operand):
+            self.visit(node.operand)
+        return node
+
+    def check_contains(self, node):
+        v = NodeFinder(self.thresholds)
+        v.visit(node)
+        return v.found
+
 
 def main(file_name):
     parser = argparse.ArgumentParser(description=("This is a program to find"
@@ -419,7 +539,7 @@ def main(file_name):
         ag.import_rd(rd.rds_in)
 
         constants = get_constants(tree, code, args.file, False)
-        const_control = get_const_control(constants, tree, code)
+        const_control, const_srces = get_const_control(constants, tree, code)
         for key, values in const_control.iteritems():
             ag.add_constant_ctrl(key, values)
 
@@ -434,33 +554,44 @@ def main(file_name):
             for i, k in ag.classes.iteritems():
                 k.graph_ba()
         thresholds = dict()
+        distances = dict()
 
         for i, k in ag.classes.iteritems():
             for thresh in k.thresholds:
                 thresholds[thresh] = k.const_flow[thresh]
+            for ps in k.pub_srvs:
+                d_info = k.calc_distances(ps)
+                for i in d_info:
+                    if i in distances:
+                        distances[i].append((ps, d_info))
+                    else:
+                        distances[i] = [(ps, d_info[i])]
 
-        print thresholds
         static_information = {}
         if not args.no_execute:
             instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
-        for i in thresholds.iterkeys():
-            info = {'lineno': i.lineno, 'file': args.file}
+        for thresh in thresholds.iterkeys():
+            srces = [const_srces[thresh][t] for t in thresholds[thresh]]
+            info = {'lineno': thresh.lineno, 'file': args.file}
             info['key'] = str(args.file) + ':' + str(info['lineno'])
-            idx = i.lineno - 1
+            idx = thresh.lineno - 1
             line_code = split_code[idx].strip().lstrip()
             while not line_code.endswith(':'):
                 idx += 1
                 line_code += split_code[idx].strip().lstrip()
-            print line_code
             info['source_code'] = line_code
-            info['topic'] = ''
-            info['distance'] = 0
-            info['source'] = ''
+            info['topic'] = 'unknown'
+            info['distance'] = min([d[1] for d in distances[thresh]])
+            info['source'] = srces
+
+            tiv = TestInfoVisitor(thresholds[thresh])
+            tiv.visit(thresh)
+
+
             info['comparisons'] = 0
             info['cmap'] = {}
             info['relation'] = []
             static_information[info['key']] = info
-        print json.dumps(static_information)
 
 
 if __name__ == "__main__":

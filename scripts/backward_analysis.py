@@ -511,7 +511,7 @@ class IfOrFuncVisitor(BasicVisitor):
 class ServiceFinderVisitor(BasicVisitor):
     def __init__(self):
         BasicVisitor.__init__(self)
-        self.proxies = []
+        self.proxies = {}
 
     def visit_Assign(self, node):
 
@@ -524,11 +524,12 @@ class ServiceFinderVisitor(BasicVisitor):
                             if name.startswith('self'):
                                 cv = ClassVariable(
                                     self.current_class, self.current_function, name, node)
-                                self.proxies.append(cv)
+                                self.proxies[cv] = node.value.args[0].s
                             else:
                                 fv = FunctionVariable(
                                     self.current_class, self.current_function, name, node)
                                 self.proxies.append(fv)
+                                self.proxies[fv] = node.value.args[0].s
 
 
 class ServiceCallFinder(BasicVisitor):
@@ -536,6 +537,7 @@ class ServiceCallFinder(BasicVisitor):
         BasicVisitor.__init__(self)
         self.proxies = proxies
         self.calls = []
+        self.srv_names = []
 
     def visit_Call(self, node):
         func = node.func
@@ -548,6 +550,7 @@ class ServiceCallFinder(BasicVisitor):
                 self.calls.append(
                     TreeObject(self.current_class,
                                self.current_function, self.current_expr, node))
+                self.srv_names.append(self.proxies[cv])
 
         else:
             fv = FunctionVariable(
@@ -561,6 +564,7 @@ class ServiceCallFinder(BasicVisitor):
                 self.calls.append(
                     TreeObject(self.current_class,
                                self.current_function, self.current_expr, node))
+                self.srv_names.append(self.proxies[fv])
 
 
 class PublishFinderVisitor(BasicVisitor):
@@ -571,6 +575,7 @@ class PublishFinderVisitor(BasicVisitor):
     def __init__(self):
         BasicVisitor.__init__(self)
         self.publish_calls = []
+        self.topics = []
 
     def visit_Call(self, node):
         func = node.func
@@ -579,9 +584,29 @@ class PublishFinderVisitor(BasicVisitor):
             pass
         elif isinstance(func, ast.Attribute):
             if func.attr == 'publish':
-                self.publish_calls.append(
-                    TreeObject(self.current_class,
-                               self.current_function, self.current_expr, node))
+                to = TreeObject(self.current_class, self.current_function, self.current_expr, node)
+                self.publish_calls.append(to)
+                faa = FindAssignment(self.current_class, node.func.value.attr)
+                faa.visit(self.current_class)
+                self.topics.append(faa.topic)
+
+
+class FindAssignment(BasicVisitor):
+
+    def __init__(self, t_class, attr):
+        BasicVisitor.__init__(self)
+        self.t_class = t_class
+        self.attr = attr
+        self.topic = 'unknown'
+
+    def visit_Assign(self, node):
+        if isinstance(node.targets[0], ast.Attribute):
+            if isinstance(node.targets[0].value, ast.Name):
+                if get_name(self.attr).endswith(get_name(node.targets[0].attr)):
+                    if isinstance(node.value, ast.Call):
+                        n = (get_name(node.value.func))
+                        if n == 'rospy.Publisher':
+                            self.topic = node.value.args[0].s
 
 
 class ImportFinder(ast.NodeVisitor):
@@ -662,8 +687,10 @@ class OutsidePubFinder(BasicVisitor):
     def __init__(self):
         BasicVisitor.__init__(self)
         self.publish_calls = []
+        self.topics = []
         self.in_expr = False
         self.found = False
+        self.cur_topic = ''
 
     def visit_Expr(self, node):
         self.current_expr = node
@@ -673,6 +700,8 @@ class OutsidePubFinder(BasicVisitor):
             self.publish_calls.append(
                 TreeObject(self.current_class,
                            self.current_function, self.current_expr, node))
+            self.topics.append(self.cur_topic)
+            self.cur_topic = ''
             self.found = False
         self.in_expr = False
         self.current_expr = None
@@ -680,6 +709,9 @@ class OutsidePubFinder(BasicVisitor):
     def visit_Attribute(self, node):
         if node.attr == 'publish':
             self.found = True
+            fav = FindAssignment(self.current_class, node.value)
+            fav.visit(self.current_class)
+            self.cur_topic = fav.topic
 
 
 class OutsidePublishChecker(ast.NodeVisitor):
@@ -717,6 +749,7 @@ class OutsideConstantMap(object):
         self.variable_map = dict()
         self.constant_map = defaultdict(set)
         self.total_map = defaultdict(set)
+        self.locations = {}
 
     def add_variable(self, current_class, variable, thing):
         attr = get_objectect_from_mod_name(thing)
@@ -735,6 +768,8 @@ class OutsideConstantMap(object):
         attr = get_objectect_from_mod_name(thing)
         if isinstance(attr, int) or isinstance(attr, float):
             self.known_constants.append(name)
+            fname = get_file_from_mode_name(thing)
+            self.locations[name] = 'External:' + fname
             return
         if inspect.isfunction(attr):
             # Skip functions
@@ -754,7 +789,7 @@ class OutsideConstantMap(object):
         except Exception:
             return None
         if src_file in self.src_repo:
-            return self.src_repo[src_file], self.tree_repo[src_file]
+            return self.src_repo[src_file], self.tree_repo[src_file], src_file
         else:
             sc, tree = get_code_and_tree(src_file)
             self.src_repo[src_file] = sc
@@ -794,6 +829,39 @@ class OustideConstantChecker(BasicVisitor):
 
         # self.generic_visit(node)
 
+def get_file_from_mode_name(name):
+    okay = False
+    thing = None
+    level = 1
+    backtrack = False
+    retname = 'unknown'
+    while not okay:
+        try:
+            module = '.'.join(name.split('.')[:level])
+            if backtrack:
+                rest = '.'.join(name.split('.')[level-1:])
+            else:
+                rest = '.'.join(name.split('.')[level:])
+            thing = __import__(module)
+            for i in rest.split('.'):
+                module = thing
+                thing = getattr(thing, i)
+            okay = True
+        except ImportError:
+            if backtrack:
+                return None
+            backtrack = True
+            level -= 1
+        except AttributeError:
+            level += 1
+        except ValueError:
+            return None
+        try:
+            return name + ':' + inspect.getsourcefile(thing)
+        except TypeError:
+            a = inspect.getmodule(module)
+            return a.__name__ + ':' + a.__file__
+    return retname
 
 def get_objectect_from_mod_name(name):
     okay = False
@@ -1237,17 +1305,19 @@ class IfConstantVisitor(BasicVisitor):
     """visit if statements to ID which constants are
     used in if statements"""
 
-    def __init__(self, canidates):
+    def __init__(self, canidates, ):
         BasicVisitor.__init__(self)
         self.canidates = canidates
         self.ifs = {}
+        self.const_src = {}
 
     def visit_If(self, node):
         cv = ConstantVisitor(self.canidates, self.current_class,
-                             self.current_function)
+                             self.current_function, self.canidates.location_map)
         cv.visit(node.test)
         if len(cv.consts) > 0:
             self.ifs[node] = cv.consts
+            self.const_src[node] = cv.const_sources
         self.generic_visit(node)
 
     def __repr__(self):
@@ -1271,13 +1341,15 @@ class WhileConstantVisitor(BasicVisitor):
         BasicVisitor.__init__(self)
         self.canidates = canidates
         self.whiles = {}
+        self.const_src = {}
 
     def visit_While(self, node):
         cv = ConstantVisitor(self.canidates, self.current_class,
-                             self.current_function)
+                             self.current_function, self.canidates.location_map)
         cv.visit(node.test)
         if len(cv.consts) > 0:
             self.whiles[node] = cv.consts
+            self.const_src[node] = cv.const_sources
         self.generic_visit(node)
 
     def __repr__(self):
@@ -1296,17 +1368,23 @@ class WhileConstantVisitor(BasicVisitor):
 class ConstantVisitor(BasicVisitor):
     """IDs constants from candidates and also numerical constants"""
 
-    def __init__(self, canidates, cls, func):
+    def __init__(self, canidates, cls, func, locations):
         BasicVisitor.__init__(self)
         self.exclude = False
         self.canidates = canidates
         self.consts = []
         self.current_class = cls
         self.current_function = func
+        self.locations = locations
+        self.const_sources = {}
 
     def visit_Num(self, node):
         if not self.exclude:
             self.consts.append(node)
+        if node not in self.const_sources:
+            self.const_sources[node] = ['Internal: ' + str(node.lineno)]
+        else:
+            self.const_sources[node].append('Internal: ' + str(node.lineno))
 
     def visit_Attribute(self, node):
         if isinstance(node.value, ast.Name):
@@ -1316,10 +1394,18 @@ class ConstantVisitor(BasicVisitor):
                 if self.current_class in self.canidates.class_vars:
                     if cv in self.canidates.class_vars[self.current_class]:
                         self.consts.append(node)
+                        if node not in self.const_sources:
+                            self.const_sources[node] = [self.locations[cv]]
+                        else:
+                            self.const_sources[node].append(self.locations[cv])
         if get_name(node) in self.canidates.known_constants:
+            self.consts.append(node)
             cv = ClassVariable(self.current_class, self.current_function,
                                node, node)
-            self.consts.append(node)
+            if node not in self.const_sources:
+                self.const_sources[node] = [self.locations[get_name(node)]]
+            else:
+                self.const_sources[node].append(self.locations[get_name(node)])
 
     def visit_Name(self, node):
         fv = FunctionVariable(self.current_class,
@@ -1327,6 +1413,10 @@ class ConstantVisitor(BasicVisitor):
         if self.current_class in self.canidates.func_vars:
             if fv in self.canidates.func_vars[self.current_class]:
                 self.consts.append(node)
+                if node not in self.const_sources:
+                    self.const_sources[node] = [self.locations[get_name(node)]]
+                else:
+                    self.const_sources[node].append(self.locations[get_name(node)])
 
     def visit_Call(self, node):
         self.exclude = True
@@ -1509,17 +1599,10 @@ def get_outside_calls(tree=None, file_name=None, src_code=None):
         tree = ast.parse(src_code)
         src_code = src_code.split('\n')
 
-    # print('Finding Imports')
     import_finder = ImportFinder()
     import_finder.visit(tree)
-    # for i in import_finder.names:
-    # print(i)
-    # print('Compiling import stuff')
     oc = OutsidePublishChecker(import_finder.names, src_code)
     oc.visit(tree)
-    # oc.outside_class_map.print_out()
-    # print('\nFinding outside calls')
-
     ocf = OutsideCallFinder(oc.outside_class_map)
     ocf.visit(tree)
     return ocf.outside_calls
@@ -1602,6 +1685,8 @@ def get_constants(tree, src_code, file_name, verbose=False, include_external=Tru
         ext_can = get_outside_candidates(tree=tree, src_code=src_code)
         cs.known_constants = ext_can.outside_const_map.known_constants
         cs.var_map = ext_can.outside_const_map.total_map
+        for i in ext_can.outside_const_map.locations:
+            cs.location_map[i] = ext_can.outside_const_map.locations[i]
     if verbose:
         print("\nIdentified Constants")
         for cls in cs.class_vars:
@@ -1684,16 +1769,19 @@ def get_const_whiles(candidates, tree, spcode, verbose=False):
 
 def get_const_control(constants, tree, spcode, verbose=False, ifs=True, whiles=True):
     ret_val = {}
+    const_sources = {}
     if ifs:
         v = get_const_ifs(constants, tree, spcode, verbose)
         # transfer to the return value
         for k in v.ifs:
             ret_val[k] = v.ifs[k]
+            const_sources[k] = v.const_src[k]
     if whiles:
         v = get_const_whiles(constants, tree, spcode, verbose)
         for k in v.whiles:
             ret_val[k] = v.whiles[k]
-    return ret_val
+            const_sources[k] = v.const_src[k]
+    return ret_val, const_sources
 
 
 def perform_analysis(ctrl_statements, calls, flow_store, tree, rd, verbose=False, web=False, src_code=None):
@@ -1769,7 +1857,7 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True, res
         flow_store = get_cfg(tree, src_code, False)
         rd = get_reaching_definitions(tree, flow_store, verbose)
         calls = get_pub_srv_calls(tree, src_code, verbose)
-        ctrl_statements = get_const_control(constants, tree, src_code, verbose=verbose, ifs=ifs, whiles=whiles)
+        ctrl_statements, _ = get_const_control(constants, tree, src_code, verbose=verbose, ifs=ifs, whiles=whiles)
         ba = perform_analysis(ctrl_statements, calls, flow_store, tree, rd,
                               verbose=verbose, web=False, src_code=src_code)
 
