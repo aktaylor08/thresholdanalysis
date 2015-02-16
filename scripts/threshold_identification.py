@@ -2,6 +2,7 @@
 import argparse
 
 from collections import defaultdict, deque
+import os
 import sys
 from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn, FunctionEntrance, FunctionExit
 from ast_tools import get_name, get_node_variables, ContainingVisitor
@@ -132,9 +133,6 @@ class ClassGraph(object):
                     visited.add(target)
                     queue.append((target, distance + 1))
         return distances
-
-
-
 
     def import_rd(self, class_rd):
         class_reach_defs = defaultdict(set)
@@ -432,20 +430,31 @@ class TestInfoVisitor(ast.NodeVisitor):
         self.thresholds = thresholds
 
         # keep track of things
-        self.information = {'comp': [], 'thresh': [], 'res': [], 'vals': []}
+        self.information = {'comp': [], 'thresh': [], 'res': [], 'vals': [], 'boolop': []}
         self.lambda_dic = {}
+
+        self.op_map = {}
+        self.comparisions = []
+
+        self.comps = deque()
 
         # keep track of numberings
         self.cnum = 0
         self.tnum = 0
         self.rnum = 0
         self.vnum = 0
+        self.checknum = 0
+
+    def create_boolop(self, node):
+        n = 'check_{:d}'.format(self.checknum)
+        self.checknum += 1
+        self.information['boolop'].append(n)
+        return n
 
     def create_thresh(self, node):
         n = 'thresh_{:d}'.format(self.tnum)
         self.tnum += 1
         self.information['thresh'].append(n)
-        self.things.append(n)
         return n
 
     def create_comp(self, node):
@@ -470,6 +479,8 @@ class TestInfoVisitor(ast.NodeVisitor):
         return n
 
     def visit_BoolOp(self, node):
+        bo = self.create_boolop(node)
+        slength = len(self.comps)
         for idx, val in enumerate(node.values):
             # On boolean op if one of the values contains a threshold than we need to visit and transform that node
             if self.check_contains(val):
@@ -477,34 +488,61 @@ class TestInfoVisitor(ast.NodeVisitor):
             # otherwise we can encapsulate the whole value in a name
             else:
                 v = self.create_val(val)
-                print v
+        diff = len(self.comps) - slength
+        if diff == 1:
+            self.op_map[bo] = {'size': 1, 'op': '', 'comps': [self.comps.popleft()]}
+        else:
+            d = {'size': diff, 'comps': []}
+            for _ in range(diff):
+                d.append(self.comps.popleft())
+            if isinstance(node.op, ast.And):
+                d['op'] = 'and'
+            elif isinstance(node.op, ast.Or):
+                d['op'] = 'or'
+            elif isinstance(node.op, ast.Or):
+                d['op'] = 'unknown'
+            self.op_map[bo] = d
 
     def visit_Compare(self, node):
         # Test to see if there is any part of the node that contains the thershold.  If not just replace the node
+        cdict = {'thresh': [], 'cmp': [], 'res': ''}
         if not self.check_contains(node):
             print 'Its not in there?'
             v = self.create_val(node)
         # now we need to loop through and replace stuff
         if node.left in self.thresholds:
             t = self.create_thresh(node.left)
+            cdict['thresh'].append(t)
         elif self.check_contains(node.left):
             self.visit(node.left)
         else:
             c = self.create_comp(node.left)
+            cdict['cmp'].append(c)
         for idx, val in enumerate(node.comparators):
             if val in self.thresholds:
                 t = self.create_thresh(val)
+                cdict['thresh'].append(t)
             elif self.check_contains(val):
                 self.visit(val)
             else:
                 c = self.create_comp(node.left)
+                cdict['cmp'].append(c)
         r = self.create_res(node)
+        cdict['res'] = r
+        self.comps.appendleft(cdict)
+        self.comparisions.append(cdict)
 
     def visit_UnaryOp(self, node):
         if node.operand in self.thresholds:
-            self.create_thresh(node.operand)
-            self.create_comp(node.operand)
+            cdict = {'thresh': [], 'cmp': [], 'res': ''}
+            t = self.create_thresh(node.operand)
+            c = self.create_comp(node.operand)
             res = self.create_res(node.operand)
+            cdict['res'] = res
+            cdict['thresh'].append(t)
+            cdict['cmp'].append(c)
+            self.comps.appendleft(cdict)
+            self.comparisions.append(cdict)
         elif self.check_contains(node.operand):
             self.visit(node.operand)
         return node
@@ -586,12 +624,15 @@ def main(file_name):
 
             tiv = TestInfoVisitor(thresholds[thresh])
             tiv.visit(thresh)
-
-
-            info['comparisons'] = 0
-            info['cmap'] = {}
-            info['relation'] = []
+            info['num_comparisons'] = len(tiv.comparisions)
+            info['opmap'] = tiv.op_map
+            info['comparisons'] = tiv.comparisions
             static_information[info['key']] = info
+        fname,_ = os.path.splitext(args.file)
+        f = fname + '_thresh_info.json'
+        with open(f, 'w') as json_out:
+            json.dump(static_information, json_out)
+
 
 
 if __name__ == "__main__":
