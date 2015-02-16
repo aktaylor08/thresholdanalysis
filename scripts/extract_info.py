@@ -40,7 +40,7 @@ def to_dataframe(series):
         add_to_data('file_name', time, file_name, indexes, data_dict)
         add_to_data('line_number', time, lineno, indexes, data_dict)
 
-        result = bool(vals[3])
+        result = vals[3] == 'True'
         add_to_data('result', time, result, indexes, data_dict)
         rest = vals[4:]
         for values in rest:
