@@ -494,7 +494,7 @@ class TestInfoVisitor(ast.NodeVisitor):
         else:
             d = {'size': diff, 'comps': []}
             for _ in range(diff):
-                d.append(self.comps.popleft())
+                d['comps'].append(self.comps.popleft())
             if isinstance(node.op, ast.And):
                 d['op'] = 'and'
             elif isinstance(node.op, ast.Or):
@@ -508,6 +508,8 @@ class TestInfoVisitor(ast.NodeVisitor):
         cdict = {'thresh': [], 'cmp': [], 'res': ''}
         if not self.check_contains(node):
             print 'Its not in there?'
+            return
+
             v = self.create_val(node)
         # now we need to loop through and replace stuff
         if node.left in self.thresholds:
@@ -606,8 +608,6 @@ def main(file_name):
                         distances[i] = [(ps, d_info[i])]
 
         static_information = {}
-        if not args.no_execute:
-            instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
         for thresh in thresholds.iterkeys():
             srces = [const_srces[thresh][t] for t in thresholds[thresh]]
             info = {'lineno': thresh.lineno, 'file': args.file}
@@ -623,7 +623,7 @@ def main(file_name):
             info['source'] = srces
 
             tiv = TestInfoVisitor(thresholds[thresh])
-            tiv.visit(thresh)
+            tiv.visit(thresh.test)
             info['num_comparisons'] = len(tiv.comparisions)
             info['opmap'] = tiv.op_map
             info['comparisons'] = tiv.comparisions
@@ -632,6 +632,9 @@ def main(file_name):
         f = fname + '_thresh_info.json'
         with open(f, 'w') as json_out:
             json.dump(static_information, json_out)
+
+        if not args.no_execute:
+            instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
 
 
 
