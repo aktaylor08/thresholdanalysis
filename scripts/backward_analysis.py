@@ -1403,9 +1403,9 @@ class ConstantVisitor(BasicVisitor):
             cv = ClassVariable(self.current_class, self.current_function,
                                node, node)
             if node not in self.const_sources:
-                self.const_sources[node] = [self.locations[get_name(node)]]
+                self.const_sources[node] = [self.locations[cv]]
             else:
-                self.const_sources[node].append(self.locations[get_name(node)])
+                self.const_sources[node].append(self.locations[cv])
 
     def visit_Name(self, node):
         fv = FunctionVariable(self.current_class,
@@ -1414,9 +1414,9 @@ class ConstantVisitor(BasicVisitor):
             if fv in self.canidates.func_vars[self.current_class]:
                 self.consts.append(node)
                 if node not in self.const_sources:
-                    self.const_sources[node] = [self.locations[get_name(node)]]
+                    self.const_sources[node] = [self.locations[fv]]
                 else:
-                    self.const_sources[node].append(self.locations[get_name(node)])
+                    self.const_sources[node].append(self.locations[fv])
 
     def visit_Call(self, node):
         self.exclude = True
