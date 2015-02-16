@@ -627,6 +627,9 @@ def main(file_name):
             info['num_comparisons'] = len(tiv.comparisions)
             info['opmap'] = tiv.op_map
             info['comparisons'] = tiv.comparisions
+            info['thresh'] = tiv.information['thresh']
+            info['res'] = tiv.information['res']
+            info['comp'] = tiv.information['comp']
             static_information[info['key']] = info
         fname,_ = os.path.splitext(args.file)
         f = fname + '_thresh_info.json'
