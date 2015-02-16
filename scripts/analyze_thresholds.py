@@ -5,7 +5,6 @@ import json
 
 import os
 import datetime
-import sys
 from threading import Thread
 
 import pandas as pd
@@ -163,26 +162,21 @@ class ThresholdInfoPanel(wx.Panel):
         self.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.handle_right_click)
 
     def handle_right_click(self, event):
-        current_item = event.m_itemIndex
         menu = wx.Menu()
         menu.Append(SHOW_CODE_ID, "Show Source Code")
         wx.EVT_MENU(menu, SHOW_CODE_ID, self.menu_select_callback)
         self.PopupMenu(menu, event.GetPoint())
         menu.Destroy()
 
-
     def menu_select_callback(self, event):
         op = event.GetId()
 
         if op == SHOW_CODE_ID:
             fname, line = self._selected.stmt_key.split(':')
-            code = ''
             if os.path.exists(fname):
                 with open(fname) as src_file:
                     lines = src_file.readlines()
                     code = ''.join(lines[int(line) - 3:int(line) + 3])
-
-
             else:
                 code = 'Could not find file {:s}'.format(fname)
             wx.MessageBox(code, "Source Code", wx.OK)
@@ -314,7 +308,6 @@ class ThresholdAnalysisModel(object):
 
         self.advanced_results = None
         self.no_advanced_results = None
-
 
         # wx notification stuff
         self._notify_window = master_window
@@ -461,8 +454,8 @@ class ThresholdAnalysisModel(object):
                     threshs = thresh_information['thresh']
                     ress = thresh_information['res']
                     comps = thresh_information['comp']
-                    opmap = thresh_information['opmap']
-                    comparisons = thresh_information['comparisons']
+                    # opmap = thresh_information['opmap']
+                    # comparisons = comparisons['comparisons']
 
                     graph_list = []
                     if size > 1:
@@ -474,10 +467,10 @@ class ThresholdAnalysisModel(object):
                                 score = (marked_time - stuff[-1]).total_seconds()
                                 c = comps[i]
                                 t = threshs[i]
-                                if not isinstance(c, str) and not isinstance(c, unicode) or not isinstance(t,
-                                                                                                           str) and not isinstance(
-                                        t, unicode):
-                                    raise NotImplementedError('Handling multiple comps or thresholds not implmented')
+
+                                if not isinstance(c, str) and not isinstance(c, unicode) or \
+                                                not isinstance(t, str) and not isinstance( t, unicode):
+                                    raise NotImplementedError('Handling multiple comps or thresholds not implemented')
                                 k1 = c
                                 k2 = t
                                 suggestion, graph_info = plot_and_analyze(windowed_threshold, k1, k2, marked_time,
@@ -523,13 +516,12 @@ class ThresholdAnalysisModel(object):
 
                 f_name, lineno = key.split(':')
                 thresh_information = self.static_info[f_name][key]
-                size = len(thresh_information['res'])
                 threshs = thresh_information['thresh']
                 ress = thresh_information['res']
-                comps = thresh_information['comp']
-                opmap = thresh_information['opmap']
+                # size = len(thresh_information['res'])
+                # comps = thresh_information['comp']
+                # opmap = thresh_information['opmap']
                 comparisons = thresh_information['comparisons']
-
 
                 # skip NaN index -> Do not have a record of the threshold at this point in time
                 if isinstance(idx, float):
@@ -636,6 +628,7 @@ class ThresholdAnalysisModel(object):
         for j in self.advanced_results:
             self.compiled_results.append(self.advanced_results[j])
             self.result_dict[j] = self.advanced_results[j]
+
 
 def plot_and_analyze(windowed_threshold, k1, k2, marked_time, thresh_name, st, et):
     """Add graphics to the graph and also return if the value should be raised or lowered"""
@@ -751,6 +744,7 @@ class ThreshInfoStore(object):
     def drop_low_scores(self, req_score):
         self.thresh_list = filter(lambda x: x.score > req_score, self.thresh_list)
 
+
 def get_series_flops(series):
     """Get the flops in a series of values
     Will return times of every time the series changes from True to False"""
@@ -786,6 +780,7 @@ def ts_to_sec(ts, epoch=datetime.datetime.utcfromtimestamp(0)):
     except:
         return np.NaN
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Show information on the user marks')
     parser.add_argument('-t', '--thresholds', required=True)
@@ -800,5 +795,3 @@ if __name__ == '__main__':
     frame.run_analysis()
     frame.Show()
     app.MainLoop()
-
-
