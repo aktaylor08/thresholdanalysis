@@ -23,6 +23,7 @@ def get_name(attr, start=str()):
         name = ''
     return name
 
+
 def get_repr(attr, start=str()):
     """get the name recursively defined"""
     if isinstance(attr, ast.Name):
