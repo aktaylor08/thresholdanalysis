@@ -23,6 +23,18 @@ def get_name(attr, start=str()):
         name = ''
     return name
 
+def get_repr(attr, start=str()):
+    """get the name recursively defined"""
+    if isinstance(attr, ast.Name):
+        name = attr.id
+    elif isinstance(attr, ast.Attribute):
+        name = get_name(attr.value, start) + '.' + get_name(attr.attr, start)
+    elif isinstance(attr, str):
+        name = attr
+    elif isinstance(attr, ast.Num):
+        name = str(attr.n)
+    return name
+
 
 def get_node_names(node):
     """Get names involved with a node"""

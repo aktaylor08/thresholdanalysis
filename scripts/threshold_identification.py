@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 import os
 import sys
 from cfg_analysis import BuildAllCFG, FunctionCall, FunctionReturn, FunctionEntrance, FunctionExit
-from ast_tools import get_name, get_node_variables, ContainingVisitor
+from ast_tools import get_name, get_node_variables, ContainingVisitor, get_repr
 import ast
 from reaching_definition import ReachingDefinition
 from backward_analysis import get_constants, get_const_control
@@ -609,7 +609,9 @@ def main(file_name):
 
         static_information = {}
         for thresh in thresholds.iterkeys():
-            srces = [const_srces[thresh][t] for t in thresholds[thresh]]
+            sources = [const_srces[thresh][t] for t in thresholds[thresh]]
+            names = [get_repr(x) for x in thresholds[thresh]]
+            print names
             info = {'lineno': thresh.lineno, 'file': args.file}
             info['key'] = str(args.file) + ':' + str(info['lineno'])
             idx = thresh.lineno - 1
@@ -620,7 +622,8 @@ def main(file_name):
             info['source_code'] = line_code
             info['topic'] = 'unknown'
             info['distance'] = min([d[1] for d in distances[thresh]])
-            info['source'] = srces
+            info['sources'] = sources
+            info['names'] = names
 
             tiv = TestInfoVisitor(thresholds[thresh])
             tiv.visit(thresh.test)
