@@ -71,8 +71,9 @@ class ThresholdGraphPanel(wx.Panel):
                 ax_range = a[1] - a[0]
                 ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
                 ax.axvline(x=result.time, linestyle='--', linewidth=2, c='r')
-                ax.text(0.95, 0.01, result.graph.suggestions[i], verticalalignment='bottom', horizontalalignment='right',
-                         transform=ax.transAxes, color='g', fontsize=16)
+                ax.text(0.95, 0.01, result.graph.suggestions[i], verticalalignment='bottom',
+                        horizontalalignment='right',
+                        transform=ax.transAxes, color='g', fontsize=16)
                 ax.set_title(result.graph.names[i])
 
                 if i != size - 1:
@@ -396,7 +397,6 @@ class ResultStore(object):
 
 
 class GraphStorage(object):
-
     def __init__(self):
         self.index = None
         self.data = {}
@@ -537,7 +537,6 @@ class ThresholdAnalysisModel(object):
         self.marks = sorted(marks, key=lambda x: x.time)
         self.post_notification('Done finding user marks')
 
-
     def compute_results(self):
         for i in self.marks:
             if i.isaction:
@@ -569,7 +568,7 @@ class ThresholdAnalysisModel(object):
             elapsed_times[key] = elapsed
 
         # get maximum time to last flop...
-        max_time = max([x for x in elapsed_times.itervalues()])
+        # max_time = max([x for x in elapsed_times.itervalues()])
         groups = thresh_df.groupby('key')
         for key, data in groups:
             elapsed = elapsed_times[key]
@@ -583,7 +582,7 @@ class ThresholdAnalysisModel(object):
                 srcs = thresh_information['sources']
                 comparisions = thresh_information['comparisons']
 
-                # enumerate all of the thresholds and comparisions in the file..
+                # enumerate all of the thresholds and comparisons in the file..
                 graph = GraphStorage()
                 graph_map = {i['res']: i for i in thresh_information['comparisons']}
                 graph.graph_map = graph_map
@@ -607,7 +606,7 @@ class ThresholdAnalysisModel(object):
                     # build up the result
                     one_result = AnalysisResult()
 
-                    # store infomation
+                    # store information
                     one_result.threshold = comp['thresh'][0]
                     thresh_idx = threshs.index(one_result.threshold)
                     one_result.source = srcs[thresh_idx]
@@ -644,10 +643,8 @@ class ThresholdAnalysisModel(object):
         thresh_df = self.get_thresh_df()
         maxes = thresh_df.groupby('key').max()
         mins = thresh_df.groupby('key').min()
-        temp_res = {}
         for key, data in thresh_df.groupby('key'):
             calc_data = data.between_time(time - datetime.timedelta(seconds=time_limit), time)
-            needed_info = []
             # get static information
             f_name, lineno = key.split(':')
             thresh_information = self._static_info.get_static_info(f_name)[key]
@@ -662,7 +659,6 @@ class ThresholdAnalysisModel(object):
             graph_map = {i['res']: i for i in thresh_information['comparisons']}
             graph.graph_map = graph_map
 
-            needed_values = []
             # calculate scores here
             for idx, comp in enumerate(comparisions):
                 if len(comp['thresh']) > 1:
@@ -675,7 +671,7 @@ class ThresholdAnalysisModel(object):
                 cseries = calc_data[c]
                 const = data[t]
                 if maxval - minval != 0:
-                    cseries = (cseries- minval) / (maxval - minval)
+                    cseries = (cseries - minval) / (maxval - minval)
                     const = (const - minval) / (maxval - minval)
                 else:
                     cseries.loc[:] = .5
@@ -688,7 +684,7 @@ class ThresholdAnalysisModel(object):
                 flop_in_series += 1
                 different = 0
 
-                # caculate the number of different values on each of the other tresholds.
+                # calculate the number of different values on each of the other thresholds.
                 if thresh_information['num_comparisons'] > 1:
                     comptype = thresh_information['opmap'][thresh_information['opmap'].keys()[0]]['op']
                     val_here = calc_data[res].tail(1).values[0]
@@ -697,7 +693,7 @@ class ThresholdAnalysisModel(object):
                             last_value = calc_data[r].tail(1)
                             if val_here != last_value:
                                 different += 1
-                #get rid of dividing my zero problem
+                # get rid of dividing by zero problem
                 different += 1
                 d = thresh_information['distance']
                 md = self._static_info.get_max_distance()
@@ -708,8 +704,8 @@ class ThresholdAnalysisModel(object):
                 d_score = d / float(md)
                 if d_score == 0:
                     d_score = 1
-                score = (dist / (d_score)) * flop_in_series * (different / num_comparisions)
-                #s = (i['distance'] + i['flop_count']) / (1 + match_count)
+                score = (dist / d_score) * flop_in_series * (different / num_comparisions)
+                # s = (i['distance'] + i['flop_count']) / (1 + match_count)
                 suggestion = 'Raise'
 
                 one_result = AnalysisResult()
@@ -726,7 +722,8 @@ class ThresholdAnalysisModel(object):
 
                 one_result.graph_map = graph_map
                 one_result.graph = graph
-                graph_data = data.between_time(time - datetime.timedelta(seconds=graph_limit), time + datetime.timedelta(seconds=graph_limit))
+                graph_data = data.between_time(time - datetime.timedelta(seconds=graph_limit),
+                                               time + datetime.timedelta(seconds=graph_limit))
                 graph.index = graph_data.index
                 graph.names.append(names[thresh_idx])
                 graph.suggestions.append(suggestion)
@@ -748,126 +745,21 @@ class ThresholdAnalysisModel(object):
 
 
 class AnalysisResult(object):
-
+    """Object to hold results"""
     def __init__(self):
+        """Init with all of the data values it stores set to none"""
         self.graph_index = None
         self.graph_data = {}
-
-
-def plot_and_analyze(windowed_threshold, k1, k2, marked_time, thresh_name, st, et):
-    """Add graphics to the graph and also return if the value should be raised or lowered"""
-    # get if the value is high or low
-    # before
-    before = windowed_threshold.between_time(st, marked_time)
-    after = windowed_threshold.between_time(marked_time, et)
-    diff_b = before[k1].astype('float') - before[k2].astype('float')
-    diff_after = after[k1].astype('float') - after[k2].astype('float')
-    diff_b = diff_b.mean()
-    diff_after = diff_after.mean()
-    if diff_b > 0:
-        if diff_after > 0:
-            suggestion = 'Raise!'
-        else:
-            suggestion = 'raise'
-    else:
-        if diff_after < 0:
-            suggestion = 'Lower!'
-        else:
-            suggestion = 'lower'
-
-    idx = windowed_threshold.loc[:, k1].index
-    s = [windowed_threshold.loc[:, k1].astype('float').values, windowed_threshold.loc[:, k2].astype('float').values]
-    snames = ['Compare Value', thresh_name]
-    v = idx.asof(marked_time)
-    mid = windowed_threshold.loc[v, k1]
-    mid = float(mid)
-
-    graph_info = GraphInfo(idx, s, snames, [[marked_time], [mid]], suggestion, thresh_name)
-    return suggestion, graph_info
-
-
-class GraphInfo(object):
-    """Simple class that holds information that is needed to quickly create graphics"""
-
-    def __init__(self, index, series, names, scatter_data, suggestion, threshold_name):
-        self.index = index
-        self.series = series
-        self.names = names
-        self.scatter_data = scatter_data
-        self.suggestion = suggestion
-        self.threshold_name = threshold_name
-
-
-class ThreshStatement(object):
-    """"Contains information about thresholds and statemetns in the source code in one
-    location"""
-
-    def __init__(self, threshold, src, stmt_key, score, suggestion=None):
-        self.threshold = threshold
-        self.source = src
-        self.stmt_key = stmt_key
-        self.score = score
-        self.suggestion = suggestion
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __str__(self):
-        return '{:f} {:s} {:s}'.format(self.score, self.threshold, self.stmt_key)
-
-
-class ThreshInfoStore(object):
-    """Store that will contain all of the information about one marked time of threshold information"""
-
-    def __init__(self, mtime, advance):
-        self.advance = advance
-        if advance:
-            self.label = 'Action'
-        else:
-            self.label = 'No Action'
-        self.mtime = mtime
-        self._stmt_map = {}
-        self._thresh_map = {}
-        self.graph_map = {}
-        self.thresh_list = []
-        self.sorted = False
-
-    def import_data(self, thresholds):
-        for i in thresholds:
-            self.import_thresh(i)
-
-    def sort(self):
-        self.thresh_list = sorted(self.thresh_list, key=lambda x: x.score)
-        self.sorted = True
-
-    def import_thresh(self, incoming):
-        self.thresh_list.append(incoming)
-        self.sorted = False
-
-        # put it in this map
-        if incoming.stmt_key in self._stmt_map:
-            self._stmt_map[incoming.stmt_key].append(incoming)
-        else:
-            self._stmt_map[incoming.stmt_key] = [incoming]
-
-        # put it in this map
-        if incoming.threshold in self._thresh_map:
-            self._thresh_map[incoming.threshold].append(incoming)
-        else:
-            self._thresh_map[incoming.threshold] = [incoming]
-
-    def get_entries(self, key, threshold):
-        vals = []
-        for i in self.thresh_list:
-            if i.stmt_key == key and i.threshold == threshold:
-                vals.append(i)
-        return vals
-
-    def add_graph(self, key, info):
-        self.graph_map[key] = info
-
-    def drop_low_scores(self, req_score):
-        self.thresh_list = filter(lambda x: x.score > req_score, self.thresh_list)
+        self.threshold = None
+        self.source = None
+        self.name = None
+        self.score = None
+        self.suggestion = None
+        self.time = None
+        self.stmt_key = None
+        self.highlight = None
+        self.graph_map = None
+        self.graph = None
 
 
 def get_series_flops(series):
