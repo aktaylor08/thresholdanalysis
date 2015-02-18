@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
-
+import matplotlib.pyplot as plt
 # noinspection PyUnresolvedReferences
 import wx
 # noinspection PyUnresolvedReferences
@@ -559,8 +559,9 @@ class ThresholdAnalysisModel(object):
         # get data
         thresh_df = self.get_thresh_df().between_time(st, et)
         calc_data = self.get_thresh_df().between_time(st, time)
+        calc_groups = calc_data.groupby('key')
         elapsed_times = {}
-        for key, data in calc_data.groupby('key'):
+        for key, data in calc_groups:
             # calculate how long it has been since the last flop
             lf = data.tail(1)['last_flop'][0]
             tdelta = time - data.tail(1).index[0]
@@ -601,7 +602,7 @@ class ThresholdAnalysisModel(object):
                     score = elapsed
 
                     # Compute the suggestion...still needs work
-                    sugestion = 'Raise'
+                    sugestion = self.get_suggestion(time, data, comp['cmp'][0],  comp['thresh'][0], res,  True)
 
                     # build up the result
                     one_result = AnalysisResult()
@@ -631,6 +632,46 @@ class ThresholdAnalysisModel(object):
 
         self.post_notification("Done with advance result")
         return results
+
+    def get_suggestion(self, time, data, comp_key, thresh_key, res_key, action):
+        """Get a suggestion based on other values"""
+        suggestion = ''
+
+        #TODO this still needs some work..
+        if action:
+            lf = get_series_flops(data.between_time(time - datetime.timedelta(seconds=self.analysis_parameters['no_action_time_limit']), time)[res_key])
+            if len(lf) == 0:
+                comp = data[comp_key]
+                thresh = data[thresh_key]
+                over = len(comp[comp < thresh])
+                under = len(comp) - over
+                if over > under:
+                    suggestion = 'Raise'
+                else:
+                    suggestion = 'Lower'
+            else:
+                comp = data.loc[lf[-1], comp_key]
+                thresh = data.loc[lf[-1], thresh_key]
+                if comp > thresh:
+                    suggestion = 'Raise'
+                else:
+                    suggestion = 'Lower'
+        else:
+            lf = get_series_flops(data[res_key])
+            if len(lf) > 0:
+                print 'asdfjaslj'
+                data = data.between_time(lf[-1], time)
+            comp = data[comp_key]
+            thresh = data[thresh_key]
+            above = len(comp[comp.values < thresh.values])
+            below = len(comp[comp.values > thresh.values])
+            if above > below:
+                suggestion = 'Lower'
+            else:
+                suggestion = 'Raise'
+
+        return suggestion
+
 
     def get_no_advance_results(self, mark):
         results = []
@@ -706,7 +747,8 @@ class ThresholdAnalysisModel(object):
                     d_score = 1
                 score = (dist / d_score) * flop_in_series * (different / num_comparisions)
                 # s = (i['distance'] + i['flop_count']) / (1 + match_count)
-                suggestion = 'Raise'
+
+                suggestion = self.get_suggestion(time, calc_data, comp['cmp'], comp['thresh'], res, False)
 
                 one_result = AnalysisResult()
 
