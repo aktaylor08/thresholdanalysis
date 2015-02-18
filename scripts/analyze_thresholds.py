@@ -640,6 +640,7 @@ class ThresholdAnalysisModel(object):
             threshs = thresh_information['thresh']
             names = thresh_information['names']
             srcs = thresh_information['sources']
+            ress = thresh_information['res']
             comparisions = thresh_information['comparisons']
 
             # enumerate all of the thresholds and comparisions in the file..
@@ -650,11 +651,11 @@ class ThresholdAnalysisModel(object):
             needed_values = []
             # calculate scores here
             for idx, comp in enumerate(comparisions):
-                info =  {}
                 if len(comp['thresh']) > 1:
                     print 'Error Cannot handle multiple thresh in one comparision...'
                 t = comp['thresh'][0]
                 c = comp['cmp'][0]
+                res = comp['res']
                 maxval = max(maxes.loc[key, t], maxes.loc[key, c])
                 minval = min(mins.loc[key, t], mins.loc[key, c])
                 cseries = data[c]
@@ -669,8 +670,20 @@ class ThresholdAnalysisModel(object):
                 dist = np.sqrt(dist * dist).mean()
                 if dist == 0:
                     dist = 999
-                info['difference'] = dist
-                info['flop_count'] = get_series_flops(data[comp['res']])
+                flop_in_series = len(get_series_flops(data[res]))
+                if thresh_information['num_comparisons'] > 1:
+                    for r in ress:
+                        if r != res:
+                            print '\t\t', r
+                else:
+                    print 'no othas'
+
+
+
+
+
+                print comp
+                print thresh_information
 
 
                 #TODO Caclulate score and a few other things here and store the information
