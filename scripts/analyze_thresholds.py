@@ -33,10 +33,11 @@ SHOW_CODE_ID = wx.NewId()
 
 
 class ThresholdGraphPanel(wx.Panel):
-    def __init__(self, parent):
+    def __init__(self, parent, model):
         wx.Panel.__init__(self, parent, -1)  # ), size=(50, 50))
 
         self.figure = matplotlib.figure.Figure()
+        self.model = model
         self.figure.add_subplot(111)
         self.canvas = FigureCanvas(self, -1, self.figure)
 
@@ -44,30 +45,33 @@ class ThresholdGraphPanel(wx.Panel):
         hbox.Add(self.canvas, proportion=1, flag=wx.EXPAND)
         self.SetSizer(hbox)
 
-    def update_graphic(self, info_store):
-        size = len(info_store)
+    def update_graphic(self, result):
+        size = len(result.graph_map)
         self.figure.clear()
         if size == 0:
             self.figure.add_subplot(111)
         else:
-            for i in range(size):
+            for i, res in enumerate(result.graph.graph_map):
+                info = result.graph.graph_map[res]
                 if i == 0:
                     ax = self.figure.add_subplot(size, 1, i + 1)
                     old_ax = ax
                 else:
                     # noinspection PyUnboundLocalVariable
                     ax = self.figure.add_subplot(size, 1, i + 1, sharex=old_ax)
-                gi = info_store[i]
-                index = gi.index
-                for z_val in zip(gi.names, gi.series):
-                    ax.plot(index, z_val[1], label=z_val[0], linewidth=3)
+                index = result.graph.index
+                for series in info['cmp']:
+                    ax.plot(index, result.graph.data[series], label=series, linewidth=3)
+                for series in info['thresh']:
+                    ax.plot(index, result.graph.data[series], label=series, linewidth=3)
+
                 a = ax.get_ylim()
                 ax_range = a[1] - a[0]
                 ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
-                ax.axvline(x=gi.scatter_data[0], linestyle='--', linewidth=2, c='r')
-                ax.text(0.95, 0.01, gi.suggestion, verticalalignment='bottom', horizontalalignment='right',
-                        transform=ax.transAxes, color='g', fontsize=16)
-                ax.set_title(gi.threshold_name)
+                ax.axvline(x=result.time, linestyle='--', linewidth=2, c='r')
+                ax.text(0.95, 0.01, result.graph.suggestions[i], verticalalignment='bottom', horizontalalignment='right',
+                         transform=ax.transAxes, color='g', fontsize=16)
+                ax.set_title(result.graph.names[i])
 
                 if i != size - 1:
                     for tick in ax.xaxis.get_major_ticks():
@@ -93,9 +97,10 @@ class ThresholdGraphPanel(wx.Panel):
 
 
 class UserMarkPanel(wx.Panel):
-    def __init__(self, parent, notify_window):
+    def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
+        self.model = model
         self._list_ctrl = AutoWidthListCtrl(
             self)  # wx.ListCtrl(self, size=(-1, -1), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
 
@@ -110,23 +115,25 @@ class UserMarkPanel(wx.Panel):
 
         self._selected = None
 
-    def add_marks(self, stores):
-        # Clear everything out
+    def rebuild_list(self):
         self._row_dict.clear()
+        self._list_ctrl.DeleteAllItems()
         self._selected = None
-        for idx, res in enumerate(sorted(stores, key=lambda x: x.mtime)):
+        for idx, res in enumerate(self.model.marks):
             self._list_ctrl.InsertStringItem(idx, res.label)
-            self._list_ctrl.SetStringItem(idx, 1, str(res.mtime))
+            self._list_ctrl.SetStringItem(idx, 1, str(res.time))
             self._row_dict[idx] = res
 
     def on_item_selected(self, event):
         current_item = event.m_itemIndex
         val = self._row_dict[current_item]
         self._selected = val
-        wx.PostEvent(self._notify_window, MarkSelectedEvent(store=val))
+        wx.PostEvent(self._notify_window, MarkSelectedEvent(index=val))
 
     def get_graphical_information(self, threshold_store):
         if self._selected is not None:
+            print self._selected
+            print dir(self._selected)
             return self._selected.graph_map[threshold_store.stmt_key]
         else:
             return None
@@ -139,18 +146,20 @@ class AutoWidthListCtrl(wx.ListCtrl, ListCtrlAutoWidthMixin):
 
 
 class ThresholdInfoPanel(wx.Panel):
-    def __init__(self, parent, notify_window):
+    def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
+        self.model = model
 
         # self._list_ctrl = wx.ListCtrl(self, size=(-1, 100), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
         self._list_ctrl = AutoWidthListCtrl(self)
 
         self._list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
         self._list_ctrl.InsertColumn(0, "Threshold")
-        self._list_ctrl.InsertColumn(1, "Score")
-        self._list_ctrl.InsertColumn(2, "Suggestion")
-        self._list_ctrl.InsertColumn(3, "Location")
+        self._list_ctrl.InsertColumn(1, "Source")
+        self._list_ctrl.InsertColumn(2, "Score")
+        self._list_ctrl.InsertColumn(3, "Suggestion")
+        self._list_ctrl.InsertColumn(4, "Location")
 
         self._row_dict = {}
 
@@ -183,25 +192,26 @@ class ThresholdInfoPanel(wx.Panel):
         else:
             pass
 
-    def add_thresholds(self, store):
+    def add_thresholds(self, index):
         # Clear everything out
-        if not store.sorted:
-            store.sort()
+        results = self.model.get_results(index)
+        results = sorted(results, key=lambda x: x.score)
         self._row_dict.clear()
         self._list_ctrl.DeleteAllItems()
         self._selected = None
-        for idx, res in enumerate(store.thresh_list):
-            self._list_ctrl.InsertStringItem(idx, str(res.threshold))
-            self._list_ctrl.SetStringItem(idx, 1, str(res.score))
-            self._list_ctrl.SetStringItem(idx, 2, str(res.suggestion))
-            self._list_ctrl.SetStringItem(idx, 3, str(res.stmt_key))
+        for idx, res in enumerate(results):
+            self._list_ctrl.InsertStringItem(idx, str(res.name))
+            self._list_ctrl.SetStringItem(idx, 1, str(res.source))
+            self._list_ctrl.SetStringItem(idx, 2, str(res.score))
+            self._list_ctrl.SetStringItem(idx, 3, str(res.suggestion))
+            self._list_ctrl.SetStringItem(idx, 4, str(res.stmt_key))
             self._row_dict[idx] = res
 
     def on_item_selected(self, event):
         current_item = event.m_itemIndex
         val = self._row_dict[current_item]
         self._selected = val
-        wx.PostEvent(self._notify_window, ThresholdSelected(threshold=val))
+        wx.PostEvent(self._notify_window, ThresholdSelected(result=val))
 
 
 class ThresholdFrame(wx.Frame):
@@ -216,10 +226,10 @@ class ThresholdFrame(wx.Frame):
         self.top_bottom = wx.SplitterWindow(self.left_right)
 
         # marking list self argument for which panel to notify -- ie this window
-        self.mark_panel = UserMarkPanel(self.left_right, self)
+        self.mark_panel = UserMarkPanel(self.left_right, self, self.analysis_model)
 
-        self.graph_area = ThresholdGraphPanel(self.top_bottom)
-        self.thresh_info_area = ThresholdInfoPanel(self.top_bottom, self)
+        self.graph_area = ThresholdGraphPanel(self.top_bottom, self.analysis_model)
+        self.thresh_info_area = ThresholdInfoPanel(self.top_bottom, self, self.analysis_model)
 
         # set up splitters
         self.left_right.SplitVertically(self.mark_panel, self.top_bottom, 200)
@@ -244,20 +254,14 @@ class ThresholdFrame(wx.Frame):
     def on_result(self, event):
         self.status_bar.SetStatusText(event.data)
         if event.data == 'Done':
-            self.mark_panel.add_marks(self.analysis_model.compiled_results)
+            self.mark_panel.rebuild_list()
 
     def on_mark_selected(self, event):
         self.graph_area.clear_graphic()
-        self.thresh_info_area.add_thresholds(event.store)
+        self.thresh_info_area.add_thresholds(event.index)
 
     def on_threshold_selected(self, event):
-        g = self.mark_panel.get_graphical_information(event.threshold)
-        self.graph_area.update_graphic(g)
-
-
-def load_static_info(fname):
-    with open(fname, 'r') as open_f:
-        return json.load(open_f)
+        self.graph_area.update_graphic(event.result)
 
 
 class AnalysisThread(Thread):
@@ -272,16 +276,119 @@ class AnalysisThread(Thread):
         self.analysis_results = []
 
     def run(self):
+        self.model.load_mark_times()
         self.model.load_data()
         self.model.get_flop_information()
-        self.model.get_times()
-        self.model.handle_advance()
-        self.model.handle_no_advance()
-        self.model.compile_list()
+        self.model.compute_results()
         wx.PostEvent(self._notify_window, AnalysisResultEvent(data='Done'))
 
     def abort(self):
         self._want_abort = 1
+
+
+class ThresholdBackgroundNode(object):
+    def __init__(self):
+        self.dirty = False
+
+
+def take2(arr):
+    s = 0
+    n = s + 2
+    while n <= len(arr):
+        v = arr[s:n]
+        s = n
+        n = s + 2
+        yield v
+
+
+class StaticInfoMap(object):
+    """Class that handles everything that has to do with the static
+    info that is produced by parsing and threshold identification process"""
+
+    def __init__(self, file_map):
+        self._info = {}
+        if file_map is not None:
+            for k, f in take2(file_map):
+                self._load_file_info(k, f)
+
+    def get_static_info(self, key_name):
+        if key_name in self._info:
+            return self._info[key_name]
+        else:
+            self._load_file_info(key_name, os.path.splitext(key_name)[0] + '_thresh_info.json')
+            return self._info[key_name]
+
+    def _load_file_info(self, key_name, file_name=None):
+        if file_name is None:
+            file_name = key_name
+        if file_name not in self._info:
+            with open(file_name, 'r') as open_f:
+                info = json.load(open_f)
+                self._info[key_name] = info
+
+
+class UserMark(object):
+    def __init__(self, time, isaction):
+        self.time = time
+        self.isaction = isaction
+        if isaction:
+            self.label = 'Action'
+        else:
+            self.label = 'No Action'
+
+    def is_advance(self):
+        return self.isaction
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        if self.isaction:
+            return str(self.time) + ' ' + 'Action'
+        else:
+            return str(self.time) + ' ' + 'No Action'
+
+
+class InvalidException(Exception):
+    def __init__(self, key):
+        Exception.__init__(self)
+        self.message = key + ' is invalid'
+
+
+class ResultStore(object):
+    def __init__(self):
+        self._results = {}
+        self._valid = {}
+
+    def add_result(self, key, results):
+        self._results[key] = results
+        self._valid[key] = True
+
+    def get_result(self, key):
+        if not self._valid[key]:
+            raise InvalidException(key)
+        else:
+            return self._results[key]
+
+    def invalidate(self):
+        for i in self._valid.keys():
+            self._valid[i] = False
+
+    def check_valid(self, key):
+        if key in self._valid:
+            return self._valid[key]
+        else:
+            return False
+
+
+class GraphStorage(object):
+
+    def __init__(self):
+        self.index = None
+        self.data = {}
+        self.map = {}
+        self.names = []
+        self.suggestions = []
 
 
 class ThresholdAnalysisModel(object):
@@ -290,21 +397,29 @@ class ThresholdAnalysisModel(object):
         of the data in one easy to access location instead of accross multiple classes
         that make adding and editing stuff a pain."""
 
-    def __init__(self, bag_file, thresh_file, static_info_map=None, master_window=None):
+    def __init__(self, bag_file=None, thresh_file=None, file_map=None, master_window=None, live=False):
         self._bag_file = bag_file
         self._thresh_file = thresh_file
-        self._static_info_map = static_info_map
-        self.bag_df = None
-        self.thresh_df = None
-        self._loaded = False
-        self.static_info = {}
+
+        self._static_info = StaticInfoMap(file_map)
+        self.marks = []
+
+        self.analysis_parameters = {'action_time_limit': 5.0, 'no_action_time_limit': 3.0, 'graph_time_limit': 5.0}
+        self.result_store = ResultStore()
+
+        self._thresh_df = None
         self.summary_df = None
+
         self.marked_actions = None
         self.marked_results = None
         self.marked_results = None
+
         self.marked_no_actions = None
         self.result_dict = {}
         self.compiled_results = []
+        self.live = live
+        if self.live:
+            self.background_node = ThresholdBackgroundNode()
 
         self.advanced_results = None
         self.no_advanced_results = None
@@ -321,27 +436,18 @@ class ThresholdAnalysisModel(object):
             wx.PostEvent(self._notify_window, AnalysisResultEvent(data=notification))
 
     def load_data(self):
-        if self._loaded:
-            return
         self.post_notification('Loading data')
+        if self._thresh_file is not None:
+            self._thresh_df = pd.read_csv(self._thresh_file, parse_dates=True, index_col=0)
+            for key in self._thresh_df.key.unique():
+                self._static_info.get_static_info(key.split(':')[0])
+        else:
+            self._thresh_df = pd.DataFrame()
 
-        self.bag_df = pd.read_csv(self._bag_file, parse_dates=True, index_col=0)
-        self.thresh_df = pd.read_csv(self._thresh_file, parse_dates=True, index_col=0)
-        if self._static_info_map is None:
-            self._static_info_map = {}
-        for key in self.thresh_df.key.unique():
-            fname = key.split(':')[0]
-            if fname not in self.static_info:
-                if key in self._static_info_map:
-                    info = load_static_info(self._static_info_map[key])
-                else:
-                    loadf = os.path.splitext(fname)[0] + '_thresh_info.json'
-                    info = load_static_info(loadf)
-                self.static_info[fname] = info
         self.post_notification('Done Loading Data')
 
     def get_flop_information(self):
-        if self.thresh_df is None:
+        if self._thresh_df is None:
             raise Exception('Threshold File not loaded')
 
         self.post_notification('Calculating Flops and stuff')
@@ -354,7 +460,7 @@ class ThresholdAnalysisModel(object):
         pfs = []
 
         # get flop information as well as number of true and false ect.
-        for k, v in self.thresh_df.groupby('key'):
+        for k, v in self._thresh_df.groupby('key'):
             counts = v['result'].value_counts()
             if True in counts:
                 t = counts[True]
@@ -382,126 +488,196 @@ class ThresholdAnalysisModel(object):
 
         # create the dataframe
         # now add flop_times
-        self.thresh_df['last_flop'] = np.NaN
+        self._thresh_df['last_flop'] = np.NaN
         for i in df.index:
-            flop_locations = get_flops(self.thresh_df, i)
-            self.thresh_df = add_times(self.thresh_df, i, flop_locations)
+            flop_locations = get_flops(self._thresh_df, i)
+            self._thresh_df = add_times(self._thresh_df, i, flop_locations)
         self.summary_df = df
         self.post_notification('Done calculating flops')
 
-    def get_times(self):
-        if self.bag_df is None:
-            raise Exception('Bag with Marked Actions not loaded')
+
+    def load_mark_times(self):
         self.post_notification('Finding user marks')
-        no_action = []
-        action = []
-        if 'mark_no_action__data_nsecs' in self.bag_df.columns:
-            idx = self.bag_df.mark_no_action__data_nsecs.dropna().index
-            vals = self.bag_df.loc[idx, ['mark_no_action__data_secs', 'mark_no_action__data_nsecs']]
+        if self._bag_file is None:
+            self.marks = []
+            return
+        bag_df = pd.read_csv(self._bag_file, parse_dates=True, index_col=0)
+        marks = []
+        if 'mark_no_action__data_nsecs' in bag_df.columns:
+            idx = bag_df.mark_no_action__data_nsecs.dropna().index
+            vals = bag_df.loc[idx, ['mark_no_action__data_secs', 'mark_no_action__data_nsecs']]
             for _, data in vals.iterrows():
                 s = data['mark_no_action__data_secs']
                 ns = data['mark_no_action__data_nsecs']
                 time = s + ns / 1000000000.0
-                no_action.append(pd.to_datetime(time, unit='s'))
-        else:
-            print 'No bad marked?'
-        if 'mark_action__data_nsecs' in self.bag_df.columns:
-            idx = self.bag_df.mark_action__data_nsecs.dropna().index
-            vals = self.bag_df.loc[idx, ['mark_action__data_secs', 'mark_action__data_nsecs']]
+                time = pd.to_datetime(time, unit='s')
+                marks.append(UserMark(time, False))
+        if 'mark_action__data_nsecs' in bag_df.columns:
+            idx = bag_df.mark_action__data_nsecs.dropna().index
+            vals = bag_df.loc[idx, ['mark_action__data_secs', 'mark_action__data_nsecs']]
             for _, data in vals.iterrows():
                 s = data['mark_action__data_secs']
                 ns = data['mark_action__data_nsecs']
                 time = s + ns / 1000000000.0
-                action.append(pd.to_datetime(time, unit='s'))
-        self.marked_actions = action
-        self.marked_no_actions = action
+                time = pd.to_datetime(time, unit='s')
+                marks.append(UserMark(time, True))
+        self.marks = sorted(marks, key=lambda x: x.time)
         self.post_notification('Done finding user marks')
 
-    def handle_advance(self, time_limit=5.0):
-        self.post_notification("Analyzing marked advances")
-        groups = self.thresh_df.groupby('key')
-        results = {}
-        for marked_time in self.marked_actions:
-            thresh_store = ThreshInfoStore(marked_time, True)
-            et = marked_time + datetime.timedelta(seconds=time_limit)
-            st = marked_time - datetime.timedelta(seconds=time_limit)
-            last_flops = {}
-            # get the time from the last flop
-            for key, data in groups:
-                idx = data.index.asof(marked_time)
 
-                if not isinstance(idx, float):
-                    if idx > st:
-                        time = data.loc[idx, 'last_flop']
-                        if not pd.isnull(time):
-                            last_flops[key] = time
+    def compute_results(self):
+        for i in self.marks:
+            if i.isaction:
+                res = self.get_advance_results(i)
+                self.result_store.add_result(i, res)
+            else:
+                res = self.get_no_advance_results(i)
+                self.result_store.add_result(i, res)
 
-            # sort and filter
-            x = [(k, v) for k, v in last_flops.iteritems()]
-            # x = filter(lambda arg: arg[1] < time_limit, x)
-            # x = sorted(x, key=lambda arg: arg[1])
+    def get_advance_results(self, mark):
+        self.post_notification("Computing advance result")
+        results = []
 
-            # report
-            in_limits = self.thresh_df.between_time(st, et)
-            if len(x) > 0:
-                for flop in x:
-                    windowed_threshold = in_limits[in_limits['key'] == flop[0]]
+        # compute time limits and the like
+        time_limit = self.analysis_parameters['action_time_limit']
+        time = mark.time
+        st = time - datetime.timedelta(seconds=time_limit)
+        et = time + datetime.timedelta(seconds=time_limit)
 
-                    f_name, lineno = flop[0].split(':')
-                    key = flop[0]
-                    thresh_information = self.static_info[f_name][key]
-                    size = len(thresh_information['res'])
-                    threshs = thresh_information['thresh']
-                    ress = thresh_information['res']
-                    comps = thresh_information['comp']
-                    # opmap = thresh_information['opmap']
-                    # comparisons = comparisons['comparisons']
+        # get data
+        thresh_df = self.get_thresh_df().between_time(st, et)
+        calc_data = self.get_thresh_df().between_time(st, time)
+        elapsed_times = {}
+        for key, data in calc_data.groupby('key'):
+            # calculate how long it has been since the last flop
+            lf = data.tail(1)['last_flop'][0]
+            tdelta = time - data.tail(1).index[0]
+            elapsed = (lf + tdelta).total_seconds()
+            elapsed_times[key] = elapsed
 
-                    graph_list = []
-                    if size > 1:
-                        code_thresh = threshs
-                        for i in range(size):
-                            stuff = get_series_flops(
-                                windowed_threshold.between_time(st, marked_time)['res_{:d}'.format(i)])
-                            if len(stuff) > 0:
-                                score = (marked_time - stuff[-1]).total_seconds()
-                                c = comps[i]
-                                t = threshs[i]
+        # get maximum time to last flop...
+        max_time = max([x for x in elapsed_times.itervalues()])
+        groups = thresh_df.groupby('key')
+        for key, data in groups:
+            elapsed = elapsed_times[key]
+            if elapsed < time_limit:
 
-                                if not isinstance(c, str) and not isinstance(c, unicode) or \
-                                                not isinstance(t, str) and not isinstance( t, unicode):
-                                    raise NotImplementedError('Handling multiple comps or thresholds not implemented')
-                                k1 = c
-                                k2 = t
-                                suggestion, graph_info = plot_and_analyze(windowed_threshold, k1, k2, marked_time,
-                                                                          code_thresh[i], st, et)
-                                ts = ThreshStatement(code_thresh[i], flop[0], score, suggestion)
-                                thresh_store.import_thresh(ts)
-                                graph_list.append(graph_info)
-                    else:
-                        thresh_name = threshs[0]
-                        if len(ress) > 1:
-                            raise Exception("Too many results for this instance?")
-                        res = ress[0]
-                        stuff = get_series_flops(windowed_threshold.between_time(st, marked_time)[res])
-                        if len(stuff) > 0:
-                            if len(comps) > 1:
-                                raise Exception("Too many results for this instance?")
-                            score = (marked_time - stuff[-1]).total_seconds()
-                            suggestion, graph_info = plot_and_analyze(windowed_threshold, comps[0], threshs[0],
-                                                                      marked_time, thresh_name, st, et)
-                            ts = ThreshStatement(thresh_name, flop[0], score, suggestion)
-                            thresh_store.import_thresh(ts)
-                            graph_list.append(graph_info)
-                    thresh_store.add_graph(flop[0], graph_list)
-            thresh_store.sort()
-            results[marked_time] = thresh_store
-        self.advanced_results = results
-        self.post_notification("Done analyzing marked advances")
+                # get static information
+                f_name, lineno = key.split(':')
+                thresh_information = self._static_info.get_static_info(f_name)[key]
+                threshs = thresh_information['thresh']
+                names = thresh_information['names']
+                srcs = thresh_information['sources']
+                comparisions = thresh_information['comparisons']
+
+                # enumerate all of the thresholds and comparisions in the file..
+                graph = GraphStorage()
+                graph_map = {i['res']: i for i in thresh_information['comparisons']}
+                graph.graph_map = graph_map
+
+                for idx, comp in enumerate(comparisions):
+                    res = comp['res']
+                    if len(comp['thresh']) > 1:
+                        print 'Error Cannot handle multiple thresh in one comparision...'
+
+                    # now get the flops for each individual result in this thing
+                    flops = get_series_flops(data.between_time(st, time)[res])
+                    if len(flops) > 0:
+                        elapsed = (time - flops[-1]).total_seconds()
+
+                    # get score... For now super simple elapsed time
+                    score = elapsed
+
+                    # Compute the suggestion...still needs work
+                    sugestion = 'Raise'
+
+                    # build up the result
+                    one_result = AnalysisResult()
+
+                    # store infomation
+                    one_result.threshold = comp['thresh'][0]
+                    thresh_idx = threshs.index(one_result.threshold)
+                    one_result.source = srcs[thresh_idx]
+                    one_result.name = names[thresh_idx]
+                    one_result.score = score
+                    one_result.suggestion = sugestion
+                    one_result.time = time
+                    one_result.stmt_key = key
+
+                    one_result.graph_map = graph_map
+                    one_result.graph = graph
+                    graph_data = data.between_time(st, time + datetime.timedelta(seconds=time_limit))
+                    graph.index = graph_data.index
+                    graph.names.append(names[thresh_idx])
+                    graph.suggestions.append(sugestion)
+                    for i in graph_map[res]['cmp']:
+                        graph.data[i] = graph_data[i].values
+                    for i in graph_map[res]['thresh']:
+                        graph.data[i] = graph_data[i].values
+                    results.append(one_result)
+
+        self.post_notification("Done with advance result")
+        return results
+
+    def get_no_advance_results(self, mark):
+        results = []
+
+        # compute time limits and the like
+        time_limit = self.analysis_parameters['no_action_time_limit']
+        graph_limit = self.analysis_parameters['graph_time_limit']
+        time = mark.time
+        # get data
+        thresh_df = self.get_thresh_df()
+        calc_data = thresh_df.between_time(time - datetime.timedelta(seconds=time_limit), time)
+        maxes = thresh_df.groupby('key').max()
+        mins = thresh_df.groupby('key').min()
+        temp_res = {}
+        for key, data in calc_data.groupby('key'):
+            needed_info = []
+            # get static information
+            f_name, lineno = key.split(':')
+            thresh_information = self._static_info.get_static_info(f_name)[key]
+            threshs = thresh_information['thresh']
+            names = thresh_information['names']
+            srcs = thresh_information['sources']
+            comparisions = thresh_information['comparisons']
+
+            # enumerate all of the thresholds and comparisions in the file..
+            graph = GraphStorage()
+            graph_map = {i['res']: i for i in thresh_information['comparisons']}
+            graph.graph_map = graph_map
+
+            needed_values = []
+            # calculate scores here
+            for idx, comp in enumerate(comparisions):
+                info =  {}
+                if len(comp['thresh']) > 1:
+                    print 'Error Cannot handle multiple thresh in one comparision...'
+                t = comp['thresh'][0]
+                c = comp['cmp'][0]
+                maxval = max(maxes.loc[key, t], maxes.loc[key, c])
+                minval = min(mins.loc[key, t], mins.loc[key, c])
+                cseries = data[c]
+                const = data[t]
+                if maxval - minval != 0:
+                    cseries = (cseries- minval) / (maxval - minval)
+                    const = (const - minval) / (maxval - minval)
+                else:
+                    cseries.loc[:] = .5
+                    const.loc[:] = .5
+                dist = cseries - const
+                dist = np.sqrt(dist * dist).mean()
+                if dist == 0:
+                    dist = 999
+                info['difference'] = dist
+                info['flop_count'] = get_series_flops(data[comp['res']])
+
+
+                #TODO Caclulate score and a few other things here and store the information
 
     def handle_no_advance(self, time_limit=5.0):
         self.post_notification("Analyzing marked no advances")
-        groups = self.thresh_df.groupby('key')
+        groups = self._thresh_df.groupby('key')
         results = {}
         for marked_time in self.marked_no_actions:
             scores = []
@@ -515,13 +691,15 @@ class ThresholdAnalysisModel(object):
                 graph_list = []
 
                 f_name, lineno = key.split(':')
-                thresh_information = self.static_info[f_name][key]
-                threshs = thresh_information['thresh']
+                thresh_information = self._static_info.get_static_info(f_name)[key]
+                names = thresh_information['names']
+                srcs = thresh_information['sources']
                 ress = thresh_information['res']
                 # size = len(thresh_information['res'])
                 # comps = thresh_information['comp']
                 # opmap = thresh_information['opmap']
                 comparisons = thresh_information['comparisons']
+
 
                 # skip NaN index -> Do not have a record of the threshold at this point in time
                 if isinstance(idx, float):
@@ -536,7 +714,7 @@ class ThresholdAnalysisModel(object):
 
                 for count, val in enumerate(ress):
                     try:
-                        info = {'threshold': threshs[count]}
+                        info = {'threshold': names[count], 'source': srcs[count]}
 
                         k1 = comparisons[count]['cmp']
                         k2 = comparisons[count]['thresh']
@@ -546,10 +724,10 @@ class ThresholdAnalysisModel(object):
                         k1 = k1[0]
                         k2 = k2[0]
                         if len(ress) > 1:
-                            suggestion, graph_info = plot_and_analyze(total, k1, k2, marked_time, info['threshold'], st,
+                            suggestion, graph_info = plot_and_analyze(total, k1, k2, marked_time, names[count], st,
                                                                       et)
                         else:
-                            suggestion, graph_info = plot_and_analyze(total, k1, k2, marked_time, info['threshold'], st,
+                            suggestion, graph_info = plot_and_analyze(total, k1, k2, marked_time, names[count], st,
                                                                       et)
 
                         graph_list.append(graph_info)
@@ -605,12 +783,12 @@ class ThresholdAnalysisModel(object):
                             if j['match']:
                                 match_count += 1
                     s = (i['distance'] + i['flop_count']) / (1 + match_count)
-                    scores.append((key, i['threshold'], s, i['suggestion']))
+                    scores.append((key, i['threshold'], s, i['suggestion'], i['source']))
                 thresh_store.add_graph(key, graph_list)
 
             values = sorted(scores, key=lambda asdf: asdf[2])
             for i in values:
-                ts = ThreshStatement(i[1], i[0], i[2], i[3])
+                ts = ThreshStatement(i[1], i[4], i[0], i[2], i[3])
                 thresh_store.import_thresh(ts)
 
             thresh_store.sort()
@@ -618,16 +796,29 @@ class ThresholdAnalysisModel(object):
         self.no_advanced_results = results
         self.post_notification("Done analyzing marked no advances")
 
+    def get_results(self, index):
+        return self.result_store.get_result(index)
+
     def compile_list(self):
         self.post_notification('Compiling_list')
         self.compiled_results = []
         for i in self.no_advanced_results:
-            print i
             self.compiled_results.append(self.no_advanced_results[i])
             self.result_dict[i] = self.no_advanced_results[i]
         for j in self.advanced_results:
             self.compiled_results.append(self.advanced_results[j])
             self.result_dict[j] = self.advanced_results[j]
+
+    def get_thresh_df(self):
+        # TODO Add import of new information from background node
+        return self._thresh_df
+
+
+class AnalysisResult(object):
+
+    def __init__(self):
+        self.graph_index = None
+        self.graph_data = {}
 
 
 def plot_and_analyze(windowed_threshold, k1, k2, marked_time, thresh_name, st, et):
@@ -678,8 +869,9 @@ class ThreshStatement(object):
     """"Contains information about thresholds and statemetns in the source code in one
     location"""
 
-    def __init__(self, threshold, stmt_key, score, suggestion=None):
+    def __init__(self, threshold, src, stmt_key, score, suggestion=None):
         self.threshold = threshold
+        self.source = src
         self.stmt_key = stmt_key
         self.score = score
         self.suggestion = suggestion

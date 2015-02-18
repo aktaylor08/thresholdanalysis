@@ -278,12 +278,14 @@ class CandidateCompiler(object):
                         # as of right now we just increment in init but
                         if i.func.name == '__init__':
                             init.add(i)
-                            self.location_map[i] = 'code: ' + self.file_name + ':' + str(i.assign.lineno)
+                            if i not in self.location_map:
+                                self.location_map[i] = 'code: ' + os.path.basename(self.file_name) + ':' + str(i.assign.lineno)
 
                         else:
                             if self.check_only_const(i):
                                 maybe.add(i)
-                                self.location_map[i] = 'code: ' + self.file_name + ':' + str(i.assign.lineno)
+                                if i not in self.location_map:
+                                    self.location_map[i] = 'code: ' + os.path.basename(self.file_name) + ':' + str(i.assign.lineno)
                             else:
                                 elsewhere.add(i)
 
@@ -310,7 +312,7 @@ class CandidateCompiler(object):
                     else:
                         const = self.check_only_const(i.assign.value)
                         if const:
-                            self.location_map[i] = 'code: ' + self.file_name + ':' + str(i.assign.lineno)
+                            self.location_map[i] = 'code: ' + os.path.basename(self.file_name) + ':' + str(i.assign.lineno)
                             if i in candidates:
                                 candidates[i] += 1
                             else:
@@ -1305,15 +1307,15 @@ class IfConstantVisitor(BasicVisitor):
     """visit if statements to ID which constants are
     used in if statements"""
 
-    def __init__(self, canidates, ):
+    def __init__(self, canidates, file_name):
         BasicVisitor.__init__(self)
         self.canidates = canidates
         self.ifs = {}
         self.const_src = {}
+        self.file_name = file_name
 
     def visit_If(self, node):
-        cv = ConstantVisitor(self.canidates, self.current_class,
-                             self.current_function, self.canidates.location_map)
+        cv = ConstantVisitor(self.canidates, self.current_class, self.current_function, self.canidates.location_map, self.file_name)
         cv.visit(node.test)
         if len(cv.consts) > 0:
             self.ifs[node] = cv.consts
@@ -1337,15 +1339,15 @@ class WhileConstantVisitor(BasicVisitor):
     """visit while statements to ID which constants are
     used in while statements"""
 
-    def __init__(self, canidates):
+    def __init__(self, canidates, file_name):
         BasicVisitor.__init__(self)
         self.canidates = canidates
         self.whiles = {}
         self.const_src = {}
+        self.file_name = file_name
 
     def visit_While(self, node):
-        cv = ConstantVisitor(self.canidates, self.current_class,
-                             self.current_function, self.canidates.location_map)
+        cv = ConstantVisitor(self.canidates, self.current_class, self.current_function, self.canidates.location_map, self.file_name)
         cv.visit(node.test)
         if len(cv.consts) > 0:
             self.whiles[node] = cv.consts
@@ -1368,7 +1370,7 @@ class WhileConstantVisitor(BasicVisitor):
 class ConstantVisitor(BasicVisitor):
     """IDs constants from candidates and also numerical constants"""
 
-    def __init__(self, canidates, cls, func, locations):
+    def __init__(self, canidates, cls, func, locations, file_name):
         BasicVisitor.__init__(self)
         self.exclude = False
         self.canidates = canidates
@@ -1378,13 +1380,15 @@ class ConstantVisitor(BasicVisitor):
         self.locations = locations
         self.const_sources = {}
 
+        self.file_name = file_name
+
     def visit_Num(self, node):
         if not self.exclude:
             self.consts.append(node)
         if node not in self.const_sources:
-            self.const_sources[node] = ['Internal: ' + str(node.lineno)]
+            self.const_sources[node] = ['Numerical Constant: ' + os.path.basename(self.file_name) + str(node.lineno)]
         else:
-            self.const_sources[node].append('Internal: ' + str(node.lineno))
+            self.const_sources[node].append('Numerical Constant: ' + os.path.basename(self.file_name) + str(node.lineno))
 
     def visit_Attribute(self, node):
         if isinstance(node.value, ast.Name):
@@ -1743,10 +1747,10 @@ def get_pub_srv_calls(tree, src_code, verbose=False, split=False):
         return calls
 
 
-def get_const_ifs(candidates, tree, spcode, verbose=False):
+def get_const_ifs(candidates, tree, spcode, file_name, verbose=False):
     if verbose:
         print('\nFinding if statements with constant values')
-    if_visit = IfConstantVisitor(candidates)
+    if_visit = IfConstantVisitor(candidates, file_name)
     if_visit.visit(tree)
     if verbose:
         print("Following if statements have constants: ")
@@ -1755,10 +1759,10 @@ def get_const_ifs(candidates, tree, spcode, verbose=False):
     return if_visit
 
 
-def get_const_whiles(candidates, tree, spcode, verbose=False):
+def get_const_whiles(candidates, tree, spcode, file_name, verbose=False):
     if verbose:
         print('\nFinding while statements with constant values')
-    while_visit = WhileConstantVisitor(candidates)
+    while_visit = WhileConstantVisitor(candidates, file_name)
     while_visit.visit(tree)
     if verbose:
         print("Following if statements have constants: ")
@@ -1767,17 +1771,17 @@ def get_const_whiles(candidates, tree, spcode, verbose=False):
     return while_visit
 
 
-def get_const_control(constants, tree, spcode, verbose=False, ifs=True, whiles=True):
+def get_const_control(constants, tree, spcode, file_name, verbose=False, ifs=True, whiles=True):
     ret_val = {}
     const_sources = {}
     if ifs:
-        v = get_const_ifs(constants, tree, spcode, verbose)
+        v = get_const_ifs(constants, tree, spcode, file_name, verbose)
         # transfer to the return value
         for k in v.ifs:
             ret_val[k] = v.ifs[k]
             const_sources[k] = v.const_src[k]
     if whiles:
-        v = get_const_whiles(constants, tree, spcode, verbose)
+        v = get_const_whiles(constants, tree, spcode, file_name,  verbose)
         for k in v.whiles:
             ret_val[k] = v.whiles[k]
             const_sources[k] = v.const_src[k]
@@ -1857,7 +1861,7 @@ def analyze_file(fname, verbose=False, execute=False, ifs=True, whiles=True, res
         flow_store = get_cfg(tree, src_code, False)
         rd = get_reaching_definitions(tree, flow_store, verbose)
         calls = get_pub_srv_calls(tree, src_code, verbose)
-        ctrl_statements, _ = get_const_control(constants, tree, src_code, verbose=verbose, ifs=ifs, whiles=whiles)
+        ctrl_statements, _ = get_const_control(constants, tree, src_code, fname, verbose=verbose, ifs=ifs, whiles=whiles)
         ba = perform_analysis(ctrl_statements, calls, flow_store, tree, rd,
                               verbose=verbose, web=False, src_code=src_code)
 

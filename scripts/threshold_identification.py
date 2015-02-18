@@ -579,7 +579,7 @@ def main(file_name):
         ag.import_rd(rd.rds_in)
 
         constants = get_constants(tree, code, args.file, False)
-        const_control, const_srces = get_const_control(constants, tree, code)
+        const_control, const_srces = get_const_control(constants, tree, code, args.file)
         for key, values in const_control.iteritems():
             ag.add_constant_ctrl(key, values)
 
@@ -609,9 +609,15 @@ def main(file_name):
 
         static_information = {}
         for thresh in thresholds.iterkeys():
-            sources = [const_srces[thresh][t] for t in thresholds[thresh]]
-            names = [get_repr(x) for x in thresholds[thresh]]
-            print names
+            names = []
+            sources = []
+            for x in thresholds[thresh]:
+                names.append(get_repr(x))
+                val = const_srces[thresh][x]
+                if len(val) > 1:
+                    print 'ERROR SOURCE???'
+                    print val
+                sources.append(val[0])
             info = {'lineno': thresh.lineno, 'file': args.file}
             info['key'] = str(args.file) + ':' + str(info['lineno'])
             idx = thresh.lineno - 1
@@ -637,7 +643,7 @@ def main(file_name):
         fname,_ = os.path.splitext(args.file)
         f = fname + '_thresh_info.json'
         with open(f, 'w') as json_out:
-            json.dump(static_information, json_out)
+            json.dump(static_information, json_out, indent=1)
 
         if not args.no_execute:
             instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
