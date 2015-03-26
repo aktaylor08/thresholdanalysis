@@ -8,7 +8,10 @@ import os
 import datetime
 
 from threading import Thread
-from matplotlib.rcsetup import validate_nseq_float
+
+import matplotlib
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
 
 import pandas as pd
 import numpy as np
@@ -29,6 +32,148 @@ AnalysisResultEvent, ANALYSIS_RESULT_EVENT = wx.lib.newevent.NewEvent()
 ThresholdSelected, THRESHOLD_SELECTED_EVENT = wx.lib.newevent.NewEvent()
 
 SHOW_CODE_ID = wx.NewId()
+
+
+class ThresholdGraphPanel(wx.Panel):
+    def __init__(self, parent, model):
+        wx.Panel.__init__(self, parent, -1)  # ), size=(50, 50))
+
+        self.figure = matplotlib.figure.Figure()
+        self.figure.set_facecolor('w')
+        self.model = model
+        self.figure.add_subplot(111)
+        self.canvas = FigureCanvas(self, -1, self.figure)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        hbox.Add(self.canvas, proportion=1, flag=wx.EXPAND)
+        self.SetSizer(hbox)
+
+    def update_graphic(self, result):
+        size = len(result.graph_map)
+        self.figure.clear()
+        if size == 0:
+            self.figure.add_subplot(111)
+        else:
+            highlight = result.highlight
+            for i, res in enumerate(result.graph.graph_map):
+                info = result.graph.graph_map[res]
+                if i == 0:
+                    ax = self.figure.add_subplot(size, 1, i + 1)
+                    old_ax = ax
+                else:
+                    # noinspection PyUnboundLocalVariable
+                    ax = self.figure.add_subplot(size, 1, i + 1, sharex=old_ax)
+                index = result.graph.index
+                for series in info['cmp']:
+                    ax.plot(index, result.graph.data[series], label=series, linewidth=3, marker='o')
+                for series in info['thresh']:
+                    ax.plot(index, result.graph.data[series], label=series, linewidth=3)
+
+                a = ax.get_ylim()
+                ax_range = a[1] - a[0]
+                ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
+                ax.axvline(x=result.time, linestyle='--', linewidth=2, c='r')
+                ax.text(0.95, 0.01, result.graph.suggestions[i], verticalalignment='bottom',
+                        horizontalalignment='right',
+                        transform=ax.transAxes, color='g', fontsize=16)
+                ax.set_title(result.graph.names[i])
+
+                if i != size - 1:
+                    for tick in ax.xaxis.get_major_ticks():
+                        tick.label.set_label('')
+                        tick.label.set_visible(False)
+                    ax.get_xaxis().set_ticks([])
+                else:
+                    for tick in ax.xaxis.get_major_ticks():
+                        tick.label.set_fontsize(13)
+                        # specify integer or one of preset strings, e.g.
+                        tick.label.set_rotation(-45)
+                    for tick in ax.yaxis.get_major_ticks():
+                        tick.label.set_fontsize(14)
+                        # specify integer or one of preset strings, e.g.
+                        # ax.legend()
+                if i != highlight:
+                    alpha = .4
+                    # Awesome way to set a property of everything in the axes...
+                    for o in ax.findobj(lambda x: hasattr(x, 'set_alpha')):
+                        o.set_alpha(alpha)
+
+        # self.canvas.figure = self.figure #= FigureCanvas(self, -1, self.figure)
+        self.canvas.draw()
+
+    def clear_graphic(self):
+        self.figure.clear()
+        self.figure.add_subplot(111)
+        self.canvas.draw()
+
+
+class ThresholdInfoPanel(wx.Panel):
+    def __init__(self, parent, notify_window, model):
+        wx.Panel.__init__(self, parent)
+        self._notify_window = notify_window
+        self.model = model
+
+        # self._list_ctrl = wx.ListCtrl(self, size=(-1, 100), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
+        self._list_ctrl = AutoWidthListCtrl(self)
+
+        self._list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
+        self._list_ctrl.InsertColumn(0, "Threshold")
+        self._list_ctrl.InsertColumn(1, "Source")
+        self._list_ctrl.InsertColumn(2, "Score")
+        self._list_ctrl.InsertColumn(3, "Suggestion")
+        self._list_ctrl.InsertColumn(4, "Location")
+
+        self._row_dict = {}
+
+        h_box = wx.BoxSizer(wx.HORIZONTAL)
+        h_box.Add(self._list_ctrl, 1, wx.EXPAND)
+        self.SetSizer(h_box)
+        self._selected = None
+
+        self.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.handle_right_click)
+
+    def handle_right_click(self, event):
+        menu = wx.Menu()
+        menu.Append(SHOW_CODE_ID, "Show Source Code")
+        wx.EVT_MENU(menu, SHOW_CODE_ID, self.menu_select_callback)
+        self.PopupMenu(menu, event.GetPoint())
+        menu.Destroy()
+
+    def menu_select_callback(self, event):
+        op = event.GetId()
+
+        if op == SHOW_CODE_ID:
+            fname, line = self._selected.stmt_key.split(':')
+            if os.path.exists(fname):
+                with open(fname) as src_file:
+                    lines = src_file.readlines()
+                    code = ''.join(lines[int(line) - 3:int(line) + 3])
+            else:
+                code = 'Could not find file {:s}'.format(fname)
+            wx.MessageBox(code, "Source Code", wx.OK)
+        else:
+            pass
+
+    def add_thresholds(self, index):
+        # Clear everything out
+        results = self.model.get_results(index)
+        results = sorted(results, key=lambda x: x.score)
+        self._row_dict.clear()
+        self._list_ctrl.DeleteAllItems()
+        self._selected = None
+        for idx, res in enumerate(results):
+            self._list_ctrl.InsertStringItem(idx, str(res.name))
+            self._list_ctrl.SetStringItem(idx, 1, str(res.source))
+            self._list_ctrl.SetStringItem(idx, 2, str(res.score))
+            self._list_ctrl.SetStringItem(idx, 3, str(res.suggestion))
+            self._list_ctrl.SetStringItem(idx, 4, str(res.stmt_key))
+            self._row_dict[idx] = res
+
+    def on_item_selected(self, event):
+        current_item = event.m_itemIndex
+        val = self._row_dict[current_item]
+        self._selected = val
+        wx.PostEvent(self._notify_window, ThresholdSelected(result=val))
 
 
 class ThresholdPairPanel(wx.Panel):
@@ -92,6 +237,7 @@ class ThresholdPairPanel(wx.Panel):
             else:
                 self._list_ctrl.SetItemState(r, 0, wx.LIST_STATE_SELECTED)
 
+
 class UserMarkPanel(wx.Panel):
     def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
@@ -146,21 +292,31 @@ class ThresholdFrame(wx.Frame):
         # which files are we analyzing
         self.analysis_model = model
 
-        # set up the split window
+        # set up large split window
         self.left_right = wx.SplitterWindow(self)
-        self.top_bottom = wx.SplitterWindow(self.left_right)
+
+        # Add the user mark panel and the notebook
+        self.mark_panel = UserMarkPanel(self.left_right, self, self.analysis_model)
+        self.notebook = wx.Notebook(self.left_right)
 
         # marking list self argument for which panel to notify -- ie this window
-        self.mark_panel = UserMarkPanel(self.left_right, self, self.analysis_model)
-        self.thresh_pair_panel = ThresholdPairPanel(self.top_bottom, self, self.analysis_model)
-        self.blank = wx.Panel(self.top_bottom)
-
+        self.thresh_pair_panel = ThresholdPairPanel(self.notebook, self, self.analysis_model)
 
         # set up splitters
-        self.left_right.SplitVertically(self.mark_panel, self.top_bottom, 200)
-        self.top_bottom.SplitHorizontally(self.thresh_pair_panel, self.blank, 800)
+
+        self.graph_page = wx.SplitterWindow(self.notebook)
+
+        self.graph_area = ThresholdGraphPanel(self.graph_page, self.analysis_model)
+        self.thresh_info_area = ThresholdInfoPanel(self.graph_page, self, self.analysis_model)
+
+        # add to notebook
+        self.notebook.AddPage(self.thresh_pair_panel, "Threshold View")
+        self.notebook.AddPage(self.graph_page, "Graphs")
+
+        self.left_right.SplitVertically(self.mark_panel, self.notebook, 200)
         self.left_right.SetSashGravity(0.0)
-        self.top_bottom.SetSashGravity(0.0)
+        self.graph_page.SplitHorizontally(self.graph_area, self.thresh_info_area, 550)
+        self.graph_page.SetSashGravity(.8)
         self.worker = None
 
         # set up the status bar
@@ -169,7 +325,7 @@ class ThresholdFrame(wx.Frame):
 
         # handle dealing with the threshold infomation
         ANALYSIS_RESULT_EVENT(self, self.on_result)
-        # THRESHOLD_SELECTED_EVENT(self, self.on_threshold_selected)
+        THRESHOLD_SELECTED_EVENT(self, self.on_threshold_selected)
         MARK_SELECTED_EVENT(self, self.on_mark_selected)
 
     def run_analysis(self):
@@ -183,7 +339,12 @@ class ThresholdFrame(wx.Frame):
             self.thresh_pair_panel.rebuild_list()
 
     def on_mark_selected(self, event):
+        self.graph_area.clear_graphic()
+        self.thresh_info_area.add_thresholds(event.index)
         self.thresh_pair_panel.mark_possible(event.index)
+
+    def on_threshold_selected(self, event):
+        self.graph_area.update_graphic(event.result)
 
 
 class AnalysisThread(Thread):
@@ -236,8 +397,11 @@ class StaticInfoMap(object):
                 self._load_file_info(k, f)
         if directory is not None:
             if os.path.exists(directory):
-                for f in glob.glob(directory + ".json"):
-                    self._load_file_info(k, f)
+                if not directory[-1] == '/':
+                    directory += '/'
+                for f in glob.glob(directory + "*.json"):
+                    print f
+                    self._load_file_info(f, f)
             else:
                 print("ERROR directory does not exist")
 
@@ -383,9 +547,14 @@ class ThresholdAnalysisModel(object):
         return ret_vals
 
     def get_thresh_value(self, key):
+        if len(self._thresh_df) == 0:
+            return np.NaN
         temp = self._thresh_df[self._thresh_df['key'] == key].tail(1)
         if len(temp) > 0:
-            return temp['thresh_0'].values[0]
+            try:
+                return temp['thresh_0'].values[0]
+            except KeyError:
+                return temp['const_0_0'].values[0]
         else:
             return np.NaN
 
@@ -422,6 +591,10 @@ class ThresholdAnalysisModel(object):
         pfs = []
 
         # get flop information as well as number of true and false ect.
+        if len(self._thresh_df) == 0:
+            self.summary_df = pd.DataFrame()
+            self.post_notification('Done calculating flops')
+            return
         for k, v in self._thresh_df.groupby('key'):
             counts = v['result'].value_counts()
             if True in counts:
@@ -524,7 +697,6 @@ class ThresholdAnalysisModel(object):
             if elapsed < time_limit:
 
                 # get static information
-                f_name, lineno = key.split(':')
                 thresh_information = self._static_info.get_static_info(key)
                 threshs = thresh_information['thresh']
                 names = thresh_information['names']
@@ -583,9 +755,7 @@ class ThresholdAnalysisModel(object):
 
     def get_suggestion(self, time, data, comp_key, thresh_key, res_key, action):
         """Get a suggestion based on other values"""
-        suggestion = ''
-
-        #TODO this still needs some work..
+        # TODO this still needs some work..
         if action:
             lf = get_series_flops(data.between_time(time - datetime.timedelta(seconds=self.analysis_parameters['no_action_time_limit']), time)[res_key])
             if len(lf) == 0:
@@ -607,7 +777,6 @@ class ThresholdAnalysisModel(object):
         else:
             lf = get_series_flops(data[res_key])
             if len(lf) > 0:
-                print 'asdfjaslj'
                 data = data.between_time(lf[-1], time)
             comp = data[comp_key]
             thresh = data[thresh_key]
@@ -619,7 +788,6 @@ class ThresholdAnalysisModel(object):
                 suggestion = 'Raise'
 
         return suggestion
-
 
     def get_no_advance_results(self, mark):
         results = []
@@ -658,7 +826,10 @@ class ThresholdAnalysisModel(object):
                 minval = min(mins.loc[key, t], mins.loc[key, c])
                 cseries = calc_data[c]
                 const = data[t]
-                if maxval - minval != 0:
+                if np.isnan(maxval) or np.isnan(minval):
+                    cseries.loc[:] = .5
+                    const.loc[:] = .5
+                elif maxval - minval != 0:
                     cseries = (cseries - minval) / (maxval - minval)
                     const = (const - minval) / (maxval - minval)
                 else:
@@ -789,8 +960,8 @@ def ts_to_sec(ts, epoch=datetime.datetime.utcfromtimestamp(0)):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Show information on the user marks')
-    parser.add_argument('-t', '--thresholds', required=True)
-    parser.add_argument('-b', '--bag', required=True)
+    parser.add_argument('-t', '--thresholds', )
+    parser.add_argument('-b', '--bag', )
     parser.add_argument('-k', '--key_map', nargs='*')
     parser.add_argument('-d', '--info_directory',)
     args = parser.parse_args()

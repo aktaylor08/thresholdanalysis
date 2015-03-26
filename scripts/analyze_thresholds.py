@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
-import matplotlib.pyplot as plt
+
 # noinspection PyUnresolvedReferences
 import wx
 # noinspection PyUnresolvedReferences
