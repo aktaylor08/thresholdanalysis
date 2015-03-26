@@ -68,7 +68,8 @@ class InstrumentVisitor(ast.NodeTransformer):
                 print type(node.test)
                 print ast.dump(node.test)
                 print 'Unexpected type here'
-                assert False
+                return node
+
             ccollector = ComparisionCollector(self.tmap[node], node.lineno)
             val = ccollector.visit(node.test)
             args = []

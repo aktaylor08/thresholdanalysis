@@ -530,8 +530,8 @@ class ServiceFinderVisitor(BasicVisitor):
                             else:
                                 fv = FunctionVariable(
                                     self.current_class, self.current_function, name, node)
-                                self.proxies.append(fv)
-                                self.proxies[fv] = node.value.args[0].s
+                                # self.proxies.append(fv)
+                                self.proxies[fv] = 'service' # node.value.args[0].s
 
 
 class ServiceCallFinder(BasicVisitor):
@@ -862,7 +862,10 @@ def get_file_from_mode_name(name):
             return name + ':' + inspect.getsourcefile(thing)
         except TypeError:
             a = inspect.getmodule(module)
-            return a.__name__ + ':' + a.__file__
+            try:
+                return a.__name__ + ':' + a.__file__
+            except:
+                return 'unknown'
     return retname
 
 def get_objectect_from_mod_name(name):
@@ -1407,7 +1410,10 @@ class ConstantVisitor(BasicVisitor):
             cv = ClassVariable(self.current_class, self.current_function,
                                node, node)
             if node not in self.const_sources:
-                self.const_sources[node] = [self.locations[cv]]
+                try:
+                    self.const_sources[node] = [self.locations[cv]]
+                except KeyError:
+                    self.const_sources[node] = str(node )
             else:
                 self.const_sources[node].append(self.locations[cv])
 
