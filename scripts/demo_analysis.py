@@ -22,6 +22,7 @@ import wx
 import wx.lib.newevent
 # noinspection PyUnresolvedReferences
 from wx.lib.mixins.listctrl import ListCtrlAutoWidthMixin
+from threshold_node import ThresholdNode
 
 
 # Set up the custom event for background processing of the data
@@ -287,7 +288,7 @@ class AutoWidthListCtrl(wx.ListCtrl, ListCtrlAutoWidthMixin):
 
 class ThresholdFrame(wx.Frame):
     def __init__(self, parent, title, model):
-        wx.Frame.__init__(self, parent, title=title, size=(1000, 800))
+        wx.Frame.__init__(self, parent, title=title, size=(900, 700))
 
         # which files are we analyzing
         self.analysis_model = model
@@ -328,6 +329,7 @@ class ThresholdFrame(wx.Frame):
         THRESHOLD_SELECTED_EVENT(self, self.on_threshold_selected)
         MARK_SELECTED_EVENT(self, self.on_mark_selected)
 
+
     def run_analysis(self):
         self.status_bar.SetStatusText("Begining analysis")
         self.worker = AnalysisThread(self, self.analysis_model)
@@ -367,11 +369,6 @@ class AnalysisThread(Thread):
 
     def abort(self):
         self._want_abort = 1
-
-
-class ThresholdBackgroundNode(object):
-    def __init__(self):
-        self.dirty = False
 
 
 def take2(arr):
@@ -508,6 +505,10 @@ class ThresholdAnalysisModel(object):
 
     def __init__(self, bag_file=None, thresh_file=None, file_map=None, info_directory=None,
                  master_window=None, live=False):
+        self.background_node = ThresholdNode(live)
+        if bag_file:
+            self.background_node.import_mark_file(bag_file)
+
         self._bag_file = bag_file
         self._thresh_file = thresh_file
 
@@ -528,8 +529,6 @@ class ThresholdAnalysisModel(object):
         self.result_dict = {}
         self.compiled_results = []
         self.live = live
-        if self.live:
-            self.background_node = ThresholdBackgroundNode()
 
         self.advanced_results = None
         self.no_advanced_results = None
@@ -594,7 +593,7 @@ class ThresholdAnalysisModel(object):
         if len(self._thresh_df) == 0:
             self.summary_df = pd.DataFrame()
             self.post_notification('Done calculating flops')
-            return
+            return None
         for k, v in self._thresh_df.groupby('key'):
             counts = v['result'].value_counts()
             if True in counts:
@@ -678,7 +677,10 @@ class ThresholdAnalysisModel(object):
         et = time + datetime.timedelta(seconds=time_limit)
 
         # get data
-        thresh_df = self.get_thresh_df().between_time(st, et)
+        thresh_df = self.get_thresh_df()
+        if len(thresh_df) == 0:
+            return results
+        thresh_df = threh_df.between_time(st, et)
         calc_data = self.get_thresh_df().between_time(st, time)
         calc_groups = calc_data.groupby('key')
         elapsed_times = {}
@@ -798,6 +800,8 @@ class ThresholdAnalysisModel(object):
         time = mark.time
         # get data
         thresh_df = self.get_thresh_df()
+        if len(thresh_df) == 0:
+            return results
         maxes = thresh_df.groupby('key').max()
         mins = thresh_df.groupby('key').min()
         for key, data in thresh_df.groupby('key'):
@@ -961,12 +965,12 @@ def ts_to_sec(ts, epoch=datetime.datetime.utcfromtimestamp(0)):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Show information on the user marks')
     parser.add_argument('-t', '--thresholds', )
-    parser.add_argument('-b', '--bag', )
+    parser.add_argument('-m', '--mark_file', )
     parser.add_argument('-k', '--key_map', nargs='*')
     parser.add_argument('-d', '--info_directory',)
     args = parser.parse_args()
 
-    tam = ThresholdAnalysisModel(args.bag, args.thresholds, args.key_map, args.info_directory)
+    tam = ThresholdAnalysisModel(args.mark_file, args.thresholds, args.key_map, args.info_directory)
 
     app = wx.App(False)
     frame = ThresholdFrame(None, "Threshold Analysis information", tam)
