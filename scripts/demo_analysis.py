@@ -27,6 +27,7 @@ from threshold_node import ThresholdNode
 
 # Set up the custom event for background processing of the data
 EVT_RESULT_ID = wx.NewId()
+TIMER_ID = wx.NewId()
 
 MarkSelectedEvent, MARK_SELECTED_EVENT = wx.lib.newevent.NewEvent()
 AnalysisResultEvent, ANALYSIS_RESULT_EVENT = wx.lib.newevent.NewEvent()
@@ -329,10 +330,16 @@ class ThresholdFrame(wx.Frame):
         THRESHOLD_SELECTED_EVENT(self, self.on_threshold_selected)
         MARK_SELECTED_EVENT(self, self.on_mark_selected)
 
+        self.timer = wx.Timer(self, TIMER_ID)
+        self.timer.Start(1000)
+        wx.EVT_TIMER(self, TIMER_ID, self.on_timer)
 
-    def run_analysis(self):
-        self.status_bar.SetStatusText("Begining analysis")
-        self.worker = AnalysisThread(self, self.analysis_model)
+    def on_timer(self, event):
+        if self.analysis_model is not None:
+            rebuild = self.analysis_model.process_new_marks()
+            if rebuild:
+                self.mark_panel.rebuild_list()
+                self.thresh_pair_panel.rebuild_list()
 
     def on_result(self, event):
         self.status_bar.SetStatusText(event.data)
@@ -359,13 +366,6 @@ class AnalysisThread(Thread):
         self.advance = None
         self.start()
         self.analysis_results = []
-
-    def run(self):
-        self.model.load_mark_times()
-        self.model.load_data()
-        self.model.get_flop_information()
-        self.model.compute_results()
-        wx.PostEvent(self._notify_window, AnalysisResultEvent(data='Done'))
 
     def abort(self):
         self._want_abort = 1
@@ -413,7 +413,7 @@ class StaticInfoMap(object):
         if key_name in self._info:
             return self._info[key_name]
         else:
-            print("does not exist...trying to load file")
+            print("does not exist...trying to load file: {:s}".format(key_name))
             self._load_file_info(key_name, os.path.splitext(key_name)[0] + '_thresh_info.json')
             return self._info[key_name]
 
@@ -503,36 +503,31 @@ class ThresholdAnalysisModel(object):
         of the data in one easy to access location instead of accross multiple classes
         that make adding and editing stuff a pain."""
 
-    def __init__(self, bag_file=None, thresh_file=None, file_map=None, info_directory=None,
-                 master_window=None, live=False):
+    def __init__(self, bag_record=None, mark_file=None, thresh_file=None, file_map=None, info_directory=None,
+                 master_window=None, live=False, namespace=None):
         self.background_node = ThresholdNode(live)
-        if bag_file:
-            self.background_node.import_mark_file(bag_file)
+        if bag_record is not None:
+            self.background_node.import_bag_file(bag_record, namespace)
+        else:
+            if mark_file:
+                self.background_node.import_mark_file(mark_file)
+            if thresh_file:
+                self.background_node.import_thresh_file(thresh_file)
 
-        self._bag_file = bag_file
-        self._thresh_file = thresh_file
 
         self._static_info = StaticInfoMap(file_map, info_directory)
         self.marks = []
-
         self.analysis_parameters = {'action_time_limit': 5.0, 'no_action_time_limit': 3.0, 'graph_time_limit': 5.0}
         self.result_store = ResultStore()
-
-        self._thresh_df = None
-        self.summary_df = None
-
+        self._thresh_df = pd.DataFrame()
         self.marked_actions = None
         self.marked_results = None
         self.marked_results = None
-
         self.marked_no_actions = None
         self.result_dict = {}
         self.compiled_results = []
-        self.live = live
-
         self.advanced_results = None
         self.no_advanced_results = None
-
         # wx notification stuff
         self._notify_window = master_window
 
@@ -546,9 +541,10 @@ class ThresholdAnalysisModel(object):
         return ret_vals
 
     def get_thresh_value(self, key):
-        if len(self._thresh_df) == 0:
+        df = self.get_thresh_df()
+        if len(df) == 0:
             return np.NaN
-        temp = self._thresh_df[self._thresh_df['key'] == key].tail(1)
+        temp = df[df['key'] == key].tail(1)
         if len(temp) > 0:
             try:
                 return temp['thresh_0'].values[0]
@@ -565,100 +561,19 @@ class ThresholdAnalysisModel(object):
         if self._notify_window is not None:
             wx.PostEvent(self._notify_window, AnalysisResultEvent(data=notification))
 
-    def load_data(self):
-        self.post_notification('Loading data')
-        if self._thresh_file is not None:
-            self._thresh_df = pd.read_csv(self._thresh_file, parse_dates=True, index_col=0)
-            for key in self._thresh_df.key.unique():
-                self._static_info.get_static_info(key)
-        else:
-            self._thresh_df = pd.DataFrame()
+    def process_new_marks(self):
+        new_marks = [UserMark(*x) for x in self.background_node.get_new_marks()]
+        # Check to see if we need to rebuild the model and all of that good stuff
+        if len(new_marks) > 0:
+            self.marks.extend(new_marks)
+            self.compute_results(new_marks)
+            return True
+        return False
 
-        self.post_notification('Done Loading Data')
-
-    def get_flop_information(self):
-        if self._thresh_df is None:
-            raise Exception('Threshold File not loaded')
-
-        self.post_notification('Calculating Flops and stuff')
-        """Get compiled threshold information"""
-        keys = []
-        trues = []
-        falses = []
-        totals = []
-        pts = []
-        pfs = []
-
-        # get flop information as well as number of true and false ect.
-        if len(self._thresh_df) == 0:
-            self.summary_df = pd.DataFrame()
-            self.post_notification('Done calculating flops')
-            return None
-        for k, v in self._thresh_df.groupby('key'):
-            counts = v['result'].value_counts()
-            if True in counts:
-                t = counts[True]
-            else:
-                t = 0
-            if False in counts:
-                f = counts[False]
-            else:
-                f = 0
-            keys.append(k)
-            trues.append(t)
-            falses.append(f)
-            totals.append(t + f)
-            if t + f == 0:
-                pt = 0
-                pf = 0
-            else:
-                pt = (t / (float(t + f)))
-                pf = (f / (float(t + f)))
-            pts.append(pt)
-            pfs.append(pf)
-
-        df = pd.DataFrame(data={'true_count': trues, 'false_count': falses, 'count': totals,
-                                'true_prop': pts, 'false_prop': pfs}, index=keys)
-
-        # create the dataframe
-        # now add flop_times
-        self._thresh_df['last_flop'] = np.NaN
-        for i in df.index:
-            flop_locations = get_flops(self._thresh_df, i)
-            self._thresh_df = add_times(self._thresh_df, i, flop_locations)
-        self.summary_df = df
-        self.post_notification('Done calculating flops')
-
-    def load_mark_times(self):
-        self.post_notification('Finding user marks')
-        if self._bag_file is None:
-            self.marks = []
-            return
-        bag_df = pd.read_csv(self._bag_file, parse_dates=True, index_col=0)
-        marks = []
-        if 'mark_no_action__data_nsecs' in bag_df.columns:
-            idx = bag_df.mark_no_action__data_nsecs.dropna().index
-            vals = bag_df.loc[idx, ['mark_no_action__data_secs', 'mark_no_action__data_nsecs']]
-            for _, data in vals.iterrows():
-                s = data['mark_no_action__data_secs']
-                ns = data['mark_no_action__data_nsecs']
-                time = s + ns / 1000000000.0
-                time = pd.to_datetime(time, unit='s')
-                marks.append(UserMark(time, False))
-        if 'mark_action__data_nsecs' in bag_df.columns:
-            idx = bag_df.mark_action__data_nsecs.dropna().index
-            vals = bag_df.loc[idx, ['mark_action__data_secs', 'mark_action__data_nsecs']]
-            for _, data in vals.iterrows():
-                s = data['mark_action__data_secs']
-                ns = data['mark_action__data_nsecs']
-                time = s + ns / 1000000000.0
-                time = pd.to_datetime(time, unit='s')
-                marks.append(UserMark(time, True))
-        self.marks = sorted(marks, key=lambda x: x.time)
-        self.post_notification('Done finding user marks')
-
-    def compute_results(self):
-        for i in self.marks:
+    def compute_results(self, marks):
+        #rebuild dataframe here.
+        self.rebuild_dataframe()
+        for i in marks:
             if i.isaction:
                 res = self.get_advance_results(i)
                 self.result_store.add_result(i, res)
@@ -666,10 +581,13 @@ class ThresholdAnalysisModel(object):
                 res = self.get_no_advance_results(i)
                 self.result_store.add_result(i, res)
 
-    def get_advance_results(self, mark):
-        self.post_notification("Computing advance result")
-        results = []
+    def rebuild_dataframe(self):
+        data = self.background_node.get_new_threshold_data()
+        self._thresh_df = data
 
+
+    def get_advance_results(self, mark):
+        results = []
         # compute time limits and the like
         time_limit = self.analysis_parameters['action_time_limit']
         time = mark.time
@@ -680,17 +598,19 @@ class ThresholdAnalysisModel(object):
         thresh_df = self.get_thresh_df()
         if len(thresh_df) == 0:
             return results
-        thresh_df = threh_df.between_time(st, et)
+        thresh_df = thresh_df.between_time(st, et)
         calc_data = self.get_thresh_df().between_time(st, time)
         calc_groups = calc_data.groupby('key')
         elapsed_times = {}
         for key, data in calc_groups:
             # calculate how long it has been since the last flop
-            lf = data.tail(1)['last_flop'][0]
-            tdelta = time - data.tail(1).index[0]
-            elapsed = (lf + tdelta).total_seconds()
-            elapsed_times[key] = elapsed
-
+            try:
+                lf = data.tail(1)['last_flop'][0]
+                tdelta = time - data.tail(1).index[0]
+                elapsed = (lf + tdelta).total_seconds()
+                elapsed_times[key] = elapsed
+            except:
+                elapsed_times[key] = 99999
         # get maximum time to last flop...
         # max_time = max([x for x in elapsed_times.itervalues()])
         groups = thresh_df.groupby('key')
@@ -793,15 +713,15 @@ class ThresholdAnalysisModel(object):
 
     def get_no_advance_results(self, mark):
         results = []
-
+        if len(self.get_thresh_df()) == 0:
+            print 'empty data set'
+            return results
         # compute time limits and the like
         time_limit = self.analysis_parameters['no_action_time_limit']
         graph_limit = self.analysis_parameters['graph_time_limit']
         time = mark.time
         # get data
         thresh_df = self.get_thresh_df()
-        if len(thresh_df) == 0:
-            return results
         maxes = thresh_df.groupby('key').max()
         mins = thresh_df.groupby('key').min()
         for key, data in thresh_df.groupby('key'):
@@ -904,7 +824,6 @@ class ThresholdAnalysisModel(object):
         return self.result_store.get_result(index)
 
     def get_thresh_df(self):
-        # TODO Add import of new information from background node
         return self._thresh_df
 
 
@@ -924,6 +843,58 @@ class AnalysisResult(object):
         self.highlight = None
         self.graph_map = None
         self.graph = None
+
+#Flopping stuff
+def get_flop_information(df):
+    """Add last flop information to a dataframe"""
+    if df is None:
+        raise Exception('Threshold File not loaded')
+
+    # Get compiled threshold information
+    keys = []
+    trues = []
+    falses = []
+    totals = []
+    pts = []
+    pfs = []
+
+    # no data
+    if len(df) == 0:
+        return df
+
+    for k, v in df.groupby('key'):
+        counts = v['result'].value_counts()
+        if True in counts:
+            t = counts[True]
+        else:
+            t = 0
+        if False in counts:
+            f = counts[False]
+        else:
+            f = 0
+        keys.append(k)
+        trues.append(t)
+        falses.append(f)
+        totals.append(t + f)
+        if t + f == 0:
+            pt = 0
+            pf = 0
+        else:
+            pt = (t / (float(t + f)))
+            pf = (f / (float(t + f)))
+        pts.append(pt)
+        pfs.append(pf)
+
+    summary_df = pd.DataFrame(data={'true_count': trues, 'false_count': falses, 'count': totals,
+                                    'true_prop': pts, 'false_prop': pfs}, index=keys)
+
+    # create the dataframe
+    # now add flop_times
+    df.loc[:, 'last_flop'] = np.NaN
+    for i in summary_df.index:
+        flop_locations = get_flops(df, i)
+        df = add_times(df, i, flop_locations)
+    return df
 
 
 def get_series_flops(series):
@@ -966,14 +937,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Show information on the user marks')
     parser.add_argument('-t', '--thresholds', )
     parser.add_argument('-m', '--mark_file', )
-    parser.add_argument('-k', '--key_map', nargs='*')
+    parser.add_argument('-b', '--bag_record', )
+    parser.add_argument('-k', '--key_map', nargs='*', )
     parser.add_argument('-d', '--info_directory',)
+    parser.add_argument('--namespace',)
     args = parser.parse_args()
 
-    tam = ThresholdAnalysisModel(args.mark_file, args.thresholds, args.key_map, args.info_directory)
+    print args.thresholds
+    print args.bag_record
+    # create the model
+    tam = ThresholdAnalysisModel(mark_file=args.mark_file, thresh_file=args.thresholds, file_map=args.key_map,
+                                 info_directory=args.info_directory, bag_record=args.bag_record,
+                                 namespace=args.namespace)
 
     app = wx.App(False)
     frame = ThresholdFrame(None, "Threshold Analysis information", tam)
-    frame.run_analysis()
     frame.Show()
     app.MainLoop()
