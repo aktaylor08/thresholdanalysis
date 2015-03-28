@@ -634,7 +634,7 @@ def main(file_name):
                 tiv.visit(thresh.test)
                 relation = tiv.operation
                 val = const_srces[thresh][val]
-                name = get_repr(val)
+                name = str(val)
                 if len(val) > 1:
                     print 'ERROR SOURCE???'
                     print val
@@ -651,53 +651,17 @@ def main(file_name):
                     'other_thresholds': other_thresholds,
                     'relation': relation,
                 }
-                infomation[key] = infomation
-            keys.append(cur_keys)
-
-        for thresh in thresholds.iterkeys():
-            print len(thresholds[thresh])
-            names = []
-            sources = []
-            keys = []
-            for x in thresholds[thresh]:
-                names.append(get_repr(x))
-                val = const_srces[thresh][x]
-                if len(val) > 1:
-                    print 'ERROR SOURCE???'
-                    print val
-                sources.append(val[0])
-
-            file_name = os.path.abspath(args.file)
-            info = {'lineno': thresh.lineno, 'file': file_name}
-            idx = thresh.lineno - 1
-            line_code = split_code[idx].strip().lstrip()
-            info['source_code'] = line_code
-            info['topic'] = 'unknown'
-            info['distance'] = min([d[1] for d in distances[thresh]])
-            info['sources'] = sources
-            info['names'] = names
-            while not line_code.endswith(':'):
-                idx += 1
-                line_code += split_code[idx].strip().lstrip()
-            info['key'] = str(args.file) + ':' + str(info['lineno'])
-
-            tiv = TestInfoVisitor(thresholds[thresh])
-            tiv.visit(thresh.test)
-            info['num_comparisons'] = len(tiv.comparisions)
-            info['opmap'] = tiv.op_map
-            info['comparisons'] = tiv.comparisions
-            info['thresh'] = tiv.information['thresh']
-            info['res'] = tiv.information['res']
-            info['comp'] = tiv.information['comp']
-            static_information[info['key']] = info
+                infomation[key] = local_info 
+                cur_keys.append(key)
+            keys[thresh] = cur_keys
 
         fname,_ = os.path.splitext(args.file)
         f = fname + '_thresh_info.json'
         with open(f, 'w') as json_out:
-            json.dump(static_information, json_out, indent=1)
+            json.dump(infomation, json_out, indent=1)
 
         if not args.no_execute:
-            instrument_thresholds(tree, thresholds, args.file, code.split('\n'), False, args.rest)
+            instrument_thresholds(tree, thresholds, keys, args.file, code.split('\n'), False, args.rest)
 
 
 

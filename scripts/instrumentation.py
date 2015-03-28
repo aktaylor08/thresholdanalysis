@@ -10,8 +10,8 @@ from ast_tools import get_string_repr
 # The new version is at the top and only exports select information that just reports threshold values
 # and comparision values in the code
 
-def instrument_thresholds(tree, thresholds, fname, code, verbose, args):
-    tree = InstrumentVisitor(thresholds, fname, code, verbose).visit(tree)
+def instrument_thresholds(tree, thresholds, keys, fname, code, verbose, args):
+    tree = InstrumentVisitor(thresholds, keys, fname, code, verbose).visit(tree)
     tree = add_import_statement(tree)
     tree = ast.fix_missing_locations(tree)
     code = compile(tree, fname, mode='exec')
@@ -33,11 +33,12 @@ def add_import_statement(node):
 class InstrumentVisitor(ast.NodeTransformer):
     """Node transformer to instrument the code"""
 
-    def __init__(self, thresholds, fname, code, verbose):
+    def __init__(self, thresholds, keys, fname, code, verbose):
         """setup"""
         self.fname = fname
         self.tmap = {}
         self.code = code
+        self.keys = keys
         self.verbose = verbose
         self.debug = False
         for i in thresholds:
