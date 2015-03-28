@@ -435,6 +435,7 @@ class TestInfoVisitor(ast.NodeVisitor):
 
         self.op_map = {}
         self.comparisions = []
+        self.operation = ''
 
         self.comps = deque()
 
@@ -497,10 +498,13 @@ class TestInfoVisitor(ast.NodeVisitor):
                 d['comps'].append(self.comps.popleft())
             if isinstance(node.op, ast.And):
                 d['op'] = 'and'
+                self.operation = 'and'
             elif isinstance(node.op, ast.Or):
                 d['op'] = 'or'
+                self.operation = 'or'
             elif isinstance(node.op, ast.Or):
                 d['op'] = 'unknown'
+                self.operation = 'or'
             self.op_map[bo] = d
 
     def visit_Compare(self, node):
@@ -608,9 +612,53 @@ def main(file_name):
                         distances[i] = [(ps, d_info[i])]
 
         static_information = {}
+        keys = {}
+        infomation = {}
         for thresh in thresholds.iterkeys():
+            cur_keys = []
+            file_name = os.path.abspath(args.file)
+            lineno = thresh.lineno
+            idx = thresh.lineno - 1
+            line_code = split_code[idx].strip().lstrip()
+            while not line_code.endswith(':'):
+                idx += 1
+                line_code += split_code[idx].strip().lstrip()
+            source_code = line_code
+            topic = 'unknown'
+            distance = min([d[1] for d in distances[thresh]])
+            for count, val in enumerate(thresholds[thresh]):
+                key = "{:s}:{:d}:{:d}".format(file_name, lineno, count)
+                cur_keys.append(key)
+                other_thresholds = len(thresholds[thresh]) -1
+                tiv = TestInfoVisitor(thresholds[thresh])
+                tiv.visit(thresh.test)
+                relation = tiv.operation
+                val = const_srces[thresh][val]
+                name = get_repr(val)
+                if len(val) > 1:
+                    print 'ERROR SOURCE???'
+                    print val
+                source = val[0]
+                local_info = {
+                    'key': key,
+                    'file': file_name,
+                    'name': name,
+                    'lineno': lineno,
+                    'source_code': source_code,
+                    'topic': topic,
+                    'source': source,
+                    'distance': distance,
+                    'other_thresholds': other_thresholds,
+                    'relation': relation,
+                }
+                infomation[key] = infomation
+            keys.append(cur_keys)
+
+        for thresh in thresholds.iterkeys():
+            print len(thresholds[thresh])
             names = []
             sources = []
+            keys = []
             for x in thresholds[thresh]:
                 names.append(get_repr(x))
                 val = const_srces[thresh][x]
@@ -618,18 +666,20 @@ def main(file_name):
                     print 'ERROR SOURCE???'
                     print val
                 sources.append(val[0])
-            info = {'lineno': thresh.lineno, 'file': args.file}
-            info['key'] = str(args.file) + ':' + str(info['lineno'])
+
+            file_name = os.path.abspath(args.file)
+            info = {'lineno': thresh.lineno, 'file': file_name}
             idx = thresh.lineno - 1
             line_code = split_code[idx].strip().lstrip()
-            while not line_code.endswith(':'):
-                idx += 1
-                line_code += split_code[idx].strip().lstrip()
             info['source_code'] = line_code
             info['topic'] = 'unknown'
             info['distance'] = min([d[1] for d in distances[thresh]])
             info['sources'] = sources
             info['names'] = names
+            while not line_code.endswith(':'):
+                idx += 1
+                line_code += split_code[idx].strip().lstrip()
+            info['key'] = str(args.file) + ':' + str(info['lineno'])
 
             tiv = TestInfoVisitor(thresholds[thresh])
             tiv.visit(thresh.test)
@@ -640,6 +690,7 @@ def main(file_name):
             info['res'] = tiv.information['res']
             info['comp'] = tiv.information['comp']
             static_information[info['key']] = info
+
         fname,_ = os.path.splitext(args.file)
         f = fname + '_thresh_info.json'
         with open(f, 'w') as json_out:
