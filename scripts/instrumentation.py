@@ -59,7 +59,6 @@ class InstrumentVisitor(ast.NodeTransformer):
     def handle_node(self, node):
         if node in self.tmap:
             if isinstance(node.test, ast.Compare):
-
                 pass
             elif isinstance(node.test, ast.BoolOp):
                 pass
@@ -71,15 +70,53 @@ class InstrumentVisitor(ast.NodeTransformer):
                 print 'Unexpected type here'
                 return node
 
-            ccollector = ComparisionCollector(self.tmap[node], node.lineno)
+            ccollector = ComparisionCollector(self.tmap[node], node.lineno, self.keys[node])
+
             val = ccollector.visit(node.test)
+            report_vals = []
+            key_list = []
+            for i in ccollector.value_map:
+                s = ast.Str(s=ccollector.value_map[i].key, lineno=node.lineno)
+                key_list.append(s)
+                ast.copy_location(s, node)
+                keys = [
+                    ast.Str(s='cmp', lineno=node.lineno),
+                    ast.Str(s='thresh', lineno=node.lineno),
+                    ast.Str(s='res', lineno=node.lineno),
+                ]
+                for poop in keys:
+                    ast.copy_location(poop, node)
+                values = [
+                    ccollector.value_map[i].comp,
+                    ccollector.value_map[i].thresh,
+                    ccollector.value_map[i].res,
+                ]
+                for poop in values:
+                    ast.copy_location(poop, node)
+                one_dict = ast.Dict(keys=keys, values=values, lineno=node.lineno)
+                ast.copy_location(one_dict, node)
+                report_vals.append(one_dict)
+
+            keys_arg = ast.List(elts=key_list, ctx=ast.Load(), lineno=node.lineno)
+            report_arg = ast.List(elts=report_vals, ctx=ast.Load(), lineno=node.lineno)
+            ast.fix_missing_locations(report_arg)
+            for i in report_arg.elts:
+                ast.fix_missing_locations(i)
+                for j in i.keys:
+                    ast.fix_missing_locations(j)
+                for k in i.values:
+                    ast.fix_missing_locations(k)
+            ast.copy_location(keys_arg, node)
+            ast.copy_location(report_arg, node)
+            # have created the two required things here.
+
             args = []
             names = []
             for i in get_names(val):
                 args.append(ast.Name(id=i.id, ctx=ast.Param(), lineno=node.lineno))
                 names.append(i.id)
             args = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[])
-            lv = ast.Lambda(args=args, body=val, lineno=node.lineno)
+            result_lambda = ast.Lambda(args=args, body=val, lineno=node.lineno)
             ccollector.lambda_dic['result'] = names
 
             if self.debug:
@@ -92,7 +129,6 @@ class InstrumentVisitor(ast.NodeTransformer):
                     print '\t', ast.dump(i)
                 for i in ccollector.information['res']:
                     print '\t', ast.dump(i)
-
                 print '\n\n\n\n'
 
             keys = []
@@ -103,16 +139,18 @@ class InstrumentVisitor(ast.NodeTransformer):
                 for val in ccollector.lambda_dic[i]:
                     elements.append(ast.Str(s=val))
                 values.append(ast.List(elts=elements, ctx=ast.Load()))
-            dict_create = ast.Dict(keys=keys, values=values)
+            arg_dict = ast.Dict(keys=keys, values=values)
             # add the function call
             for i in ccollector.things:
                 ast.fix_missing_locations(i)
-            ast.fix_missing_locations(lv)
+            ast.fix_missing_locations(result_lambda)
+            ast.fix_missing_locations(keys_arg)
+            ast.fix_missing_locations(report_arg)
             name = ast.Name(id='reporting', ctx=ast.Load(lineno=node.lineno), lineno=node.lineno)
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load(lineno=node.lineno), lineno=node.lineno)
 
-            func_args = [ast.Str(s=self.fname, lineno=node.lineno), ast.Num(n=node.lineno, lineno=node.lineno), lv,
-                         dict_create]
+            func_args = [result_lambda, arg_dict, keys_arg, report_arg]
+            print ast.dump(report_arg)
 
             call = ast.Call(
                 func=attr, args=func_args, keywords=ccollector.things, starargs=None, kwargs=None, lineno=node.lineno)
@@ -136,6 +174,16 @@ def get_names(node):
     return ret_val
 
 
+class ComparisionInfo(object):
+    """Hold the names of a comparision"""
+
+    def __init__(self, key, comp, thresh, res):
+        self.key = key
+        self.comp = comp
+        self.thresh = thresh
+        self.res = res
+
+
 class ComparisionCollector(ast.NodeTransformer):
     """Class to transform the node into something
         that instead of doing calculations pulls them out into all
@@ -143,10 +191,12 @@ class ComparisionCollector(ast.NodeTransformer):
 
     """
 
-    def __init__(self, thresholds, lineno):
+    def __init__(self, thresholds, lineno, keys):
         self.things = []
         self.thresholds = thresholds
+        self.keys = keys
         self.lineno = lineno
+        self.value_map = {}
 
         # keep track of things
         self.information = {'comp': [], 'thresh': [], 'res': [], 'vals': []}
@@ -219,34 +269,59 @@ class ComparisionCollector(ast.NodeTransformer):
             return ast.Name(id=v.arg, ctx=ast.Load(), lineno=self.lineno)
 
         # now we need to loop through and replace stuff
+        key = None
+        comp = None
+        res = None
+        thresh = None
         if node.left in self.thresholds:
+            lookup = self.thresholds.index(node.left)
+            key = self.keys[lookup]
             t = self.create_thresh(node.left)
+            thresh = t
             node.left = ast.Name(id=t.arg, ctx=ast.Load(), lineno=self.lineno)
         elif self.check_contains(node.left):
             new_node = self.visit(node.left)
             node.left = new_node
         else:
             c = self.create_comp(node.left)
+            comp = c
             node.left = ast.Name(id=c.arg, ctx=ast.Load(), lineno=self.lineno)
         for idx, val in enumerate(node.comparators):
             if val in self.thresholds:
+                lookup = self.thresholds.index(val)
+                key = self.keys[lookup]
                 t = self.create_thresh(val)
+                thresh = t
                 node.comparators[idx] = ast.Name(id=t.arg, ctx=ast.Load(), lineno=self.lineno)
             elif self.check_contains(val):
                 new_node = self.visit(val)
                 node.comparators[idx] = new_node
             else:
                 c = self.create_comp(node.left)
+                comp = c
                 node.comparators[idx] = ast.Name(id=c.arg, ctx=ast.Load(), lineno=self.lineno)
+            if idx > 0:
+                print "Multi comparitors. ERROR"
         r = self.create_res(node)
+        res = r
+        if thresh is None or comp is None or res is None:
+            print 'Why is one None?!?!'
+        else:
+            self.value_map[key] = ComparisionInfo(key, comp, thresh, res)
         return ast.Name(id=r.arg, ctx=ast.Load(), lineno=self.lineno)
 
     def visit_UnaryOp(self, node):
         # TODO Fix this as well
         if node.operand in self.thresholds:
-            self.create_thresh(node.operand)
-            self.create_comp(node.operand)
+            lookup = self.thresholds.index(node.operand)
+            key = self.keys[lookup]
+            thresh = self.create_thresh(node.operand)
+            comp = self.create_comp(node.operand)
             res = self.create_res(node.operand)
+            self.value_map[key] = ComparisionInfo(key, comp, thresh, res)
+
+
+
             node.operand = ast.Name(id=res.arg, ctx=ast.Load(), lineno=self.lineno)
         elif self.check_contains(node.operand):
             node.operand = self.visit(node.operand)

@@ -7,27 +7,31 @@ import datetime
 from std_msgs.msg import String
 
 
-def report(filename, lineno, result, arg_dict, *args, **kwargs):
-    vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), str(
-        filename), str(lineno)]
+def report(result, arg_dict, report_keys, report_map, *args, **kwargs):
+
+    # do required calculations
     for key in kwargs:
         if key.startswith('res_'):
-            d = {i : kwargs[i] for i in arg_dict[key]}
+            d = {i: kwargs[i] for i in arg_dict[key]}
             kwargs[key] = kwargs[key](**d)
         if type(kwargs[key]) is bytes:
             kwargs[key] = binascii.hexlify(kwargs[key])
-    d = {i : kwargs[i] for i in arg_dict['result']}
+    d = {i: kwargs[i] for i in arg_dict['result']}
     result = result(**d)
-    vals.append(str(result))
-    for key in kwargs:
-        vals.append(key + ':' + str(kwargs[key]).replace(',', ''))
-    vals = ','.join(vals)
-    Reporter.Instance().publish(vals)
+
+    # now report values for each threshold
+    for report_key, values in zip(report_keys, report_map):
+        #create the first part of the results
+        vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), report_key, str(result)]
+        # now get the kwargs stuff
+        for rep_string, real_key in values.iter_items():
+            vals.append(rep_string+ ':' + str(kwargs[real_key]).replace(',', ''))
+        vals = ','.join(vals)
+        Reporter.Instance().publish(vals)
     return result
 
 
 class Singleton:
-
     """
     A non-thread-safe helper class to ease implementing singletons.
     This should be used as a decorator -- not a metaclass -- to the
@@ -69,10 +73,9 @@ class Singleton:
 
 @Singleton
 class Reporter:
-
     def __init__(self):
         self.pub = rospy.Publisher(
-            '/threshold_information', String,) #queue_size=100)
+            '/threshold_information', String, )  # queue_size=100)
 
     def publish(self, msg):
         self.pub.publish(msg)

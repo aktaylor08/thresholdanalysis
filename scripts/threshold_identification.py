@@ -15,7 +15,7 @@ import json
 
 
 import networkx as nx
-import matplotlib.pyplot as plt
+from matplotlib.pyplot import show
 
 
 class AnalysisGraph(object):
@@ -391,7 +391,7 @@ class ClassGraph(object):
             else:
                 v.set_text(k.lineno)
 
-        plt.show()
+        show()
 
     def graph_ba(self):
         thresh_lines = [x.lineno for x in self.thresholds]
@@ -416,7 +416,7 @@ class ClassGraph(object):
             nx.draw_networkx_nodes(G, pos, nodelist=list(temp_thresh), node_color='b')
             nx.draw_networkx_nodes(G, pos, nodelist=list(others), node_color='r')
             nx.draw_networkx_labels(G, pos)
-            plt.show()
+            show()
 
 class TestInfoVisitor(ast.NodeVisitor):
     """Class to transform the node into something
@@ -512,9 +512,10 @@ class TestInfoVisitor(ast.NodeVisitor):
         cdict = {'thresh': [], 'cmp': [], 'res': ''}
         if not self.check_contains(node):
             print 'Its not in there?'
-            return
-
             v = self.create_val(node)
+            return node
+
+
         # now we need to loop through and replace stuff
         if node.left in self.thresholds:
             t = self.create_thresh(node.left)
@@ -611,7 +612,6 @@ def main(file_name):
                     else:
                         distances[i] = [(ps, d_info[i])]
 
-        static_information = {}
         keys = {}
         infomation = {}
         for thresh in thresholds.iterkeys():
@@ -639,31 +639,23 @@ def main(file_name):
                     print 'ERROR SOURCE???'
                     print val
                 source = val[0]
-                local_info = {
-                    'key': key,
-                    'file': file_name,
-                    'name': name,
-                    'lineno': lineno,
-                    'source_code': source_code,
-                    'topic': topic,
-                    'source': source,
-                    'distance': distance,
-                    'other_thresholds': other_thresholds,
-                    'relation': relation,
-                }
+                print source
+                ttype, source = source.split()
+                ttype = ttype.lstrip().strip()[:-1]
+                source = source.lstrip().strip()
+                local_info = dict(key=key, file=file_name, name=name, lineno=lineno, source_code=source_code,
+                                  topic=topic, type=ttype, source=source, distance=distance,
+                                  other_thresholds=other_thresholds, relation=relation)
                 infomation[key] = local_info 
-                cur_keys.append(key)
             keys[thresh] = cur_keys
 
-        fname,_ = os.path.splitext(args.file)
+        fname, _ = os.path.splitext(args.file)
         f = fname + '_thresh_info.json'
         with open(f, 'w') as json_out:
             json.dump(infomation, json_out, indent=1)
 
         if not args.no_execute:
             instrument_thresholds(tree, thresholds, keys, args.file, code.split('\n'), False, args.rest)
-
-
 
 if __name__ == "__main__":
     fname = sys.argv[1]

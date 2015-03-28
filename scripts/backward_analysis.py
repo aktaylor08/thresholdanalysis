@@ -1389,9 +1389,9 @@ class ConstantVisitor(BasicVisitor):
         if not self.exclude:
             self.consts.append(node)
         if node not in self.const_sources:
-            self.const_sources[node] = ['Numerical Constant: ' + os.path.basename(self.file_name) + str(node.lineno)]
+            self.const_sources[node] = ['Numerical: ' + os.path.basename(self.file_name) + str(node.lineno)]
         else:
-            self.const_sources[node].append('Numerical Constant: ' + os.path.basename(self.file_name) + str(node.lineno))
+            self.const_sources[node].append('Numerical: ' + os.path.basename(self.file_name) + str(node.lineno))
 
     def visit_Attribute(self, node):
         if isinstance(node.value, ast.Name):
