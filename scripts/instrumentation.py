@@ -43,7 +43,6 @@ class InstrumentVisitor(ast.NodeTransformer):
         self.debug = False
         for i in thresholds:
             self.tmap[i] = thresholds[i]
-        instrumented = set()
 
     def visit_If(self, node):
         """Just call the handle node function"""
@@ -73,41 +72,7 @@ class InstrumentVisitor(ast.NodeTransformer):
             ccollector = ComparisionCollector(self.tmap[node], node.lineno, self.keys[node])
 
             val = ccollector.visit(node.test)
-            report_vals = []
-            key_list = []
-            for i in ccollector.value_map:
-                s = ast.Str(s=ccollector.value_map[i].key, lineno=node.lineno)
-                key_list.append(s)
-                ast.copy_location(s, node)
-                keys = [
-                    ast.Str(s='cmp', lineno=node.lineno),
-                    ast.Str(s='thresh', lineno=node.lineno),
-                    ast.Str(s='res', lineno=node.lineno),
-                ]
-                for poop in keys:
-                    ast.copy_location(poop, node)
-                values = [
-                    ccollector.value_map[i].comp,
-                    ccollector.value_map[i].thresh,
-                    ccollector.value_map[i].res,
-                ]
-                for poop in values:
-                    ast.copy_location(poop, node)
-                one_dict = ast.Dict(keys=keys, values=values, lineno=node.lineno)
-                ast.copy_location(one_dict, node)
-                report_vals.append(one_dict)
 
-            keys_arg = ast.List(elts=key_list, ctx=ast.Load(), lineno=node.lineno)
-            report_arg = ast.List(elts=report_vals, ctx=ast.Load(), lineno=node.lineno)
-            ast.fix_missing_locations(report_arg)
-            for i in report_arg.elts:
-                ast.fix_missing_locations(i)
-                for j in i.keys:
-                    ast.fix_missing_locations(j)
-                for k in i.values:
-                    ast.fix_missing_locations(k)
-            ast.copy_location(keys_arg, node)
-            ast.copy_location(report_arg, node)
             # have created the two required things here.
 
             args = []
@@ -141,23 +106,48 @@ class InstrumentVisitor(ast.NodeTransformer):
                 values.append(ast.List(elts=elements, ctx=ast.Load()))
             arg_dict = ast.Dict(keys=keys, values=values)
             # add the function call
-            for i in ccollector.things:
-                ast.fix_missing_locations(i)
-            ast.fix_missing_locations(result_lambda)
-            ast.fix_missing_locations(keys_arg)
-            ast.fix_missing_locations(report_arg)
             name = ast.Name(id='reporting', ctx=ast.Load(lineno=node.lineno), lineno=node.lineno)
             attr = ast.Attribute(value=name, attr='report', ctx=ast.Load(lineno=node.lineno), lineno=node.lineno)
 
+            report_vals = []
+            key_list = []
+            for i in ccollector.value_map:
+                s = ast.Str(s=ccollector.value_map[i].key, lineno=node.lineno, col_offset=0)
+                key_list.append(s)
+                keys = [
+                    ast.Str(s='cmp', lineno=node.lineno, col_offset=0),
+                    ast.Str(s='thresh', lineno=node.lineno, col_offset=0),
+                    ast.Str(s='res', lineno=node.lineno, col_offset=0),
+                ]
+                values = [
+                    ast.Str(ccollector.value_map[i].comp.arg),
+                    ast.Str(ccollector.value_map[i].thresh.arg),
+                    ast.Str(ccollector.value_map[i].res.arg),
+                ]
+                one_dict = ast.Dict(keys=keys, values=values, lineno=node.lineno, col_offset=0)
+                report_vals.append(one_dict)
+
+            keys_arg = ast.List(elts=key_list, ctx=ast.Load(), lineno=node.lineno, col_offset=0)
+            keys_arg = ast.fix_missing_locations(keys_arg)
+            report_arg = ast.List(elts=report_vals, ctx=ast.Load(), lineno=node.lineno, col_offset=0)
+            report_arg = ast.fix_missing_locations(report_arg)
+
             func_args = [result_lambda, arg_dict, keys_arg, report_arg]
             print ast.dump(report_arg)
+           # func_args = [result_lambda, arg_dict, keys_arg,]# report_arg]
 
             call = ast.Call(
                 func=attr, args=func_args, keywords=ccollector.things, starargs=None, kwargs=None, lineno=node.lineno)
 
             node.test = call
-            ast.fix_missing_locations(node)
-            #now make the call
+            ast.fix_missing_locations(call)
+            for i in ccollector.things:
+                ast.fix_missing_locations(i)
+            ast.fix_missing_locations(result_lambda)
+            ast.fix_missing_locations(keys_arg)
+            ast.fix_missing_locations(report_arg)
+
+
 
         return node
 
