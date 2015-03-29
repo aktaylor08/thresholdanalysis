@@ -397,7 +397,6 @@ class StaticInfoMap(object):
                 if not directory[-1] == '/':
                     directory += '/'
                 for f in glob.glob(directory + "*.json"):
-                    print f
                     self._load_file_info(f, f)
             else:
                 print("ERROR directory does not exist")
@@ -729,7 +728,6 @@ class ThresholdAnalysisModel(object):
             calc_data = data.between_time(time - datetime.timedelta(seconds=time_limit), time)
             # get static information
             thresh_information = self._static_info.get_static_info(key)
-            print thresh_information
             threshs = thresh_information['thresh']
             names = thresh_information['names']
             srcs = thresh_information['sources']
@@ -951,8 +949,6 @@ if __name__ == '__main__':
         print 'running on old records not live!'
         live = False
 
-    print args.thresholds
-    print args.bag_record
     # create the model
     tam = ThresholdAnalysisModel(mark_file=args.mark_file, thresh_file=args.thresholds, file_map=args.key_map,
                                  info_directory=args.info_directory, bag_record=args.bag_record,
