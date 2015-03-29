@@ -133,8 +133,6 @@ class InstrumentVisitor(ast.NodeTransformer):
             report_arg = ast.fix_missing_locations(report_arg)
 
             func_args = [result_lambda, arg_dict, keys_arg, report_arg]
-            print ast.dump(report_arg)
-           # func_args = [result_lambda, arg_dict, keys_arg,]# report_arg]
 
             call = ast.Call(
                 func=attr, args=func_args, keywords=ccollector.things, starargs=None, kwargs=None, lineno=node.lineno)

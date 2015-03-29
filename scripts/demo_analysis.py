@@ -729,6 +729,7 @@ class ThresholdAnalysisModel(object):
             calc_data = data.between_time(time - datetime.timedelta(seconds=time_limit), time)
             # get static information
             thresh_information = self._static_info.get_static_info(key)
+            print thresh_information
             threshs = thresh_information['thresh']
             names = thresh_information['names']
             srcs = thresh_information['sources']
@@ -945,12 +946,17 @@ if __name__ == '__main__':
     parser.add_argument('--namespace',)
     args = parser.parse_args()
 
+    live = True
+    if args.not_live or args.thresholds is not None or args.mark_file is not None or args.bag_record is not None:
+        print 'running on old records not live!'
+        live = False
+
     print args.thresholds
     print args.bag_record
     # create the model
     tam = ThresholdAnalysisModel(mark_file=args.mark_file, thresh_file=args.thresholds, file_map=args.key_map,
                                  info_directory=args.info_directory, bag_record=args.bag_record,
-                                 namespace=args.namespace, live=not args.not_live)
+                                 namespace=args.namespace, live=live)
 
     app = wx.App(False)
     frame = ThresholdFrame(None, "Threshold Analysis information", tam)
