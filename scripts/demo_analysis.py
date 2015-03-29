@@ -504,7 +504,7 @@ class ThresholdAnalysisModel(object):
         that make adding and editing stuff a pain."""
 
     def __init__(self, bag_record=None, mark_file=None, thresh_file=None, file_map=None, info_directory=None,
-                 master_window=None, live=False, namespace=None):
+                 master_window=None, live=True, namespace=None):
         self.background_node = ThresholdNode(live)
         if bag_record is not None:
             self.background_node.import_bag_file(bag_record, namespace)
@@ -940,6 +940,7 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--bag_record', )
     parser.add_argument('-k', '--key_map', nargs='*', )
     parser.add_argument('-d', '--info_directory',)
+    parser.add_argument('--not_live', action='store_true')
     parser.add_argument('--namespace',)
     args = parser.parse_args()
 
@@ -948,7 +949,7 @@ if __name__ == '__main__':
     # create the model
     tam = ThresholdAnalysisModel(mark_file=args.mark_file, thresh_file=args.thresholds, file_map=args.key_map,
                                  info_directory=args.info_directory, bag_record=args.bag_record,
-                                 namespace=args.namespace)
+                                 namespace=args.namespace, live=not args.not_live)
 
     app = wx.App(False)
     frame = ThresholdFrame(None, "Threshold Analysis information", tam)

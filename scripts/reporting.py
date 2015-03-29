@@ -24,7 +24,7 @@ def report(result, arg_dict, report_keys, report_map, *args, **kwargs):
         #create the first part of the results
         vals = ['{:.7f}'.format(rospy.Time.now().to_sec()), report_key, str(result)]
         # now get the kwargs stuff
-        for rep_string, real_key in values.iter_items():
+        for rep_string, real_key in values.iteritems():
             vals.append(rep_string+ ':' + str(kwargs[real_key]).replace(',', ''))
         vals = ','.join(vals)
         Reporter.Instance().publish(vals)

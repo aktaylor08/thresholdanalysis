@@ -1,6 +1,6 @@
 try:
     import rospy
-    from std_msgs.msg import String
+    from std_msgs.msg import String, Time
     ros = True
 except ImportError:
     print("No ros must import to the node instead of live")
@@ -22,11 +22,16 @@ class ThresholdNode(object):
     """Node that controls all threshold stuff"""
 
     def __init__(self, live):
+        print live
         if live:
             if not ros:
                 print "NO ROS"
             else:
-                pass
+                print 'hi'
+                rospy.init_node('threshold_monitor_node')
+                rospy.Subscriber('threshold_information', String, self.thresh_callback)
+                rospy.Subscriber('mark_action', Time, self.mark_action_callback)
+                rospy.Subscriber('mark_no_action', Time , self.mark_no_action_callback)
 
         self._marks = []
         self._new_marks = []
@@ -40,14 +45,14 @@ class ThresholdNode(object):
 
 
     # ROS CALLBACKS
-    def mark_adv_callback(self, msg):
-        pass
+    def mark_action_callback(self, msg):
+        self.handle_mark(msg.data.sec, msg.data.nsec, True)
 
-    def mark_no_adv_callback(self, msg):
-        pass
+    def mark_no_action_callback(self, msg):
+        self.handle_mark(msg.data.sec, msg.data.nsec, True)
 
     def thresh_callback(self, msg):
-        pass
+        self.handle_thresh_string(msg.data)
 
     # Handle a mark
     def handle_mark(self, sec, n_sec, action):
