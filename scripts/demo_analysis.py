@@ -583,8 +583,9 @@ class ThresholdAnalysisModel(object):
 
     def rebuild_dataframe(self):
         data = self.background_node.get_new_threshold_data()
-        self._thresh_df = data
-
+        self._thresh_df = self._thresh_df.append(data)
+        for i, g in self._thresh_df.groupby('key'):
+            print i, g['last_cmp_flop'][-1]
 
     def get_advance_results(self, mark):
         results = []

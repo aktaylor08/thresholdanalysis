@@ -31,7 +31,7 @@ class ThresholdNode(object):
                 rospy.init_node('threshold_monitor_node')
                 rospy.Subscriber('threshold_information', String, self.thresh_callback)
                 rospy.Subscriber('mark_action', Time, self.mark_action_callback)
-                rospy.Subscriber('mark_no_action', Time , self.mark_no_action_callback)
+                rospy.Subscriber('mark_no_action', Time, self.mark_no_action_callback)
 
         self._marks = []
         self._new_marks = []
@@ -41,8 +41,11 @@ class ThresholdNode(object):
 
         self.new_data_store = {}
         self.indexes = {}
+        self.last_total_results = {}
+        self.last_local_results = {}
+        self.last_local_flop = {}
+        self.last_total_flop = {}
         self.times = set()
-
 
     # ROS CALLBACKS
     def mark_action_callback(self, msg):
@@ -90,6 +93,7 @@ class ThresholdNode(object):
         if len(vals) % 2 == 1:
             old = True
 
+        self._lock.acquire()
         # parse times
         time = pd.to_datetime(float(vals[0]), unit='s')
         self.times.add(time)
@@ -115,14 +119,43 @@ class ThresholdNode(object):
         # add to data store key and result
         self.add_to_data('key', time, thresh_key, )
         self.add_to_data('result', time, result, )
+        local_result = None
 
         # now get the rest of the values here and add them to the data store
         for values in rest:
             try:
                 key, val = values.split(':')
+                if key == 'res':
+                    local_result = val
                 self.add_to_data(key, time, float(val), )
             except ValueError:
                 pass
+
+        # keep track of flops here
+        # overall on result
+        if thresh_key in self.last_total_results:
+            if result != self.last_total_results[thresh_key]:
+                # it is a flop
+                self.last_total_flop[thresh_key] = time
+        else:
+            self.last_total_flop[thresh_key] = None
+
+        self.last_total_results[thresh_key] = result
+        self.add_to_data('last_total_flop', time, None)
+
+        # local results
+        if thresh_key in self.last_local_results:
+            if local_result != self.last_local_results[thresh_key]:
+                # it is a flop
+                self.last_local_flop[thresh_key] = time
+        else:
+            self.last_local_flop[thresh_key] = None
+
+        self.last_local_results[thresh_key] = local_result
+        self.add_to_data('last_cmp_flop', time, self.last_local_flop[thresh_key])
+
+
+        self._lock.release()
 
     def add_to_data(self, key, idx_time, value):
         """Add information to the datastore"""
