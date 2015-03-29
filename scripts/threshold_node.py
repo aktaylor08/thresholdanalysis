@@ -46,10 +46,10 @@ class ThresholdNode(object):
 
     # ROS CALLBACKS
     def mark_action_callback(self, msg):
-        self.handle_mark(msg.data.sec, msg.data.nsec, True)
+        self.handle_mark(msg.data.secs, msg.data.nsecs, True)
 
     def mark_no_action_callback(self, msg):
-        self.handle_mark(msg.data.sec, msg.data.nsec, True)
+        self.handle_mark(msg.data.secs, msg.data.nsecs, True)
 
     def thresh_callback(self, msg):
         self.handle_thresh_string(msg.data)
