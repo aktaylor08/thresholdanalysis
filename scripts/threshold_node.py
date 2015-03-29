@@ -22,12 +22,11 @@ class ThresholdNode(object):
     """Node that controls all threshold stuff"""
 
     def __init__(self, live):
-        print live
+        print "Are we doing it live?", live
         if live:
             if not ros:
                 print "NO ROS"
             else:
-                print 'hi'
                 rospy.init_node('threshold_monitor_node')
                 rospy.Subscriber('threshold_information', String, self.thresh_callback)
                 rospy.Subscriber('mark_action', Time, self.mark_action_callback)
@@ -198,6 +197,7 @@ class ThresholdNode(object):
             return
         _, ext = os.path.splitext(bag_file)
         bag_df = None
+        csv = False
         if ext == '.bag':
             if rbp:
                 bag_df = rosbag_pandas.bag_to_dataframe(bag_file)
@@ -206,11 +206,14 @@ class ThresholdNode(object):
 
         elif ext == '.csv':
             bag_df = pd.read_csv(bag_file, parse_dates=True, index_col=0)
+            csv = True
         if ns is None:
             thresh = bag_df['threshold_information__data'].dropna()
         else:
             thresh = bag_df[ns + '_threshold_information__data'].dropna()
         for i in thresh.values:
+            if csv:
+                i = i.replace('\t', ',')
             self.handle_thresh_string(i)
         self.handle_mark_df(bag_df)
 
