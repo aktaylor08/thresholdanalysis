@@ -125,10 +125,14 @@ class ThresholdNode(object):
             try:
                 key, val = values.split(':')
                 if key == 'res':
+                    try:
+                        val = int(vals[2]) == 0
+                    except:
+                        val = vals[2] == 'True'
                     local_result = val
                 self.add_to_data(key, time, float(val), )
-            except ValueError:
-                pass
+            except ValueError as e:
+                print e
 
         # keep track of flops here
         # overall on result
@@ -143,15 +147,18 @@ class ThresholdNode(object):
         self.add_to_data('last_total_flop', time, None)
 
         # local results
+        local_flop = False
         if thresh_key in self.last_local_results:
             if local_result != self.last_local_results[thresh_key]:
                 # it is a flop
                 self.last_local_flop[thresh_key] = time
+                local_flop = True
         else:
             self.last_local_flop[thresh_key] = None
 
         self.last_local_results[thresh_key] = local_result
         self.add_to_data('last_cmp_flop', time, self.last_local_flop[thresh_key])
+        self.add_to_data('flop', time, local_flop)
 
 
         self._lock.release()
@@ -216,9 +223,6 @@ class ThresholdNode(object):
                 i = i.replace('\t', ',')
             self.handle_thresh_string(i)
         self.handle_mark_df(bag_df)
-
-
-
 
     def import_thresh_file(self, thresh_file):
         """Import a previously parsed threshold file"""
