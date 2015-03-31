@@ -850,6 +850,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--info_directory',)
     parser.add_argument('--not_live', action='store_true')
     parser.add_argument('--namespace',)
+    parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
 
     live = True
