@@ -10,7 +10,7 @@ class Faker(object):
 
     def __init__(self):
         rospy.init_node("FAKEKTR")
-        self.publiser = rospy.Publisher("/give_me_info",  Int16)
+        self.publiser = rospy.Publisher("/give_me_info",  Int16, queue_size=10)
 
     def main_loop(self):
         rate = rospy.Rate(10)

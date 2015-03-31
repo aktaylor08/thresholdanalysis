@@ -84,7 +84,7 @@ class ThresholdNode(object):
 
     # Handle a new threshold
     def handle_thresh_string(self, thresh_string):
-        """Parse a threshold string from an isntrumentation site"""
+        """Parse a threshold string"""
         vals = thresh_string.split(',')
 
         # is it an old or new style
@@ -159,8 +159,6 @@ class ThresholdNode(object):
         self.last_local_results[thresh_key] = local_result
         self.add_to_data('last_cmp_flop', time, self.last_local_flop[thresh_key])
         self.add_to_data('flop', time, local_flop)
-
-
         self._lock.release()
 
     def add_to_data(self, key, idx_time, value):

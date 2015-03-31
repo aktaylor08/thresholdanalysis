@@ -63,17 +63,17 @@ class ThresholdGraphPanel(wx.Panel):
         ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
         ax.axvline(x=result.time, linestyle='--', linewidth=2, c='r')
         ax.text(0.95, 0.01, result.graph.suggestion, verticalalignment='bottom',
-            horizontalalignment='right',
-            transform=ax.transAxes, color='g', fontsize=16)
+                horizontalalignment='right',
+                transform=ax.transAxes, color='g', fontsize=16)
         ax.set_title(result.graph.name)
         for tick in ax.xaxis.get_major_ticks():
             tick.label.set_fontsize(13)
-           # specify integer or one of preset strings, e.g.
+            # specify integer or one of preset strings, e.g.
             tick.label.set_rotation(-45)
         for tick in ax.yaxis.get_major_ticks():
             tick.label.set_fontsize(14)
-                        # specify integer or one of preset strings, e.g.
-                        # ax.legend()
+            # specify integer or one of preset strings, e.g.
+            # ax.legend()
         # self.canvas.figure = self.figure #= FigureCanvas(self, -1, self.figure)
         self.canvas.draw()
 
@@ -153,7 +153,6 @@ class ThresholdInfoPanel(wx.Panel):
 
 
 class ThresholdPairPanel(wx.Panel):
-
     def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
@@ -311,7 +310,7 @@ class ThresholdFrame(wx.Frame):
         self.timer.Start(1000)
         wx.EVT_TIMER(self, TIMER_ID, self.on_timer)
 
-    def on_timer(self, event):
+    def on_timer(self, _):
         if self.analysis_model is not None:
             rebuild = self.analysis_model.process_new_marks()
             if rebuild:
@@ -407,7 +406,7 @@ class StaticInfoMap(object):
         max_val = 0
         for i in self._info.itervalues():
             if int(i['distance']) > 0:
-                    max_val = int(i['distance'])
+                max_val = int(i['distance'])
         return max_val
 
 
@@ -481,8 +480,8 @@ class ThresholdAnalysisModel(object):
         that make adding and editing stuff a pain."""
 
     def __init__(self, bag_record=None, mark_file=None, thresh_file=None, file_map=None, info_directory=None,
-                 master_window=None, live=True, namespace=None):
-        self.background_node = ThresholdNode(live)
+                 master_window=None, is_live=True, namespace=None):
+        self.background_node = ThresholdNode(is_live)
         if bag_record is not None:
             self.background_node.import_bag_file(bag_record, namespace)
         else:
@@ -490,7 +489,6 @@ class ThresholdAnalysisModel(object):
                 self.background_node.import_mark_file(mark_file)
             if thresh_file:
                 self.background_node.import_thresh_file(thresh_file)
-
 
         self._static_info = StaticInfoMap(file_map, info_directory)
         self.marks = []
@@ -546,7 +544,7 @@ class ThresholdAnalysisModel(object):
         return False
 
     def compute_results(self, marks):
-        #rebuild dataframe here.
+        # rebuild dataframe here.
         self.rebuild_dataframe()
         for i in marks:
             if i.isaction:
@@ -590,30 +588,30 @@ class ThresholdAnalysisModel(object):
         for key, data in groups:
             elapsed = elapsed_times[key]
             if elapsed < time_limit:
-                    score = elapsed
-                    sugestion = self.get_suggestion(time, data, 'cmp', 'thresh', 'res',  True)
-                    # build up the result
-                    one_result = AnalysisResult()
-                    thresh_information = self._static_info.get_static_info(key)
+                score = elapsed
+                sugestion = self.get_suggestion(time, data, 'cmp', 'thresh', 'res', True)
+                # build up the result
+                one_result = AnalysisResult()
+                thresh_information = self._static_info.get_static_info(key)
 
-                    # store information
-                    one_result.threshold = thresh_information['name']
-                    one_result.source = thresh_information['source']
-                    one_result.name = thresh_information['name']
-                    one_result.score = score
-                    one_result.suggestion = sugestion
-                    one_result.time = time
-                    one_result.stmt_key = key
+                # store information
+                one_result.threshold = thresh_information['name']
+                one_result.source = thresh_information['source']
+                one_result.name = thresh_information['name']
+                one_result.score = score
+                one_result.suggestion = sugestion
+                one_result.time = time
+                one_result.stmt_key = key
 
-                    graph = GraphStorage()
-                    one_result.graph = graph
-                    graph_data = data.between_time(st, time + datetime.timedelta(seconds=time_limit))
-                    graph.index = graph_data.index
-                    graph.name = thresh_information['source']
-                    graph.suggestion = sugestion
-                    graph.cmp = graph_data['cmp'].values
-                    graph.thresh = graph_data['thresh'].values
-                    results.append(one_result)
+                graph = GraphStorage()
+                one_result.graph = graph
+                graph_data = data.between_time(st, time + datetime.timedelta(seconds=time_limit))
+                graph.index = graph_data.index
+                graph.name = thresh_information['source']
+                graph.suggestion = sugestion
+                graph.cmp = graph_data['cmp'].values
+                graph.thresh = graph_data['thresh'].values
+                results.append(one_result)
 
         self.post_notification("Done with advance result")
         return results
@@ -622,7 +620,9 @@ class ThresholdAnalysisModel(object):
         """Get a suggestion based on other values"""
         # TODO this still needs some work..
         if action:
-            lf = get_series_flops(data.between_time(time - datetime.timedelta(seconds=self.analysis_parameters['no_action_time_limit']), time)[res_key])
+            lf = get_series_flops(
+                data.between_time(time - datetime.timedelta(seconds=self.analysis_parameters['no_action_time_limit']),
+                                  time)[res_key])
             if len(lf) == 0:
                 comp = data[comp_key]
                 thresh = data[thresh_key]
@@ -683,7 +683,7 @@ class ThresholdAnalysisModel(object):
                 const = (const - minval) / (maxval - minval)
             else:
                 cseries = pd.Series(data=.5, index=cseries.index)
-                const= pd.Series(data=.5, index=const.index)
+                const = pd.Series(data=.5, index=const.index)
             dist = cseries - const
             dist = np.sqrt(dist * dist).mean()
             if dist == 0:
@@ -701,7 +701,7 @@ class ThresholdAnalysisModel(object):
             d_score = d / float(md)
             if d_score == 0:
                 d_score = 1
-            score = (dist / d_score) + flop_in_series #/ NUM_COMPARISIONS)
+            score = (dist / d_score) + flop_in_series  # / num_comparisions)
 
             suggestion = self.get_suggestion(time, calc_data, 'cmp',
                                              'thresh', 'res', False)
@@ -719,7 +719,7 @@ class ThresholdAnalysisModel(object):
 
             one_result.graph = graph
             graph_data = data.between_time(time - datetime.timedelta(seconds=graph_limit),
-                                               time + datetime.timedelta(seconds=graph_limit))
+                                           time + datetime.timedelta(seconds=graph_limit))
             graph.index = graph_data.index
             graph.name = thresh_information['name']
             graph.suggestion = suggestion
@@ -737,6 +737,7 @@ class ThresholdAnalysisModel(object):
 
 class AnalysisResult(object):
     """Object to hold results"""
+
     def __init__(self):
         """Init with all of the data values it stores set to `none"""
         self.graph_index = None
@@ -752,7 +753,8 @@ class AnalysisResult(object):
         self.graph_map = None
         self.graph = None
 
-#Flopping stuff
+
+# Flopping stuff
 def get_flop_information(df):
     """Add last flop information to a dataframe"""
     if df is None:
@@ -847,9 +849,9 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mark_file', )
     parser.add_argument('-b', '--bag_record', )
     parser.add_argument('-k', '--key_map', nargs='*', )
-    parser.add_argument('-d', '--info_directory',)
+    parser.add_argument('-d', '--info_directory', )
     parser.add_argument('--not_live', action='store_true')
-    parser.add_argument('--namespace',)
+    parser.add_argument('--namespace', )
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
 
@@ -861,7 +863,7 @@ if __name__ == '__main__':
     # create the model
     tam = ThresholdAnalysisModel(mark_file=args.mark_file, thresh_file=args.thresholds, file_map=args.key_map,
                                  info_directory=args.info_directory, bag_record=args.bag_record,
-                                 namespace=args.namespace, live=live)
+                                 namespace=args.namespace, is_live=live)
 
     app = wx.App(False)
     frame = ThresholdFrame(None, "Threshold Analysis information", tam)
