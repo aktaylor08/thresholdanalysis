@@ -12,7 +12,7 @@ class CPPConversion(object):
 
     def __init__(self):
         rospy.init_node("Conversion")
-        self.out_publisher = rospy.Publisher('/threshold_information', String, )
+        self.out_publisher = rospy.Publisher('/threshold_information', String, queue_size=500 )
         self.in_topic = rospy.Subscriber('/rosout', Log, self.out_callback,)
 
     def out_callback(self, msg):
