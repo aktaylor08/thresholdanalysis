@@ -37,9 +37,12 @@ SHOW_CODE_ID = wx.NewId()
 
 
 class ThresholdGraphPanel(wx.Panel):
+    """This panel contains the graph"""
+
     def __init__(self, parent, model):
         wx.Panel.__init__(self, parent, -1)  # ), size=(50, 50))
 
+        # set up the matplotlib figure
         self.figure = matplotlib.figure.Figure()
         self.figure.set_facecolor('w')
         self.model = model
@@ -51,13 +54,15 @@ class ThresholdGraphPanel(wx.Panel):
         self.SetSizer(hbox)
 
     def update_graphic(self, result):
+        """Update the graph"""
+        # clear and plot
         self.figure.clear()
-
-        ax = self.figure.add_subplot(1, 1, 1)
         ax = self.figure.add_subplot(1, 1, 1)
         index = result.graph.index
         ax.plot(index, result.graph.cmp, label='cmp', linewidth=3, marker='o')
         ax.plot(index, result.graph.thresh, label='thresh', linewidth=3)
+
+        # set limits and tick marks and text and all of the goodness
         a = ax.get_ylim()
         ax_range = a[1] - a[0]
         ax.set_ylim(a[0] - .05 * ax_range, a[1] + .05 * ax_range)
@@ -68,22 +73,22 @@ class ThresholdGraphPanel(wx.Panel):
         ax.set_title(result.graph.name)
         for tick in ax.xaxis.get_major_ticks():
             tick.label.set_fontsize(13)
-            # specify integer or one of preset strings, e.g.
             tick.label.set_rotation(-45)
         for tick in ax.yaxis.get_major_ticks():
             tick.label.set_fontsize(14)
-            # specify integer or one of preset strings, e.g.
-            # ax.legend()
-        # self.canvas.figure = self.figure #= FigureCanvas(self, -1, self.figure)
+
+        # draw it
         self.canvas.draw()
 
     def clear_graphic(self):
+        """Draw a blank graphic"""
         self.figure.clear()
         self.figure.add_subplot(111)
         self.canvas.draw()
 
 
 class ThresholdInfoPanel(wx.Panel):
+    """This panel contains basic information about thresholds"""
     def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
@@ -92,6 +97,7 @@ class ThresholdInfoPanel(wx.Panel):
         # self._list_ctrl = wx.ListCtrl(self, size=(-1, 100), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
         self._list_ctrl = AutoWidthListCtrl(self)
 
+        # set up the list control
         self._list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
         self._list_ctrl.InsertColumn(0, "Threshold")
         self._list_ctrl.InsertColumn(1, "Source")
@@ -99,6 +105,7 @@ class ThresholdInfoPanel(wx.Panel):
         self._list_ctrl.InsertColumn(3, "Suggestion")
         self._list_ctrl.InsertColumn(4, "Location")
 
+        # keep track of rows
         self._row_dict = {}
 
         h_box = wx.BoxSizer(wx.HORIZONTAL)
@@ -109,6 +116,7 @@ class ThresholdInfoPanel(wx.Panel):
         self.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.handle_right_click)
 
     def handle_right_click(self, event):
+        """Create a menu"""
         menu = wx.Menu()
         menu.Append(SHOW_CODE_ID, "Show Source Code")
         wx.EVT_MENU(menu, SHOW_CODE_ID, self.menu_select_callback)
@@ -116,27 +124,26 @@ class ThresholdInfoPanel(wx.Panel):
         menu.Destroy()
 
     def menu_select_callback(self, event):
+        """Select a menu value"""
         op = event.GetId()
 
         if op == SHOW_CODE_ID:
-            fname, line = self._selected.stmt_key.split(':')
-            if os.path.exists(fname):
-                with open(fname) as src_file:
-                    lines = src_file.readlines()
-                    code = ''.join(lines[int(line) - 3:int(line) + 3])
-            else:
-                code = 'Could not find file {:s}'.format(fname)
+            key = self._selected.stmt_key
+            code = self.model.get_threshold_dict(key)['source_code']
             wx.MessageBox(code, "Source Code", wx.OK)
         else:
             pass
 
     def add_thresholds(self, index):
+        """Add threshold results to the the demo analysis"""
         # Clear everything out
         results = self.model.get_results(index)
         results = sorted(results, key=lambda x: x.score)
         self._row_dict.clear()
         self._list_ctrl.DeleteAllItems()
         self._selected = None
+
+        # put values into the list control
         for idx, res in enumerate(results):
             self._list_ctrl.InsertStringItem(idx, str(res.name))
             self._list_ctrl.SetStringItem(idx, 1, str(res.source))
@@ -145,7 +152,12 @@ class ThresholdInfoPanel(wx.Panel):
             self._list_ctrl.SetStringItem(idx, 4, str(res.stmt_key))
             self._row_dict[idx] = res
 
+        # select the first if possible
+        if len(self._row_dict) > 0:
+            self._list_ctrl.Select(0)
+
     def on_item_selected(self, event):
+        """An item has been selected so push the value to the graph"""
         current_item = event.m_itemIndex
         val = self._row_dict[current_item]
         self._selected = val
@@ -157,6 +169,7 @@ class ThresholdPairPanel(wx.Panel):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
         self.model = model
+        # set up the list control
         self._list_ctrl = AutoWidthListCtrl(self)
         self._list_ctrl.InsertColumn(0, "Type")
         self._list_ctrl.InsertColumn(1, "Source")
@@ -173,24 +186,30 @@ class ThresholdPairPanel(wx.Panel):
         self._selected = None
 
     def rebuild_list(self):
+        """We have a new option so rebuild the list"""
+        # clear stuff
         self._row_dict.clear()
         self._data_dict.clear()
         self._list_ctrl.DeleteAllItems()
         self._selected = None
 
         values = self.model.get_threshold_information()
-        for idx, res in enumerate(values):
-            self._list_ctrl.InsertStringItem(idx, res[1])
-            self._list_ctrl.SetStringItem(idx, 1, str(res[2]))
-            self._list_ctrl.SetStringItem(idx, 2, str(res[3]))
+        keys = self.model.get_all_defined_thresholds()
+        print keys
+        for idx, key in enumerate(keys):
+            d = self.model.get_threshold_dict(key)
+
+            self._list_ctrl.InsertStringItem(idx, d['type'])
+            self._list_ctrl.SetStringItem(idx, 1, d['source'])
+            self._list_ctrl.SetStringItem(idx, 2, str(self.model.get_thresh_value(key)))
             self._list_ctrl.SetStringItem(idx, 3, "")
-            self._row_dict[idx] = res
-            self._data_dict[res[0]] = res
+            self._row_dict[idx] = key
         for i in range(self._list_ctrl.GetColumnCount()):
             self._list_ctrl.SetColumnWidth(i, -1)
         self._list_ctrl.SetColumnWidth(2, -2)
 
     def mark_possible(self, idx, take=2):
+        """Mark incoming results"""
         results = self.model.get_results(idx)
         results = sorted(results, key=lambda x: x.score)
         # now either have a cutoff score or cutoff number
@@ -202,9 +221,9 @@ class ThresholdPairPanel(wx.Panel):
 
         # add new text
         for idx, res in enumerate(results):
-            val = self._data_dict[res.stmt_key]
+            key = res.stmt_key
             for r, v in self._row_dict.iteritems():
-                if v == val:
+                if v == key:
                     self._selected.append(r)
                     self._list_ctrl.SetStringItem(r, 3, res.suggestion)
 
@@ -217,6 +236,7 @@ class ThresholdPairPanel(wx.Panel):
 
 
 class UserMarkPanel(wx.Panel):
+    """User mark panel -> this displays all previous marks"""
     def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
@@ -236,6 +256,7 @@ class UserMarkPanel(wx.Panel):
         self._selected = None
 
     def rebuild_list(self):
+        """Rebuild the list"""
         self._row_dict.clear()
         self._list_ctrl.DeleteAllItems()
         self._selected = None
@@ -243,14 +264,21 @@ class UserMarkPanel(wx.Panel):
             self._list_ctrl.InsertStringItem(idx, res.label)
             self._list_ctrl.SetStringItem(idx, 1, str(res.time))
             self._row_dict[idx] = res
+        last = len(self._row_dict) - 1
+        if last >= 0:
+            self._selected = self._row_dict[last]
+            self._list_ctrl.Select(last)
 
     def on_item_selected(self, event):
+        """When an item is selected put it on all of the other ones"""
         current_item = event.m_itemIndex
         val = self._row_dict[current_item]
         self._selected = val
+        # post the events
         wx.PostEvent(self._notify_window, MarkSelectedEvent(index=val))
 
     def get_graphical_information(self, threshold_store):
+        """Get graphical information"""
         if self._selected is not None:
             return self._selected.graph_map[threshold_store.stmt_key]
         else:
@@ -264,6 +292,7 @@ class AutoWidthListCtrl(wx.ListCtrl, ListCtrlAutoWidthMixin):
 
 
 class ThresholdFrame(wx.Frame):
+    """GUI frame for thresholds"""
     def __init__(self, parent, title, model):
         wx.Frame.__init__(self, parent, title=title, size=(900, 700))
 
@@ -293,8 +322,8 @@ class ThresholdFrame(wx.Frame):
 
         self.left_right.SplitVertically(self.mark_panel, self.notebook, 200)
         self.left_right.SetSashGravity(0.0)
-        self.graph_page.SplitHorizontally(self.graph_area, self.thresh_info_area, 550)
-        self.graph_page.SetSashGravity(.8)
+        self.graph_page.SplitHorizontally(self.graph_area, self.thresh_info_area, 200)
+        self.graph_page.SetSashGravity(.5)
         self.worker = None
 
         # set up the status bar
@@ -311,6 +340,7 @@ class ThresholdFrame(wx.Frame):
         wx.EVT_TIMER(self, TIMER_ID, self.on_timer)
 
     def on_timer(self, _):
+        """ timer callback to update and rebuild the list """
         if self.analysis_model is not None:
             rebuild = self.analysis_model.process_new_marks()
             if rebuild:
@@ -324,11 +354,15 @@ class ThresholdFrame(wx.Frame):
             self.thresh_pair_panel.rebuild_list()
 
     def on_mark_selected(self, event):
+        """
+        A mark has been selected to rerun all of the stuff
+        """
         self.graph_area.clear_graphic()
         self.thresh_info_area.add_thresholds(event.index)
         self.thresh_pair_panel.mark_possible(event.index)
 
     def on_threshold_selected(self, event):
+        """Update graphic!"""
         self.graph_area.update_graphic(event.result)
 
 
@@ -408,6 +442,9 @@ class StaticInfoMap(object):
             if int(i['distance']) > 0:
                 max_val = int(i['distance'])
         return max_val
+
+    def get_all_keys(self):
+        return [x for x in self._info.keys()]
 
 
 class UserMark(object):
@@ -505,6 +542,12 @@ class ThresholdAnalysisModel(object):
         self.no_advanced_results = None
         # wx notification stuff
         self._notify_window = master_window
+
+    def get_threshold_dict(self, key):
+        return self._static_info.get_static_info(key)
+
+    def get_all_defined_thresholds(self):
+        return self._static_info.get_all_keys()
 
     def get_threshold_information(self):
         ret_vals = []
