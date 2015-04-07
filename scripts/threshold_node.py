@@ -51,7 +51,7 @@ class ThresholdNode(object):
         self.handle_mark(msg.data.secs, msg.data.nsecs, True)
 
     def mark_no_action_callback(self, msg):
-        self.handle_mark(msg.data.secs, msg.data.nsecs, True)
+        self.handle_mark(msg.data.secs, msg.data.nsecs, False)
 
     def thresh_callback(self, msg):
         self.handle_thresh_string(msg.data)
