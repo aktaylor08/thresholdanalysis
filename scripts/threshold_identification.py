@@ -560,7 +560,7 @@ class TestInfoVisitor(ast.NodeVisitor):
         return v.found
 
 
-def main(file_name):
+def main():
     parser = argparse.ArgumentParser(description=("This is a program to find"
                                                   " constant thresholds in a python program"))
     parser.add_argument('file', help='path to file')
@@ -568,6 +568,7 @@ def main(file_name):
                         action='store_true', )
     parser.add_argument('-g', '--graph', help='Graph the thresholds and stuff',
                         action='store_true', )
+    parser.add_argument("-i", "--info_out", help='File Name to output threshold information to')
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
     with open(args.file) as openf:
@@ -579,7 +580,7 @@ def main(file_name):
         rd = ReachingDefinition(tree, cfgvisit.store)
         rd.compute()
 
-        ag = AnalysisGraph(file_name)
+        ag = AnalysisGraph(args.file)
         ag.import_cfg(cfgvisit.store)
         ag.import_rd(rd.rds_in)
 
@@ -650,7 +651,10 @@ def main(file_name):
             keys[thresh] = cur_keys
 
         fname, _ = os.path.splitext(args.file)
+        if args.info_out:
+            fname = args.info_out
         f = fname + '_thresh_info.json'
+        print f
         with open(f, 'w') as json_out:
             json.dump(infomation, json_out, indent=1)
 
@@ -658,5 +662,4 @@ def main(file_name):
             instrument_thresholds(tree, thresholds, keys, args.file, code.split('\n'), False, args.rest)
 
 if __name__ == "__main__":
-    fname = sys.argv[1]
-    main(fname)
+    main()
