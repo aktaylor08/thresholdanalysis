@@ -15,20 +15,27 @@ def get_groups(lines):
     inside_args = []
     active = False
     for i in lines:
-        print i
-        match = re.search("(\w*\s*\()", i)
+        found_a_match = False
+        match = re.search("(\w*)\s*\(", i)
         if match is not None:
+            found_a_match = True
             pcount += 1
             if pcount == 1:
-                cur_cmd = match.group()[:-1]
+                cur_cmd = match.groups()[0]
             else:
-                print match.group()
+                print "error"
+                assert False
 
-        match = re.search("\w*\s*\)", i)
+        match = re.search("(\w*)\s*\)", i)
         if match is not None:
+            found_a_match = True
             pcount -= 1
-            arguments.append((cur_cmd, inside_args))
-    print arguments
+            if pcount == 0:
+                arguments.append((cur_cmd, arguments))
+            else:
+                print "error on close paren"
+                assert False
+        print found_a_match
 
 
 
