@@ -105,7 +105,7 @@ def do_work(directory_start):
                 cmake_args.insert(2, ('set', ["CMAKE_CXX_COMPILER", "clang++"]))
                 # back up old CMakeLists.txt
                 if not os.path.exists(dir_path + '/CMakeLists.txt_backup'):
-                    print "creating nonexistant backup for {:s}".format(dir_path + '/CMakeLists.txt')
+                    print "creating backup for {:s}".format(dir_path + '/CMakeLists.txt')
                     shutil.copy(dir_path + '/CMakeLists.txt', dir_path + '/CMakeLists.txt_backup')
 
                 # write out the new file
@@ -124,6 +124,7 @@ def restore(directory_start):
     for dir_path, names, files in os.walk(directory_start):
         # if we have a cmakelists and package.xml than we are in a thing to modify
         if "CMakeLists.txt_backup" in files:
+            print("Restoring backup in directory: {:s}".format(dir_path))
             shutil.move(dir_path + '/' + "CMakeLists.txt_backup", dir_path + '/' + "CMakeLists.txt")
 
 
