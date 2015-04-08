@@ -1,7 +1,5 @@
 <launch>
     <node pkg="thresholdanalysis" type="gui_tool.py" name="gui_tool"/>
-    <!-- <node pkg="thresholdanalysis" type="demo_analysis.py" name="analysis" args="-d ~/clang_results"/>
-         -->
     <node pkg="thresholdanalysis" type="cpp_conversion_node.py" name="conversion" /> 
     <node pkg="thresholdanalysis" type="demo_analysis.py" name="analysis_window" args="-d /home/ataylor/clang_results" /> 
 </launch>
