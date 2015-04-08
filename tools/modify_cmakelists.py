@@ -102,6 +102,7 @@ def do_work(directory_start):
                             arg[1].append('src/instrument.cpp')
 
             if changed:
+                cmake_args.insert(2, ('set', ["CMAKE_CXX_COMPILER", "clang++"]))
                 # back up old CMakeLists.txt
                 if not os.path.exists(dir_path + '/CMakeLists.txt_backup'):
                     print "creating nonexistant backup for {:s}".format(dir_path + '/CMakeLists.txt')
@@ -119,12 +120,19 @@ def do_work(directory_start):
                 shutil.copy(INSTRUMENT_FILE_LOCATION, dir_path + '/src/')
 
 
+def restore(directory_start):
+    for dir_path, names, files in os.walk(directory_start):
+        # if we have a cmakelists and package.xml than we are in a thing to modify
+        if "CMakeLists.txt_backup" in files:
+            shutil.move(dir_path + '/' + "CMakeLists.txt_backup", dir_path + '/' + "CMakeLists.txt")
+
 
 if __name__ == '__main__':
     # parse args
     parser = argparse.ArgumentParser(
         description="Parse all of the python files in the directories below the one passed")
     parser.add_argument('directory', help="Directory and below to process")
+    parser.add_argument("--restore", help="Revert to the CMakeLists.txt_backup files that this method creates.")
     args = parser.parse_args()
 
     directory = args.directory
@@ -134,4 +142,8 @@ if __name__ == '__main__':
     if not os.path.exists(INSTRUMENT_FILE_LOCATION):
         print("INSTRUMENTATION FILE DOES NOT EXIST WOAH")
         sys.exit(-1)
-    do_work(directory)
+    if args.restore:
+        restore(directory)
+    else:
+        do_work(directory)
+
