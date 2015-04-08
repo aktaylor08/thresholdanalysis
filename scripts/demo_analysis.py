@@ -37,6 +37,8 @@ SHOW_CODE_ID = wx.NewId()
 
 
 class ThresholdGraphPanel(wx.Panel):
+    """This is the graph view in the analysis window. Will graph one threshold at a time.
+    call update graphic with a result to display that graphic"""
     def __init__(self, parent, model):
         wx.Panel.__init__(self, parent, -1)  # ), size=(50, 50))
 
@@ -51,9 +53,9 @@ class ThresholdGraphPanel(wx.Panel):
         self.SetSizer(hbox)
 
     def update_graphic(self, result):
+        """clean and update"""
         self.figure.clear()
 
-        ax = self.figure.add_subplot(1, 1, 1)
         ax = self.figure.add_subplot(1, 1, 1)
         index = result.graph.index
         ax.plot(index, result.graph.cmp, label='cmp', linewidth=3, marker='o')
@@ -74,7 +76,6 @@ class ThresholdGraphPanel(wx.Panel):
             tick.label.set_fontsize(14)
             # specify integer or one of preset strings, e.g.
             # ax.legend()
-        # self.canvas.figure = self.figure #= FigureCanvas(self, -1, self.figure)
         self.canvas.draw()
 
     def clear_graphic(self):
@@ -84,20 +85,21 @@ class ThresholdGraphPanel(wx.Panel):
 
 
 class ThresholdInfoPanel(wx.Panel):
+    """This panel holds information that is displayed below the graphic -> Threshold, source, score, location etc"""
+
     def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
         self.model = model
 
-        # self._list_ctrl = wx.ListCtrl(self, size=(-1, 100), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
+        # set up a list control to show the results
         self._list_ctrl = AutoWidthListCtrl(self)
-
         self._list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
-        self._list_ctrl.InsertColumn(0, "Threshold")
+        self._list_ctrl.InsertColumn(0, "Type")
         self._list_ctrl.InsertColumn(1, "Source")
         self._list_ctrl.InsertColumn(2, "Score")
         self._list_ctrl.InsertColumn(3, "Suggestion")
-        self._list_ctrl.InsertColumn(4, "Location")
+        self._list_ctrl.InsertColumn(4, "File")
 
         self._row_dict = {}
 
@@ -116,36 +118,51 @@ class ThresholdInfoPanel(wx.Panel):
         menu.Destroy()
 
     def menu_select_callback(self, event):
+        """do nothing in the callback"""
         op = event.GetId()
-
         if op == SHOW_CODE_ID:
-            fname, line = self._selected.stmt_key.split(':')
-            if os.path.exists(fname):
-                with open(fname) as src_file:
-                    lines = src_file.readlines()
-                    code = ''.join(lines[int(line) - 3:int(line) + 3])
-            else:
-                code = 'Could not find file {:s}'.format(fname)
-            wx.MessageBox(code, "Source Code", wx.OK)
+            pass
         else:
             pass
 
     def add_thresholds(self, index):
+        """Add the results from a mark to the panel in this method"""
         # Clear everything out
         results = self.model.get_results(index)
+        # sort on score
         results = sorted(results, key=lambda x: x.score)
+        # clear all
         self._row_dict.clear()
         self._list_ctrl.DeleteAllItems()
         self._selected = None
+        values = self.model.get_static_info_copy()
         for idx, res in enumerate(results):
-            self._list_ctrl.InsertStringItem(idx, str(res.name))
-            self._list_ctrl.SetStringItem(idx, 1, str(res.source))
-            self._list_ctrl.SetStringItem(idx, 2, str(res.score))
-            self._list_ctrl.SetStringItem(idx, 3, str(res.suggestion))
-            self._list_ctrl.SetStringItem(idx, 4, str(res.stmt_key))
+            # get the values to put in the list control
+            key = res.stmt_key
+            ty = str(values[key]['type'])
+            src = str(values[key]['source'])
+            score = "{:.3f}".format(res.score)
+            sug = str(res.suggestion)
+            loc = str(values[key]['file']) + ' ' + str(values[key]['lineno'])
+
+            # populate
+            self._list_ctrl.InsertStringItem(idx, ty)
+            self._list_ctrl.SetStringItem(idx, 1, src)
+            self._list_ctrl.SetStringItem(idx, 2, score)
+            self._list_ctrl.SetStringItem(idx, 3, sug)
+            self._list_ctrl.SetStringItem(idx, 4, loc)
+
             self._row_dict[idx] = res
+        # make the first 4 columns fit and expand if need be...
+        self._list_ctrl.SetColumnWidth(0, -1)
+        self._list_ctrl.SetColumnWidth(1, -1)
+        self._list_ctrl.SetColumnWidth(2, -1)
+        self._list_ctrl.SetColumnWidth(3, -1)
+        self._selected = self._row_dict[0]
+        self._list_ctrl.SetItemState(0, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
 
     def on_item_selected(self, event):
+        """When an item is selected pass it along to the graphic panel"""
         current_item = event.m_itemIndex
         val = self._row_dict[current_item]
         self._selected = val
@@ -153,6 +170,8 @@ class ThresholdInfoPanel(wx.Panel):
 
 
 class ThresholdPairPanel(wx.Panel):
+    """This panel holds a basic view of all of the threshold pairs in the system"""
+
     def __init__(self, parent, notify_window, model):
         wx.Panel.__init__(self, parent)
         self._notify_window = notify_window
@@ -160,7 +179,7 @@ class ThresholdPairPanel(wx.Panel):
         self._list_ctrl = AutoWidthListCtrl(self)
         self._list_ctrl.InsertColumn(0, "Type")
         self._list_ctrl.InsertColumn(1, "Source")
-        self._list_ctrl.InsertColumn(2, "Value")
+        self._list_ctrl.InsertColumn(2, "Current Value")
         self._list_ctrl.InsertColumn(3, "Suggestion")
         for i in range(self._list_ctrl.GetColumnCount()):
             self._list_ctrl.SetColumnWidth(i, -2)
@@ -173,22 +192,35 @@ class ThresholdPairPanel(wx.Panel):
         self._selected = None
 
     def rebuild_list(self):
+        """Rebuild the list on command"""
         self._row_dict.clear()
         self._data_dict.clear()
         self._list_ctrl.DeleteAllItems()
         self._selected = None
 
+        """Get information on the thresholds"""
         values = self.model.get_threshold_information()
-        for idx, res in enumerate(values):
+        # split into nan and not nan results
+        v1 = filter(lambda x: not np.isnan(x[3]), values)
+        v2 = filter(lambda x: np.isnan(x[3]), values)
+        for idx, res in enumerate(v1):
             self._list_ctrl.InsertStringItem(idx, res[1])
             self._list_ctrl.SetStringItem(idx, 1, str(res[2]))
             self._list_ctrl.SetStringItem(idx, 2, str(res[3]))
             self._list_ctrl.SetStringItem(idx, 3, "")
             self._row_dict[idx] = res
             self._data_dict[res[0]] = res
+        offset = idx
+        for idx, res in enumerate(v2):
+            self._list_ctrl.InsertStringItem(idx+offset, res[1])
+            self._list_ctrl.SetStringItem(idx+offset, 1, str(res[2]))
+            self._list_ctrl.SetStringItem(idx+offset, 2, str('No Data'))
+            self._list_ctrl.SetStringItem(idx+offset, 3, "")
+            self._row_dict[idx+offset] = res
+            self._data_dict[res[0]] = res
         for i in range(self._list_ctrl.GetColumnCount()):
             self._list_ctrl.SetColumnWidth(i, -1)
-        self._list_ctrl.SetColumnWidth(2, -2)
+        self._list_ctrl.SetColumnWidth(3, -2)
 
     def mark_possible(self, idx, take=2):
         results = self.model.get_results(idx)
@@ -377,6 +409,12 @@ class StaticInfoMap(object):
             else:
                 print("ERROR directory does not exist")
 
+    def get_copy(self):
+        d = {}
+        for i in self._info.iterkeys():
+            d[i] = self._info[i]
+        return d
+
     def get_key_type_src(self):
         ret_val = []
         for i in self._info:
@@ -506,6 +544,9 @@ class ThresholdAnalysisModel(object):
         # wx notification stuff
         self._notify_window = master_window
 
+    def get_static_info_copy(self):
+        return self._static_info.get_copy()
+
     def get_threshold_information(self):
         ret_vals = []
         for i in self._static_info.get_key_type_src():
@@ -513,7 +554,7 @@ class ThresholdAnalysisModel(object):
             ty = i[1]
             name = i[2]
             value = self.get_thresh_value(key)
-            ret_vals.append((key, ty, name, value))
+            ret_vals.append((key, ty, name, float(value)))
         return ret_vals
 
     def get_thresh_value(self, key):

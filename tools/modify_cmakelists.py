@@ -78,7 +78,8 @@ def do_work(directory_start):
                 add_instrument_code = []
                 # loop through the received tripples to get the desired information
                 for i in cmake_args:
-                    if i[0] == "add_executable" or i[0] == "add_library" or i[0] == "add_install":
+                    # removed library call temporarily
+                    if i[0] == "add_executable":# == "add_library" or i[0] == "add_install":
                         add_targets.append(i[1][0])
                         rest = i[1][1:]
                         if len(rest) == 1 and rest[0].startswith('${'):
