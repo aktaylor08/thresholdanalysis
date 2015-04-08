@@ -7,7 +7,7 @@ import sys
 import re
 import shutil
 
-INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
 
 
 def get_groups(lines):
@@ -93,7 +93,7 @@ def do_work(directory_start):
                 for trg in add_targets:
                     changed = True
                     cmake_args.append(('set_target_properties',
-                                       [trg, 'COMPILE_FLAGS', '"-g -flto"', 'LINK_FLAGS', '"-flto"']))
+                                       [trg, 'PROPERTIES', 'COMPILE_FLAGS', '"-g -flto"', 'LINK_FLAGS', '"-flto"']))
 
                 # append src/instrument.cpp to the file list for all of the executables
                 for arg in cmake_args:
