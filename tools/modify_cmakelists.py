@@ -132,18 +132,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Parse all of the python files in the directories below the one passed")
     parser.add_argument('directory', help="Directory and below to process")
-    parser.add_argument("--restore", help="Revert to the CMakeLists.txt_backup files that this method creates.")
+    parser.add_argument("--restore", help="Revert to the CMakeLists.txt_backup files that this method creates.",
+            action='store_true')
     args = parser.parse_args()
 
     directory = args.directory
     if not os.path.exists(directory):
         print("Invalid directory!")
         sys.exit(-1)
-    if not os.path.exists(INSTRUMENT_FILE_LOCATION):
-        print("INSTRUMENTATION FILE DOES NOT EXIST WOAH")
-        sys.exit(-1)
     if args.restore:
         restore(directory)
     else:
+        if not os.path.exists(INSTRUMENT_FILE_LOCATION):
+            print("INSTRUMENTATION FILE DOES NOT EXIST WOAH")
+            sys.exit(-1)
         do_work(directory)
 
