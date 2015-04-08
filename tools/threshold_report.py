@@ -39,6 +39,7 @@ if __name__ == '__main__':
     maxd = 0
     mind = 9999
     dtotal = 0
+    count = 0
 
     for d in data.itervalues():
         # file type count
@@ -71,27 +72,26 @@ if __name__ == '__main__':
         if dist < maxd:
             mind = dist
         dtotal += dist
-    print d
-
+        count += 1
 
     param_counts = sorted([(int(y),x) for x,y in param_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
-    file_counts= sorted([(int(y),x) for x,y in file_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
+    file_counts = sorted([(int(y),x) for x,y in file_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
 
     print '\n\n'
-    print 'Report for directory:\t\t\t{:s}'.format(directory)
-    print 'Number of threshold branches:\t{:d}'.format(len(data))
-    print '\tIn python files\t\t\t\t{:d}'.format(py)
-    print '\tIn c++ files\t\t\t\t{:d}'.format(cpp)
+    print '{:35s}\t{:s}'.format("Report for directory:", directory)
+    print '{:35s}\t{:d}'.format("Number of threshold branches:", len(data))
+    print '{:35s}\t{:d}'.format("   In python files", py)
+    print '{:35s}\t{:d}'.format("   In cpp files", cpp)
     print '\n'
-    print 'From Parameters:\t\t\t\t{:d}'.format(param)
-    print 'ided as  constant:\t\t\t\t{:d}'.format(const)
-    print 'Numerical Comparisons:\t\t\t{:d}'.format(numerical)
+    print '{:35s}\t{:d}'.format("From Parameters", param)
+    print '{:35s}\t{:d}'.format("identified constant", const)
+    print '{:35s}\t{:d}'.format("Numerical Comparison", numerical )
     print '\n'
-    print "Max Separation:\t\t\t{:d}".format(maxd)
-    print "Min Separation:\t\t\t{:d}".format(mind)
-    print "Average Separation:\t\t\t{:f}".format(float(dtotal) / len(data))
+    print '{:35s}\t{:d}'.format("Max Separation", maxd)
+    print '{:35s}\t{:d}'.format("Min Separation", mind)
+    print '{:35s}\t{:f}'.format("Average Separation", float(dtotal) / count)
     print '\n'
-    print "Files with Constants:"
+    print "Files with thresholds:"
     print "\tCount\tFile Name"
     for i in file_counts:
         print "\t{:d}\t\t{:s}".format(i[0], i[1])

@@ -58,6 +58,7 @@ def do_work(directory_start):
     for dir_path, names, files in os.walk(directory_start):
         # if we have a cmakelists and package.xml than we are in a thing to modify
         if "CMakeLists.txt" in files and "package.xml" in files:
+            print "Working on: {:s}".format(dir_path)
             cmake = dir_path + '/CMakeLists.txt'
             to_parse = []
             changed = False
@@ -79,7 +80,7 @@ def do_work(directory_start):
                 # loop through the received tripples to get the desired information
                 for i in cmake_args:
                     # removed library call temporarily
-                    if i[0] == "add_executable":# == "add_library" or i[0] == "add_install":
+                    if i[0] == "add_executable" or i[0] == "add_library" or i[0] == "add_install":
                         add_targets.append(i[1][0])
                         rest = i[1][1:]
                         if len(rest) == 1 and rest[0].startswith('${'):
@@ -103,7 +104,7 @@ def do_work(directory_start):
                             arg[1].append('src/instrument.cpp')
 
             if changed:
-                cmake_args.insert(2, ('set', ["CMAKE_CXX_COMPILER", "clang++"]))
+                # cmake_args.insert(2, ('set', ["CMAKE_CXX_COMPILER", "clang++"]))
                 # back up old CMakeLists.txt
                 if not os.path.exists(dir_path + '/CMakeLists.txt_backup'):
                     print "creating backup for {:s}".format(dir_path + '/CMakeLists.txt')
