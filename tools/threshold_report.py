@@ -1,5 +1,3 @@
-__author__ = 'ataylor'
-
 #!/usr/bin/env python
 
 import argparse
