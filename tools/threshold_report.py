@@ -34,6 +34,7 @@ if __name__ == '__main__':
     const = 0
     numerical = 0
     param_counts = {}
+    param_files = {}
     file_counts = {}
 
     maxd = 0
@@ -41,12 +42,20 @@ if __name__ == '__main__':
     dtotal = 0
     count = 0
 
+    file_params = {}
+    param_to_files = {}
+
     for d in data.itervalues():
         # file type count
         if d['file'].endswith('.py'):
             py += 1
         if d['file'].endswith('.cpp'):
             cpp += 1
+
+        fset = file_params.get(d['file'], set())
+        fset.add(d['source'])
+        file_params[d['file']] = fset
+
 
         # Type count
         if d['type'].lower() == 'parameter':
@@ -61,6 +70,10 @@ if __name__ == '__main__':
             temp = param_counts.get(d['source'], 0) + 1
             param_counts[d['source']] = temp
 
+            temp = param_to_files.get(d['source'], set())
+            temp.add(d['file'])
+            param_to_files[d['source']] = temp
+
         # file count
         temp = file_counts.get(d['file'], 0) + 1
         file_counts[d['file']] = temp
@@ -74,8 +87,16 @@ if __name__ == '__main__':
         dtotal += dist
         count += 1
 
-    param_counts = sorted([(int(y),x) for x,y in param_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
-    file_counts = sorted([(int(y),x) for x,y in file_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
+    param_counts = sorted([[int(y),x] for x,y in param_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
+    file_counts = sorted([[int(y),x] for x,y in file_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
+    # just tack on the other results..hack for now.
+    for i in file_counts:
+        i.append(len(file_params[i[1]]))
+    for p in param_counts:
+        print param_to_files[p[1]]
+        p.append(len(param_to_files[p[1]]))
+
+
 
     print '\n\n'
     print '{:35s}\t{:s}'.format("Report for directory:", directory)
@@ -92,13 +113,13 @@ if __name__ == '__main__':
     print '{:35s}\t{:f}'.format("Average Separation", float(dtotal) / count)
     print '\n'
     print "Files with thresholds:"
-    print "\tCount\tFile Name"
+    print "{:10s}{:10s}\t{:20s}".format("Total", "Unique", "File Name")
     for i in file_counts:
-        print "\t{:d}\t\t{:s}".format(i[0], i[1])
+        print "{:<10d}{:<10d}\t{:20s}".format(i[0],i[2], i[1])
     print '\n'
     print "Parameters Used:"
-    print "\tCount\tParameter Name"
+    print "{:10s}{:10s}\t{:20s}".format("Uses", "Files", "Paramter")
     for i in param_counts:
-        print '\t{:d}\t\t{:s}'.format(i[0], i[1])
+        print "{:<10d}{:<10d}\t{:20s}".format(i[0],i[2], i[1])
 
 
