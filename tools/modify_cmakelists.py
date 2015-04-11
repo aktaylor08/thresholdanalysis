@@ -7,7 +7,8 @@ import sys
 import re
 import shutil
 
-INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+#INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
 
 
 def get_groups(lines):
@@ -22,6 +23,12 @@ def get_groups(lines):
         match_all = re.search('(.*)\s*\((.*)\)', i)
         match_start = re.search("(.*)\s*\((.*)", i)
         match_end = re.search("(.*)\s*\)", i)
+
+        crap = re.search("(\".*\")|(\w*)*", i)
+        if crap is not None:
+            print crap.groups()
+            print crap.group()
+
 
         # try and match between the parenthesis
         if match_all:
@@ -77,8 +84,23 @@ def do_work(directory_start):
                 cmake_args = get_groups(to_parse)
                 add_targets = []
                 add_instrument_code = []
+                to_remove = []
+
+                flags = []
                 # loop through the received tripples to get the desired information
+                in_if = False
+                ignore_section = False
+                print ''
                 for i in cmake_args:
+                    if i[0] == 'if' and i[1][2] == '"indigo"':
+                        in_if = True
+                    if i[0] == 'else':
+                        in_if = False
+                        ignore_section = True
+                    if i[0] =='endif':
+                        in_if = False
+                        ignore_section = False
+
                     # removed library call temporarily
                     if i[0] == "add_executable" or i[0] == "add_library" or i[0] == "add_install":
                         add_targets.append(i[1][0])
@@ -91,6 +113,16 @@ def do_work(directory_start):
                                         add_instrument_code.append(x)
                         else:
                             add_instrument_code.append(i)
+
+                    # Check for set` CMAKE_CXX_FLAGS to save those off for later...
+                    # also need to check out
+                    if i[0].lstrip().strip() == 'set' and i[1][0].lstrip().rstrip() == 'CMAKE_CXX_FLAGS':
+                        to_remove.append(i)
+                        if in_if:
+                            for flag in i[1][1:]:
+                                print flag
+
+
                 # set the compile and link flags needed
                 for trg in add_targets:
                     changed = True
