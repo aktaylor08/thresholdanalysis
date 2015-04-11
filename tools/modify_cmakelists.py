@@ -7,8 +7,8 @@ import sys
 import re
 import shutil
 
-INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
-# INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+#INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
 
 
 def hack_inside_group(asdgfasd):
@@ -16,14 +16,20 @@ def hack_inside_group(asdgfasd):
     cur_val = ""
     inside_string = False
     for i in asdgfasd:
-        if i.strip().lstrip().startswith('"') or i.strip().lstrip().endswith('"'):
+        if i.strip().lstrip().startswith('"') and i.strip().lstrip().endswith('"'):
+            new_list.append(i)
+        elif i.strip().lstrip().startswith('"'):
+            if inside_string:
+                raise Exception("Error parsing CMAKE FILE should not be inside string")
+            inside_string = True
+            cur_val = i
+        elif i.strip().lstrip().endswith('"'):
             if inside_string:
                 cur_val += " " + i
                 new_list .append(cur_val)
                 inside_string = False
             else:
-                inside_string = True
-                cur_val = i
+                raise Exception("Error parsing CMAKE FILE should not be not inside string")
         else:
             if inside_string:
                 cur_val += " " + i
@@ -75,8 +81,6 @@ def get_groups(lines):
         else:
             for arg in hack_inside_group(i.split()):
                 inside_args.append(arg)
-    for i in arguments:
-        print i
     return arguments
 
 
@@ -109,7 +113,7 @@ def do_work(directory_start):
                 # loop through the received tripples to get the desired information
                 in_if = False
                 ignore_section = False
-                print ''
+                cxx_flags = ''
                 for i in cmake_args:
                     if i[0] == 'if' and i[1][2] == '"indigo"':
                         in_if = True
@@ -139,14 +143,17 @@ def do_work(directory_start):
                         to_remove.append(i)
                         if in_if:
                             for flag in i[1][1:]:
-                                print flag
+                                new_flag = flag.replace('${CMAKE_CXX_FLAGS}', '')
+                                cxx_flags += new_flag
 
 
+                # strip off quots
+                cxx_flags = cxx_flags.replace('"', '')
                 # set the compile and link flags needed
                 for trg in add_targets:
                     changed = True
                     cmake_args.append(('set_target_properties',
-                                       [trg, 'PROPERTIES', 'COMPILE_FLAGS', '"-g -flto"', 'LINK_FLAGS', '"-flto"']))
+                                       [trg, 'PROPERTIES', 'COMPILE_FLAGS', '"-g -flto{:s}"'.format(cxx_flags), 'LINK_FLAGS', '"-flto"']))
 
                 # append src/instrument.cpp to the file list for all of the executables
                 for arg in cmake_args:
@@ -185,7 +192,7 @@ def restore(directory_start):
         # if we have a cmakelists and package.xml than we are in a thing to modify
         if "CMakeLists.txt_backup" in files:
             print("Restoring backup in directory: {:s}".format(dir_path))
-            shutil.move(dir_path + '/' + "CMakeLists.txt_backup", dir_path + '/' + "CMakeLists.txt")
+            shutil.copy(dir_path + '/' + "CMakeLists.txt_backup", dir_path + '/' + "CMakeLists.txt")
 
 
 if __name__ == '__main__':
