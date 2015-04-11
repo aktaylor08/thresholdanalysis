@@ -7,8 +7,29 @@ import sys
 import re
 import shutil
 
-#INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
-INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+# INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+
+
+def hack_inside_group(asdgfasd):
+    new_list = []
+    cur_val = ""
+    inside_string = False
+    for i in asdgfasd:
+        if i.strip().lstrip().startswith('"') or i.strip().lstrip().endswith('"'):
+            if inside_string:
+                cur_val += " " + i
+                new_list .append(cur_val)
+                inside_string = False
+            else:
+                inside_string = True
+                cur_val = i
+        else:
+            if inside_string:
+                cur_val += " " + i
+            else:
+                new_list.append(i)
+    return new_list
 
 
 def get_groups(lines):
@@ -24,15 +45,10 @@ def get_groups(lines):
         match_start = re.search("(.*)\s*\((.*)", i)
         match_end = re.search("(.*)\s*\)", i)
 
-        crap = re.search("(\".*\")|(\w*)*", i)
-        if crap is not None:
-            print crap.groups()
-            print crap.group()
-
-
         # try and match between the parenthesis
         if match_all:
-            arguments.append((match_all.groups()[0], match_all.groups()[1].split()))
+            inside = hack_inside_group(match_all.groups()[1].split())
+            arguments.append((match_all.groups()[0], inside))
 
         # start of match
         elif match_start is not None:
@@ -40,6 +56,7 @@ def get_groups(lines):
             if pcount == 1:
                 cur_cmd = match_start.groups()[0]
                 inside_args = [x for x in match_start.groups()[1].split()]
+                inside_args = hack_inside_group(inside_args)
             else:
                 print "error too many parenthesis"
                 assert False
@@ -48,16 +65,18 @@ def get_groups(lines):
         elif match_end is not None:
             pcount -= 1
             if pcount == 0:
-                for arg in match_end.groups()[0].split():
+
+                for arg in hack_inside_group(match_end.groups()[0].split()):
                     inside_args.append(arg)
                 arguments.append((cur_cmd, inside_args))
             else:
                 print "error on close paren"
                 assert False
         else:
-            for arg in i.split():
+            for arg in hack_inside_group(i.split()):
                 inside_args.append(arg)
-
+    for i in arguments:
+        print i
     return arguments
 
 
@@ -144,6 +163,13 @@ def do_work(directory_start):
 
                 # write out the new file
                 with open(dir_path + '/CMakeLists.txt', 'w') as outf:
+                    for val in cmake_args:
+                        outf.write(val[0] + '(\n')
+                        for x in val[1]:
+                            outf.write('\t{:s}\n'.format(x))
+                        outf.write(')\n')
+
+                with open(dir_path + '/CMakeLists.txt_mod', 'w') as outf:
                     for val in cmake_args:
                         outf.write(val[0] + '(\n')
                         for x in val[1]:
