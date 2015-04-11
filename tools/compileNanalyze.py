@@ -1,16 +1,16 @@
-import subprocess
-
-__author__ = 'ataylor'
 #!/usr/bin/python
 
+import subprocess
 import smtplib
 import shutil
 import os
 import time
+from email.mime.text import MIMEText
 
 
 CLANG_RESULTS_DIR = '/home/ataylor/clang_results/'
 RESULTS_DIR = '/home/ataylor/results/'
+
 
 
 class TestObject:
@@ -18,23 +18,36 @@ class TestObject:
     test_name = ''
     result_dir = ''
 
+    def __init__(self):
+        pass
+
+
 def mail_results(test_name, result, output):
     message = """
-    Test {:s} {:s}
+    {:s} {:s}
     \n
-
     {:s}
     """.format(test_name, result, output)
+
+    fadd = 'rostestmailer@gmail.com'
+    toadd = 'aktaylor08@gmail.com'
+
+    msg = MIMEText(message)
+    msg['Subject'] = '{:s}:{:s}'.format(test_name, result)
+    msg['From'] = fadd
+    msg['To'] = toadd
     try:
-        session = smtplib.SMTP('smtp.gmail.com',587)
+        session = smtplib.SMTP('smtp.gmail.com', 587)
         session.ehlo()
         session.starttls()
         session.ehlo()
+        ## ADD EMAIL PASSWORD!!!!
         session.login("rostestmailer@gmail.com", "")
-        session.sendmail("rostestmailer@gmail.com", "aktaylor08@gmail.com", message)
+        session.sendmail(fadd, [toadd], msg.as_string())
         session.quit()
     except smtplib.SMTPException:
         print "Error: unable to send email"
+
 
 def move_cmakes(directory, clean=True):
     for dir_path, names, files in os.walk(directory):
@@ -47,6 +60,7 @@ def move_cmakes(directory, clean=True):
                 shutil.copy(back, cmn)
             else:
                 shutil.copy(mod, cmn)
+
 
 def remove_build_devl(source_dir):
     build = source_dir + "/devel"
@@ -72,7 +86,8 @@ def run_test(test_obj):
     # # build clean
     os.chdir(test_obj.source_dir)
     st = time.time()
-    cmd = ["catkin_make", "-C", test_obj.source_dir ,"-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/llvm/Debug+Asserts/bin/clang++"]
+    cmd = ["catkin_make", "-C", test_obj.source_dir,
+           "-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/llvm/Debug+Asserts/bin/clang++"]
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (output, err) = process.communicate()
     exit_code = process.wait()
@@ -85,7 +100,8 @@ def run_test(test_obj):
     # setup modified
     move_cmakes(test_obj.source_dir + 'src/', False)
     remove_build_devl(test_obj.source_dir)
-    cmd = ["catkin_make", "-C", test_obj.source_dir ,"-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/llvm/Debug+Asserts/bin/clang++"]
+    cmd = ["catkin_make", "-C", test_obj.source_dir,
+           "-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/llvm/Debug+Asserts/bin/clang++"]
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (output, err) = process.communicate()
     exit_code = process.wait()
@@ -98,7 +114,8 @@ def run_test(test_obj):
 
 
     # do python analysis
-    cmd = ['python', '/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/tools/analyze_python_files.py',  test_obj.source_dir +'/src/',  '-o' '/home/ataylor/clang_results/']
+    cmd = ['python', '/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/tools/analyze_python_files.py',
+           test_obj.source_dir + '/src/', '-o' '/home/ataylor/clang_results/']
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (output, err) = process.communicate()
     exit_code = process.wait()
@@ -109,7 +126,7 @@ def run_test(test_obj):
     results_dir = RESULTS_DIR + test_obj.result_dir + '/'
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
-    files = [results_dir + x  for x in os.listdir(results_dir)]
+    files = [results_dir + x for x in os.listdir(results_dir)]
     for i in files:
         os.remove(i)
 
@@ -128,9 +145,8 @@ def run_test(test_obj):
         return
 
     # email results
-    mail_results(test_obj.test_name, "Done with test: " + test_obj.test_name, "times:\n" + str(t_clean) + "\n" + str(t_analyze) + "\n\n" + output)
-
-
+    mail_results(test_obj.test_name, "Done with test: " + test_obj.test_name,
+                 "times:\n" + str(t_clean) + "\n" + str(t_analyze) + "\n\n" + output)
 
 
 def main():
@@ -161,6 +177,7 @@ def main():
 
     for i in tests:
         run_test(i)
+
 
 if __name__ == '__main__':
     main()
