@@ -91,7 +91,6 @@ if __name__ == '__main__':
     for i in file_counts:
         i.append(len(file_params[i[1]]))
     for p in param_counts:
-        print param_to_files[p[1]]
         p.append(len(param_to_files[p[1]]))
 
 
@@ -108,7 +107,8 @@ if __name__ == '__main__':
     print '\n'
     print '{:35s}\t{:d}'.format("Max Separation", maxd)
     print '{:35s}\t{:d}'.format("Min Separation", mind)
-    print '{:35s}\t{:f}'.format("Average Separation", float(dtotal) / count)
+    if(count != 0):
+        print '{:35s}\t{:f}'.format("Average Separation", float(dtotal) / count)
     print '\n'
     print "Files with thresholds:"
     print "{:10s}{:10s}\t{:20s}".format("Total", "Unique", "File Name")

@@ -87,7 +87,7 @@ def run_test(test_obj):
     os.chdir(test_obj.source_dir)
     st = time.time()
     cmd = ["catkin_make", "-C", test_obj.source_dir,
-           "-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/llvm/Debug+Asserts/bin/clang++"]
+           "-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/gitllvm/Release+Asserts/bin/clang++"]
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (output, err) = process.communicate()
     exit_code = process.wait()
@@ -101,7 +101,7 @@ def run_test(test_obj):
     move_cmakes(test_obj.source_dir + 'src/', False)
     remove_build_devl(test_obj.source_dir)
     cmd = ["catkin_make", "-C", test_obj.source_dir,
-           "-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/llvm/Debug+Asserts/bin/clang++"]
+           "-DCMAKE_CXX_COMPILER=/home/ataylor/llvm_src/gitllvm/Release+Asserts/bin/clang++"]
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (output, err) = process.communicate()
     exit_code = process.wait()
@@ -151,29 +151,72 @@ def run_test(test_obj):
 
 def main():
     tests = []
-    t0 = TestObject()
-    t0.source_dir = '/home/ataylor/asctec_ws/'
-    t0.result_dir = 'asctec'
-    t0.test_name = 'asctec base'
-    tests.append(t0)
+    # t0 = TestObject()
+    # t0.source_dir = '/home/ataylor/asctec_ws/'
+    # t0.result_dir = 'asctec'
+    # t0.test_name = 'asctec base'
+    # tests.append(t0)
 
-    t1 = TestObject()
-    t1.source_dir = '/home/ataylor/ros_ws/water/'
-    t1.result_dir = 'water'
-    t1.test_name = 'water sampler'
-    tests.append(t1)
+    # t1 = TestObject()
+    # t1.source_dir = '/home/ataylor/ros_ws/water/'
+    # t1.result_dir = 'water'
+    # t1.test_name = 'water sampler'
+    # tests.append(t1)
 
-    t2 = TestObject()
-    t2.source_dir = '/home/ataylor/ros_ws/navigation/'
-    t2.result_dir = 'navigation'
-    t2.test_name = 'navigation stack'
-    tests.append(t2)
+    # t2 = TestObject()
+    # t2.source_dir = '/home/ataylor/ros_ws/navigation/'
+    # t2.result_dir = 'navigation'
+    # t2.test_name = 'navigation stack'
+    # tests.append(t2)
 
-    t3 = TestObject()
-    t3.source_dir = '/home/ataylor/ros_ws/crop_surveying/'
-    t3.result_dir = 'crop_surveying'
-    t3.test_name = 'crop surveying'
-    tests.append(t3)
+    # t3 = TestObject()
+    # t3.source_dir = '/home/ataylor/ros_ws/crop_surveying/'
+    # t3.result_dir = 'crop_surveying'
+    # t3.test_name = 'crop surveying'
+    # tests.append(t3)
+
+    # t4 = TestObject()
+    # t4.source_dir = '/home/ataylor/ros_ws/ardrone/'
+    # t4.result_dir = 'ardrone'
+    # t4.test_name = 'ardrone autonomy'
+    # tests.append(t4)
+
+    # t = TestObject()
+    # t.source_dir = '/home/ataylor/ros_ws/pass_tests/'
+    # t.result_dir = 'pass_test'
+    # t.test_name = 'pass unit tests'
+    # tests.append(t)
+
+    # t5 = TestObject()
+    # t5.source_dir = '/home/ataylor/ros_ws/baxter/'
+    # t5.result_dir = 'baxter'
+    # t5.test_name = 'Baxter Robot'
+    # tests.append(t5)
+
+    t6 = TestObject()
+    t6.source_dir = '/home/ataylor/controllers/realtime_tools'
+    t6.result_dir = 'realtime_tools'
+    t6.test_name = 'Realtime tools'
+    tests.append(t6)
+
+    t7 = TestObject()
+    t7.source_dir = '/home/ataylor/controllers/control_toolbox'
+    t7.result_dir = 'control_toolbox'
+    t7.test_name = 'Control Toolbox'
+    tests.append(t7)
+
+    t8 = TestObject()
+    t8.source_dir = '/home/ataylor/controllers/ros_control'
+    t8.result_dir = 'ros_control'
+    t8.test_name = 'Ros Control'
+    tests.append(t8)
+
+    t9 = TestObject()
+    t9.source_dir = '/home/ataylor/controllers/ros_controllers'
+    t9.result_dir = 'ros_controllers'
+    t9.test_name = 'Ros Controllers'
+    tests.append(t9)
+
 
     for i in tests:
         run_test(i)

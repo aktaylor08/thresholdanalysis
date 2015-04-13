@@ -115,14 +115,17 @@ def do_work(directory_start):
                 ignore_section = False
                 cxx_flags = ''
                 for i in cmake_args:
-                    if i[0] == 'if' and i[1][2] == '"indigo"':
-                        in_if = True
-                    if i[0] == 'else':
-                        in_if = False
-                        ignore_section = True
-                    if i[0] =='endif':
-                        in_if = False
-                        ignore_section = False
+                    try:
+                        if i[0] == 'if' and i[1][2] == '"indigo"':
+                            in_if = True
+                        if i[0] == 'else':
+                            in_if = False
+                            ignore_section = True
+                        if i[0] =='endif':
+                            in_if = False
+                            ignore_section = False
+                    except:
+                        print 'error on: ',  i
 
                     # removed library call temporarily
                     if i[0] == "add_executable" or i[0] == "add_library" or i[0] == "add_install":
