@@ -137,6 +137,9 @@ if __name__ == '__main__':
         print "{:<10d}{:<10d}\t{:20s}".format(i[0],i[2], i[1])
     print '{:d},{:d},{:d},{:d},{:d},{:d},{:d}'.format(len(data), cpp, py, total_unique, param, unique_params, len(file_counts))
 
+    values = [data.iteritems()]
+    print values
+
     for i in data:
         print data[i]['type'],
         print data[i]['source'],
