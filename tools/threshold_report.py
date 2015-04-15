@@ -47,7 +47,7 @@ if __name__ == '__main__':
         # file type count
         if d['file'].endswith('.py'):
             py += 1
-        if d['file'].endswith('.cpp'):
+        if d['file'].endswith('.cpp') or d['file'].endswith('.h'):
             cpp += 1
 
         fset = file_params.get(d['file'], set())
@@ -80,7 +80,7 @@ if __name__ == '__main__':
         dist = d['distance']
         if dist > maxd:
             maxd = dist
-        if dist < maxd:
+        if dist < mind:
             mind = dist
         dtotal += dist
         count += 1
@@ -90,26 +90,36 @@ if __name__ == '__main__':
     # just tack on the other results..hack for now.
     for i in file_counts:
         i.append(len(file_params[i[1]]))
+
+    # Total Unique
+    total_unique =sum(i[2] for i in file_counts)
     for p in param_counts:
         p.append(len(param_to_files[p[1]]))
+    unique_params = sum([p[2] for p in param_counts])
 
 
 
     print '\n\n'
     print '{:35s}\t{:s}'.format("Report for directory:", directory)
     print '{:35s}\t{:d}'.format("Number of threshold branches:", len(data))
-    print '{:35s}\t{:d}'.format("   In python files", py)
-    print '{:35s}\t{:d}'.format("   In cpp files", cpp)
+    print '  {:33s}\t{:d}'.format("In python files:", py)
+    print '  {:33s}\t{:d}'.format("In cpp files:", cpp)
     print '\n'
-    print '{:35s}\t{:d}'.format("From Parameters", param)
-    print '{:35s}\t{:d}'.format("identified constant", const)
-    print '{:35s}\t{:d}'.format("Numerical Comparison", numerical )
+    print '{:35s}\t{:d}'.format("From Parameters:", param)
+    print '{:35s}\t{:d}'.format("identified constant:", const)
+    print '{:35s}\t{:d}'.format("Numerical Comparison:", numerical )
     print '\n'
-    print '{:35s}\t{:d}'.format("Max Separation", maxd)
-    print '{:35s}\t{:d}'.format("Min Separation", mind)
-    if(count != 0):
-        print '{:35s}\t{:f}'.format("Average Separation", float(dtotal) / count)
+    print '{:35s}\t{:d}'.format('Unique Thresholds:', total_unique)
+    print '{:35s}\t{:d}'.format('Unique Parameters:', unique_params)
     print '\n'
+    print '{:35s}\t{:d}'.format("Max Separation:", maxd)
+    print '{:35s}\t{:d}'.format("Min Separation:", mind)
+    if count != 0:
+        print '{:35s}\t{:f}'.format("Average Separation:", float(dtotal) / count)
+    else:
+        print '{:35s}\t{:f}'.format("Average Separation:", 0)
+    print '\n'
+    print '{:35s}\t{:d}'.format("Number of files with thresholds", len(file_counts))
     print "Files with thresholds:"
     print "{:10s}{:10s}\t{:20s}".format("Total", "Unique", "File Name")
     for i in file_counts:
@@ -119,5 +129,6 @@ if __name__ == '__main__':
     print "{:10s}{:10s}\t{:20s}".format("Uses", "Files", "Paramter")
     for i in param_counts:
         print "{:<10d}{:<10d}\t{:20s}".format(i[0],i[2], i[1])
+    print '{:d},{:d},{:d},{:d},{:d},{:d},{:d}'.format(len(data), cpp, py, total_unique, param, unique_params, len(file_counts))
 
 

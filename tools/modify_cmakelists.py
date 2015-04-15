@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
 import argparse
+from collections import defaultdict
 
 import os
 import sys
 import re
 import shutil
+from wx._windows_ import DirDialog_GetPath
 
 INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
 # INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
@@ -29,6 +31,7 @@ def hack_inside_group(asdgfasd):
                 new_list .append(cur_val)
                 inside_string = False
             else:
+                print asdgfasd
                 raise Exception("Error parsing CMAKE FILE should not be not inside string")
         else:
             if inside_string:
@@ -47,8 +50,8 @@ def get_groups(lines):
     # did we match everything?
     for i in lines:
         # regexes and mapping
-        match_all = re.search('(.*)\s*\((.*)\)', i)
-        match_start = re.search("(.*)\s*\((.*)", i)
+        match_all = re.search("(.*?)\s*\((.*)\)", i)
+        match_start = re.search("(.*?)\s*\((.*)", i)
         match_end = re.search("(.*)\s*\)", i)
 
         # try and match between the parenthesis
@@ -108,22 +111,22 @@ def do_work(directory_start):
                 add_targets = []
                 add_instrument_code = []
                 to_remove = []
+                copy_locs = set()
 
-                flags = []
                 # loop through the received tripples to get the desired information
                 in_if = False
-                ignore_section = False
-                cxx_flags = ''
+                cxx_flags = defaultdict(str)
+                global_cxx_flags = ''
+                global_link_flags = ''
+                link_flags = defaultdict(str)
                 for i in cmake_args:
                     try:
                         if i[0] == 'if' and i[1][2] == '"indigo"':
                             in_if = True
                         if i[0] == 'else':
                             in_if = False
-                            ignore_section = True
                         if i[0] =='endif':
                             in_if = False
-                            ignore_section = False
                     except:
                         print 'error on: ',  i
 
@@ -147,28 +150,66 @@ def do_work(directory_start):
                         if in_if:
                             for flag in i[1][1:]:
                                 new_flag = flag.replace('${CMAKE_CXX_FLAGS}', '')
-                                cxx_flags += new_flag
+                                global_cxx_flags += new_flag
+                        else:
+                            print 'hey'
+                    save_next_compile = False
+                    save_next_link = False
+                    if i[0].lstrip().strip() == 'set_target_properties':
+                        trgt = i[1][0]
+                        for j in i[1]:
+                            if save_next_compile:
+                                new_flag = j.replace('${CMAKE_CXX_FLAGS}', '')
+                                cxx_flags[trgt] += new_flag
+                                save_next_compile = False
+                            if save_next_link:
+                                new_flag = j.replace('${CMAKE_LINK_FLAGS}', '')
+                                link_flags[trgt] += new_flag
+                                save_next_link = False
+
+                            if j == 'COMPILE_FLAGS':
+                                save_next_compile = True
+                            if j == 'LINK_FLAGS':
+                                save_next_link = True
+
+
 
 
                 # strip off quots
-                cxx_flags = cxx_flags.replace('"', '')
+                for trgt in cxx_flags.iterkeys():
+                    cxx_flags[trgt] = cxx_flags[trgt].replace('"', '')
+                    cxx_flags[trgt] += global_cxx_flags
+                for trgt in link_flags.iterkeys():
+                    link_flags[trgt] = link_flags[trgt].replace('"', '')
+                    link_flags[trgt] += link_flags[trgt].replace('"', '')
                 # set the compile and link flags needed
                 for trg in add_targets:
+                    print "\tadding for target: ", trg
                     changed = True
                     cmake_args.append(('set_target_properties',
-                                       [trg, 'PROPERTIES', 'COMPILE_FLAGS', '"-g -flto{:s}"'.format(cxx_flags), 'LINK_FLAGS', '"-flto"']))
+                                       [trg, 'PROPERTIES', 'COMPILE_FLAGS', '"-g -flto {:s}"'.format(cxx_flags[trg]), 'LINK_FLAGS', '"-flto {:s}"'.format(link_flags[trg])]))
 
                 # append src/instrument.cpp to the file list for all of the executables
                 for arg in cmake_args:
                     if arg in add_instrument_code:
-                        if 'src/instrument.cpp' not in arg[1]:
-                            arg[1].append('src/instrument.cpp')
+                        # get the directory to copy it into...
+                        src_dir, _ = os.path.split(arg[1][-1])
+                        if src_dir != '':
+                            inst_file = src_dir + '/instrument.cpp'
+                        else:
+                            inst_file = 'instrument.cpp'
+
+                        if inst_file not in arg[1]:
+                            arg[1].append(inst_file)
+                            if dir_path != '':
+                                copy_locs.add(dir_path + '/' + inst_file)
+                            else:
+                                copy_locs.add(inst_file)
 
             if changed:
                 # cmake_args.insert(2, ('set', ["CMAKE_CXX_COMPILER", "clang++"]))
                 # back up old CMakeLists.txt
                 if not os.path.exists(dir_path + '/CMakeLists.txt_backup'):
-                    print "creating backup for {:s}".format(dir_path + '/CMakeLists.txt')
                     shutil.copy(dir_path + '/CMakeLists.txt', dir_path + '/CMakeLists.txt_backup')
 
                 # write out the new file
@@ -187,7 +228,8 @@ def do_work(directory_start):
                         outf.write(')\n')
 
                 # copy the file over now
-                shutil.copy(INSTRUMENT_FILE_LOCATION, dir_path + '/src/')
+                for destination in copy_locs:
+                    shutil.copy(INSTRUMENT_FILE_LOCATION, destination)
 
 
 def restore(directory_start):
