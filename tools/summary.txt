@@ -1,0 +1,14 @@
+Worked on 101 packages.
+747 threshold comparions found
+mean of 7.37 thresholds per ros code examined
+standard deviaiton of 18.66
+minimum of 0
+max of 151
+43 of the 101 packages have thresholds.
+
+In ros packages that have threshols the mean number of threshold comaprions
+is 17.37 witha standard deviation of 25.  
+
+These thresholds are on average contained in 3.16 files in the ros system.
+
+
