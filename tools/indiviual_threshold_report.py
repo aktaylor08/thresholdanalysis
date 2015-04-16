@@ -6,6 +6,7 @@ import glob
 import json
 import os
 
+
 def read_data(directory):
     data = {}
     for json_file in glob.glob(directory + '*.json'):
@@ -91,19 +92,17 @@ if __name__ == '__main__':
         dtotal += dist
         count += 1
 
-    param_counts = sorted([[int(y),x] for x,y in param_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
-    file_counts = sorted([[int(y),x] for x,y in file_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
+    param_counts = sorted([[int(y), x] for x, y in param_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
+    file_counts = sorted([[int(y), x] for x, y in file_counts.iteritems()], key=lambda asdf: asdf[0], reverse=True)
     # just tack on the other results..hack for now.
     for i in file_counts:
         i.append(len(file_params[i[1]]))
 
     # Total Unique
-    total_unique =sum(i[2] for i in file_counts)
+    total_unique = sum(i[2] for i in file_counts)
     for p in param_counts:
         p.append(len(param_to_files[p[1]]))
     unique_params = sum([p[2] for p in param_counts])
-
-
 
     print '\n\n'
     print '{:35s}\t{:s}'.format("Report for directory:", directory)
@@ -113,7 +112,7 @@ if __name__ == '__main__':
     print '\n'
     print '{:35s}\t{:d}'.format("From Parameters:", param)
     print '{:35s}\t{:d}'.format("identified constant:", const)
-    print '{:35s}\t{:d}'.format("Numerical Comparison:", numerical )
+    print '{:35s}\t{:d}'.format("Numerical Comparison:", numerical)
     print '\n'
     print '{:35s}\t{:d}'.format('Unique Thresholds:', total_unique)
     print '{:35s}\t{:d}'.format('Unique Parameters:', unique_params)
@@ -129,23 +128,51 @@ if __name__ == '__main__':
     print "Files with thresholds:"
     print "{:10s}{:10s}\t{:20s}".format("Total", "Unique", "File Name")
     for i in file_counts:
-        print "{:<10d}{:<10d}\t{:20s}".format(i[0],i[2], i[1])
+        print "{:<10d}{:<10d}\t{:20s}".format(i[0], i[2], i[1])
     print '\n'
     print "Parameters Used:"
     print "{:10s}{:10s}\t{:20s}".format("Uses", "Files", "Paramter")
     for i in param_counts:
-        print "{:<10d}{:<10d}\t{:20s}".format(i[0],i[2], i[1])
-    print '{:d},{:d},{:d},{:d},{:d},{:d},{:d}'.format(len(data), cpp, py, total_unique, param, unique_params, len(file_counts))
+        print "{:<10d}{:<10d}\t{:20s}".format(i[0], i[2], i[1])
+    print '{:d},{:d},{:d},{:d},{:d},{:d},{:d}'.format(len(data), cpp, py, total_unique, param, unique_params,
+                                                      len(file_counts))
 
-    values = [data.iteritems()]
-    print values
+    for i in data.itervalues():
+        print i['type']
+    param = [x for x in data.itervalues() if x['type'] == 'Parameter']
+    num = [x for x in data.itervalues() if x['type'] == 'Numerical']
+    code = [x for x in data.itervalues() if x['type'] == 'code']
+    param = sorted(param, key=lambda x: x['distance'])
+    num = sorted(num, key=lambda x: x['distance'])
+    code = sorted(code, key=lambda x: x['distance'])
 
-    for i in data:
-        print data[i]['type'],
-        print data[i]['source'],
-        print data[i]['distance'],
-        print data[i]['file'],
-        print data[i]['lineno'],
-        print
+    print '{:15s}{:10s}{:30s}{:10s}{:s}'.format('Type', "Distance", "Source",  "Line No.", "File",)
+    for i in param:
+        print '{:15s}{:<10d}{:30s}{:<10d}{:s}'.format(
+            i['type'],
+            i['distance'],
+            i['source'],
+            i['lineno'],
+            i['file'],
+        )
+    print '-----'
+    for i in num:
+        print '{:15s}{:<10d}{:30s}{:<10d}{:s}'.format(
+            i['type'],
+            i['distance'],
+            i['source'],
+            i['lineno'],
+            i['file'],
+        )
+    print '-----'
+    for i in code:
+        print '{:15s}{:<10d}{:30s}{:<10d}{:s}'.format(
+            i['type'],
+            i['distance'],
+            i['source'],
+            i['lineno'],
+            i['file'],
+        )
+
 
 
