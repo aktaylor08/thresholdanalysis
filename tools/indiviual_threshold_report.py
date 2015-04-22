@@ -137,8 +137,6 @@ if __name__ == '__main__':
     print '{:d},{:d},{:d},{:d},{:d},{:d},{:d}'.format(len(data), cpp, py, total_unique, param, unique_params,
                                                       len(file_counts))
 
-    for i in data.itervalues():
-        print i['type']
     param = [x for x in data.itervalues() if x['type'] == 'Parameter']
     num = [x for x in data.itervalues() if x['type'] == 'Numerical']
     code = [x for x in data.itervalues() if x['type'] == 'code']
@@ -146,6 +144,7 @@ if __name__ == '__main__':
     num = sorted(num, key=lambda x: x['distance'])
     code = sorted(code, key=lambda x: x['distance'])
 
+    print '\n'
     print '{:15s}{:10s}{:30s}{:10s}{:s}'.format('Type', "Distance", "Source",  "Line No.", "File",)
     for i in param:
         print '{:15s}{:<10d}{:30s}{:<10d}{:s}'.format(
