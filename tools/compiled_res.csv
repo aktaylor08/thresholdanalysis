@@ -1,0 +1,118 @@
+
+name,threshold_comparisions,cpp,python,unique,param,unique_param,files
+asctec base,57,35,22,46,49,38,12
+water sampler,30,0,30,28,9,9,7
+crop surveying,3,3,0,3,3,3,3
+cob external,0,0,0,0,0,0,0
+cob common,0,0,0,0,0,0,0
+cob_robots,0,0,0,0,0,0,0
+Cob Environments,0,0,0,0,0,0,0
+Cob Command Tools,151,142,9,37,142,28,6
+Cob calibration data,0,0,0,0,0,0,0
+Cob substitute,0,0,0,0,0,0,0
+careobot contro,17,17,0,9,17,9,4
+careobot perception,0,0,0,0,0,0,0
+careobot manipulation,6,0,6,4,0,0,1
+careobot evnironment perception,0,0,0,0,0,0,0
+careobot navigation perception,11,11,0,8,11,8,1
+navigation stack,46,45,1,26,45,25,9
+Baxter Robot,13,0,13,7,0,0,4
+Realtime tools,0,0,0,0,0,0,0
+Control Toolbox,2,0,2,2,0,0,1
+Ros Control,0,0,0,0,0,0,0
+Ros Controllers,10,10,0,6,10,6,3
+BWI from Texas,8,0,8,6,0,0,2
+AR Tracking,0,0,0,0,0,0,0
+AprilTags Tracking,0,0,0,0,0,0,0
+Airbotix ros package,3,0,3,3,2,2,3
+Asctec Mav Pacakge,0,0,0,0,0,0,0
+UOS Tools,6,0,6,5,5,4,1
+Calvin Ros Stack,0,0,0,0,0,0,0
+CrazyFlie Ros Stack,32,0,32,19,1,1,5
+Ros Concert,3,0,3,2,0,0,2
+ROS Create Driver,38,0,38,26,15,6,2
+ROS Darwin,0,0,0,0,0,0,0
+ROS Descartes,0,0,0,0,0,0,0
+Func Maninulators,0,0,0,0,0,0,0
+ros filter library,0,0,0,0,0,0,0
+graft,0,0,0,0,0,0,0
+Rail Pick and place library,0,0,0,0,0,0,0
+Grizzly robot,0,0,0,0,0,0,0
+Hector Slam,12,12,0,11,12,11,2
+Hector Arm,0,0,0,0,0,0,0
+Hector navigation,15,15,0,13,15,13,2
+Hector diagnostics,15,15,0,13,15,13,2
+Hector turtlebot,0,0,0,0,0,0,0
+Husky Ros,0,0,0,0,0,0,0
+ICART MINI,0,0,0,0,0,0,0
+innok_heros,0,0,0,0,0,0,0
+Jaco Robot Arm,10,10,0,3,10,3,2
+Calibration,0,0,0,0,0,0,0
+jsk_db,0,0,0,0,0,0,0
+jsk_recognition,0,0,0,0,0,0,0
+jsk smart apps,0,0,0,0,0,0,0
+jsk_vis,0,0,0,0,0,0,0
+jsk_control,53,0,53,30,4,1,12
+jsk_planning,0,0,0,0,0,0,0
+jsk_roseus,0,0,0,0,0,0,0
+jsk_travis,0,0,0,0,0,0,0
+kobuki,19,0,19,18,0,0,6
+kobuki_soft,1,1,0,1,1,1,1
+Mav Ros,7,7,0,4,7,4,4
+Maxwell,4,0,4,4,0,0,1
+Motoman,0,0,0,0,0,0,0
+NAO Ros,1,0,1,1,0,0,1
+NAO Robot repo,1,0,1,1,0,0,1
+NAO Extras,26,26,0,17,26,17,2
+NAO interaction,0,0,0,0,0,0,0
+Naopi bridge,0,0,0,0,0,0,0
+nao camera,0,0,0,0,0,0,0
+nao virtual,0,0,0,0,0,0,0
+nao viz,0,0,0,0,0,0,0
+nao sensors,0,0,0,0,0,0,0
+Nav2 platform,0,0,0,0,0,0,0
+neo robot,3,3,0,3,3,3,3
+next stage,0,0,0,0,0,0,0
+novatel_spann,2,0,2,2,2,2,1
+p2 os robot,18,0,0,14,18,14,2
+robot rescue,0,0,0,0,0,0,0
+People tracking ros,24,24,0,8,24,8,3
+Pepper robot for stuff,0,0,0,0,0,0,0
+rail_segmentation,0,0,0,0,0,0,0
+rail ceiling,1,1,0,1,1,1,1
+robitician ric,16,0,16,13,0,0,2
+segbot,1,0,1,1,0,0,1
+segbot apps,0,0,0,0,0,0,0
+turtlebot apps,8,1,7,7,5,4,3
+turtlebot interactions,0,0,0,0,0,0,0
+turtlebot,0,0,0,0,0,0,0
+turtlebot create,38,0,38,26,15,6,2
+turtlebot arm,0,0,0,0,0,0,0
+ros universial robot ,0,0,0,0,0,0,0
+ocs library,13,3,10,8,3,3,5
+sr utils,0,0,0,0,0,0,0
+sr manipulation,1,0,1,1,0,0,1
+sr demo,9,0,9,3,9,3,1
+app_manager,1,0,1,1,0,0,1
+arm_nav,0,0,0,0,0,0,0
+pr futre,0,0,0,0,0,0,0
+pre2 apps,27,27,0,13,27,13,2
+pr2_colibraiton,0,0,0,0,0,0,0
+/pr2_common,0,0,0,0,0,0,0
+pr2_common_actions,0,0,0,0,0,0,0
+pr2_delivery,0,0,0,0,0,0,0
+pr2_developer_key,0,0,0,0,0,0,0
+pr2_doors,0,0,0,0,0,0,0
+pr2_kinematics,0,0,0,0,0,0,0
+pr2_mechanism_msgs,0,0,0,0,0,0,0
+pr2_navigation,7,7,0,4,7,4,3
+pr2_navigation_apps,0,0,0,0,0,0,0
+pr2_pbd,0,0,0,0,0,0,0
+pr2_precise_trajectory,4,0,4,3,3,2,1
+pr2_self_test,1,1,0,1,1,1,1
+pr2_sheild_telop,0,0,0,0,0,0,0
+pr2_surrogate,3,3,0,2,3,2,2
+rqt_pr2_dashboard,0,0,0,0,0,0,0
+willow_maps,0,0,0,0,0,0,0
+shcunk modular,9,9,0,3,9,3,1
+cob_driver,13,9,4,11,9,7,6
