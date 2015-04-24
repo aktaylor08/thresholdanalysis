@@ -31,7 +31,7 @@ class TestObject:
             self.result_dir += '/'
 
 tests = [
-    TestObject('/home/ataylor/ros_ws/pass_tests/', 'pass_test', 'pass unit tests'),
+    #TestObject('/home/ataylor/ros_ws/pass_tests/', 'pass_test', 'pass unit tests'),
     TestObject('/home/ataylor/asctec_ws/', 'asctec', 'asctec base'),
     TestObject('/home/ataylor/ros_ws/water/', 'water', 'water sampler'),
     TestObject('/home/ataylor/ros_ws/crop_surveying/', 'crop_surveying', 'crop surveying'),
@@ -377,6 +377,49 @@ def main():
             openf.write(i + '\n')
         openf.close()
 
+def roundup_results(only_params=True):
+    results = []
+    results_param = []
+    results.append('name,threshold_comparisions,cpp,python,unique,param,unique_param,files')
+    results_param.append('name,threshold_comparisions,cpp,python,unique,files')
+
+    for test in tests:
+        ff = RESULTS_DIR + test.result_dir
+        if os.path.exists(ff):
+            cmd = ['python', '/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/tools/threshold_report_only_params.py', ff]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (output, err) = process.communicate()
+            exit_code = process.wait()
+            if exit_code != 0:
+                print 'What why you break', err
+            val1 = output.split()[-1]
+
+            cmd = ['python', '/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/tools/threshold_report.py', ff]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (output, err) = process.communicate()
+            exit_code = process.wait()
+            if exit_code != 0:
+                print 'What why you break', err
+            val2 = output.split()[-1]
+            results.append(test.test_name + ',' + val2)
+            results_param.append(test.test_name + ',' + val1)
+
+        with open('/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/tools/compiled_res.csv', 'w') as openf:
+            openf.write('\n')
+            for i in results:
+                openf.write(i + '\n')
+            openf.close()
+
+        with open('/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/tools/compiled_res_param_only.csv', 'w') as openf:
+            openf.write('\n')
+            for i in results_param:
+                openf.write(i + '\n')
+            openf.close()
+
+
+
+
+
 
 def display_src_information():
     results = []
@@ -417,10 +460,13 @@ def display_src_information():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Test runner and information")
     parser.add_argument('--src-info', help="create table of source code information", action="store_true")
+    parser.add_argument('--results', help="create table of source code information", action="store_true")
     args = parser.parse_args()
 
     if args.src_info:
         display_src_information()
+    elif args.results:
+        roundup_results()
     else:
         if PASSWORD == '':
             print "FILL IN PASSWORD"

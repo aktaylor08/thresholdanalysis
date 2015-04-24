@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
+RESULT_FILE = 'combined.csv'
 
 mapping = {
     'asctec base': ["asctec base", ],
