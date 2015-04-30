@@ -518,10 +518,10 @@ class ThresholdAnalysisModel(object):
         that make adding and editing stuff a pain."""
 
     def __init__(self, bag_record=None, mark_file=None, thresh_file=None, file_map=None, info_directory=None,
-                 master_window=None, is_live=True, namespace=None):
+                 master_window=None, is_live=True, namespace=None, namespace_thresh=None):
         self.background_node = ThresholdNode(is_live)
         if bag_record is not None:
-            self.background_node.import_bag_file(bag_record, namespace)
+            self.background_node.import_bag_file(bag_record, namespace, namespace_thresh)
         else:
             if mark_file:
                 self.background_node.import_mark_file(mark_file)
@@ -627,7 +627,11 @@ class ThresholdAnalysisModel(object):
         # max_time = max([x for x in elapsed_times.itervalues()])
         groups = thresh_df.groupby('key')
         for key, data in groups:
-            elapsed = elapsed_times[key]
+            try:
+                elapsed = elapsed_times[key]
+            except:
+                "error not in there", key
+                elapsed = 9999
             if elapsed < time_limit:
                 score = elapsed
                 sugestion = self.get_suggestion(time, data, 'cmp', 'thresh', 'res', True)
@@ -893,6 +897,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--info_directory', )
     parser.add_argument('--not_live', action='store_true')
     parser.add_argument('--namespace', )
+    parser.add_argument('--namespace_thresh', )
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
 
@@ -904,7 +909,7 @@ if __name__ == '__main__':
     # create the model
     tam = ThresholdAnalysisModel(mark_file=args.mark_file, thresh_file=args.thresholds, file_map=args.key_map,
                                  info_directory=args.info_directory, bag_record=args.bag_record,
-                                 namespace=args.namespace, is_live=live)
+                                 namespace=args.namespace, namespace_thresh=args.namespace_thresh, is_live=live)
 
     app = wx.App(False)
     frame = ThresholdFrame(None, "Threshold Analysis information", tam)
