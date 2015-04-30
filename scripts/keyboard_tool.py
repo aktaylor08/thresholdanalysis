@@ -29,8 +29,10 @@ class KeyboardMarker(object):
     def key_callback(self, msg):
         if msg.code in self.adv:
             self.adv[msg.code].publish(rospy.Time.now())
+            rospy.logerr('Advance when should not marked by %d', msg.code);
         if msg.code in self.no_adv:
             self.no_adv[msg.code].publish(rospy.Time.now())
+            rospy.logerr('No Advance marked by %d', msg.code);
 
 
 if __name__ == '__main__':
