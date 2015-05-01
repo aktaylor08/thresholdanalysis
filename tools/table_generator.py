@@ -1,7 +1,10 @@
 import pandas as pd
-import matplotlib.pyplot as plt
+import csv
 
-RESULT_FILE = 'combined.csv'
+RESULT_FILE = 'combined_new.csv'
+OUT_CODE = '/Users/ataylor/Research/thresh_writeups/data/code_table.csv'
+OUT_REPO = '/Users/ataylor/Research/thresh_writeups/data/repo_results.csv'
+OUT_SYS = '/Users/ataylor/Research/thresh_writeups/data/system_results.csv'
 
 mapping = {
     'asctec base': ["asctec base", ],
@@ -65,18 +68,25 @@ mapping = {
 
 
 code_cols = ['name', 'c++ Files', 'c++ LOC', 'Headers', 'Header LOC', 'Python Files', 'Python LOC', 'Total Files', 'Total LOC']
-thresh_cols = ['name', 'clean_time', 'additional_time', 'threshold_comparisions', 'cpp', 'python', 'unique', 'param', 'unique_param', 'files']
+#thresh_cols = ['name', 'clean_time', 'additional_time', 'threshold_comparisions', 'cpp', 'python', 'unique', 'param', 'unique_param', 'files']
+thresh_cols = ['name', 'clean_time', 'additional_time', 'threshold_comparisions', 'cpp', 'python', 'unique', 'files']
 
 
 def main():
-    df = pd.read_csv('/Users/ataylor/Research/thresholdanalysis/tools/combined.csv', index_col=0)
+    df = pd.read_csv(RESULT_FILE, index_col=0)
     df = df[df["Total LOC"] > 1]
     code_df = df[code_cols]
     code_df = fix_up(code_df)
     code_df = add_data(code_df)
-    code_df.to_csv('/Users/ataylor/Research/thresh_writeups/data/code_table.csv', sep='&',
-                   line_terminator="\\\\\n", header=False,float_format='%.0f' )
-    code_df.to_csv('/Users/ataylor/Research/thresh_writeups/data/code_table_real.csv')
+    code_df.to_csv(OUT_CODE, sep='&',
+                   line_terminator="\\\\\n", header=False, float_format='%.0f' , quoting=csv.QUOTE_NONE, escapechar=' ')
+
+    ot =df[df['threshold_comparisions'] > 0]
+    print len(ot)
+    print ot['Total Files'].mean()
+    print (ot['files'] / ot['Total Files']).mean()
+    print ot['files'].mean() / ot['Total Files'].mean()
+
 
 
     tdf = df[thresh_cols]
@@ -85,12 +95,16 @@ def main():
     out_df = pare_down(tdf)
     only_thresh = out_df[out_df['threshold_comparisions'] > 0]
     print "Only contain thresholds: ", len(only_thresh)
+    print "%", len(only_thresh) / float(len(out_df))
     out_df = add_both(out_df, only_thresh)
 
-    out_df.to_csv('/Users/ataylor/Research/thresh_writeups/data/repo_results.csv', sep='&',
-                   line_terminator="\\\\\n", header=False, float_format='%.1f')
-    out_df.to_csv('/Users/ataylor/Research/thresh_writeups/data/repo_results_real.csv')
 
+
+    out_df.to_csv(OUT_REPO, sep='&',
+                   line_terminator="\\\\\n", header=False, float_format='%.1f', quoting=csv.QUOTE_NONE, escapechar=' ')
+
+
+    # MOVING ONTO COMBINED
     combined_df = pd.DataFrame()
     for i in mapping:
         temp = df.loc[df['name'].isin(mapping[i])]
@@ -99,41 +113,48 @@ def main():
         sums['number_of_repos'] = len(mapping[i])
         combined_df = combined_df.append(sums, ignore_index=True)
 
+    cot = combined_df[combined_df['threshold_comparisions'] > 0]
+    print '------combined------'
+    print len(cot)
+    print cot['Total Files'].mean()
+    print cot['files'].mean()
+    print (cot['files'] / cot['Total Files']). mean()
+
+
+
     combined_df.loc[:, 'Time Factor'] = (combined_df.loc[:, 'clean_time'] + combined_df.loc[:, 'additional_time']) / combined_df.loc[:, 'clean_time']
     combined_df = fix_up(combined_df)
     out_df = pare_down(combined_df)
     only_thresh = out_df[out_df['threshold_comparisions'] > 0]
     print "Only contain thresholds combined: ", len(only_thresh)
+    print "%", len(only_thresh) / float(len(out_df))
     out_df = add_both(out_df, only_thresh)
 
-    out_df.to_csv('/Users/ataylor/Research/thresh_writeups/data/system_results.csv', sep='&',
-                  line_terminator="\\\\\n", header=False, float_format='%.1f')
-    out_df.to_csv('/Users/ataylor/Research/thresh_writeups/data/system_results_real.csv')
+    out_df.to_csv(OUT_SYS, sep='&',
+                  line_terminator="\\\\\n", header=False, float_format='%.1f', quoting=csv.QUOTE_NONE, escapechar=' ')
 
     only_thresh = out_df[out_df.threshold_comparisions > 0]
     no_thresh = out_df[out_df.threshold_comparisions == 0]
-    print no_thresh.number_of_repos
-    print no_thresh['Total LOC'].describe()
-    print out_df.number_of_repos.describe()
-    print out_df.number_of_repos.value_counts()
-    print 'Hey'
-    print len(combined_df[combined_df.number_of_repos == 1]) / float(len(combined_df))
-    print len(only_thresh)
-    print len(only_thresh) / float(len(combined_df))
-    print only_thresh.threshold_comparisions.describe()
+    # print no_thresh.number_of_repos
+    # print no_thresh['Total LOC'].describe()
+    # print out_df.number_of_repos.describe()
+    # print out_df.number_of_repos.value_counts()
+    # print 'Hey'
+    # print len(combined_df[combined_df.number_of_repos == 1]) / float(len(combined_df))
+    # print len(only_thresh)
+    # print len(only_thresh) / float(len(combined_df))
+    # print only_thresh.threshold_comparisions.describe()
 
 
 def pare_down(tdf):
     out_df = pd.DataFrame(index=tdf.index)
     out_df['time'] = tdf['clean_time']
     out_df['time_factor'] = tdf['Time Factor']
-    cpp = tdf['cpp']
-    python = tdf['param'] - tdf['cpp']
-    total = cpp + python
-    out_df['threshold_comparisions'] = total
-    out_df['cpp'] = cpp
-    out_df['python'] = python
-    out_df['unique'] = tdf['unique_param']
+    print tdf.columns
+    out_df['threshold_comparisions'] = tdf['threshold_comparisions']
+    out_df['cpp'] = tdf['cpp']
+    out_df['python']  = tdf['python']
+    out_df['unique'] = tdf['unique']
     out_df['files'] = tdf['files']
     return out_df
 
@@ -183,6 +204,7 @@ def add_both(df, df_only):
         df.loc['\\textbf{only threshold max}', i] = desc.loc['max', i]
         df.loc['\\textbf{only threshold sum}', i] = sums[i]
     return df
+
 
 def add_data(df):
     desc = df.describe()

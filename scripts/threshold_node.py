@@ -211,7 +211,7 @@ class ThresholdNode(object):
                 print "No rosbag pandas cannot read bag!"
 
         elif ext == '.csv':
-            bag_df = pd.read_csv(bag_file, parse_dates=True, index_col=0)
+            bag_df = pd.read_csv(bag_file, parse_dates=True, index_col=0, quotechar='"')
             csv = True
         if nst is None:
             thresh = bag_df['threshold_information__data'].dropna()
@@ -227,7 +227,7 @@ class ThresholdNode(object):
 
     def import_thresh_file(self, thresh_file):
         """Import a previously parsed threshold file"""
-        df = pd.read_csv(thresh_file, parse_dates=True, index_col=0)
+        df = pd.read_csv(thresh_file, parse_dates=True, index_col=0, quotechar='"')
         columns = df.columns
         for time, values in zip(df.index, df.values):
             self.times.add(time)
@@ -254,7 +254,7 @@ class ThresholdNode(object):
                 print "No rosbag pandas cannot read bag!"
 
         elif ext == '.csv':
-            bag_df = pd.read_csv(fname, parse_dates=True, index_col=0)
+            bag_df = pd.read_csv(fname, parse_dates=True, index_col=0, quotechar='"')
 
         else:
             print "Unknown File type ", fname
