@@ -2,42 +2,57 @@ import datetime
 import numpy as np
 import pandas as pd
 
+import matplotlib.pyplot as plt
 
 def get_param_keys(static_info):
     params = {x: y for x, y in static_info.iteritems() if y['type'] == 'Parameter'}
     return [x['key'] for x in params.itervalues()]
 
-
-def get_advanced_scores(time, thresh_df, static_info, flop_window = 5.0):
-    param_keys = get_param_keys(static_info)
-    results = {}
-
-    # count the flops in the past n seconds.
+def get_flops(thresh_df, time, static_info, flop_window=5.0, ):
     flop_counts = {}
+    param_keys = get_param_keys(static_info)
     st = time - datetime.timedelta(seconds=flop_window)
-    calc_data = thresh_df.between_time(st, time)
-    maxf, minf = 0, 0
-    for key, data in calc_data.groupby('key'):
+    maxf, minf = 0, 99999
+    # get a count for the number of flops in the last n seconds
+    for key, data in thresh_df.groupby('key'):
         if key not in param_keys:
             continue
+        data = data.between_time(st,time)
         flops = len(data[data['flop']])
-        print key
-        print flops
+        flop_counts[key] = flops
+        if flops > maxf:
+            maxf = flops
+        if flops < minf:
+            minf = flops
+    return flop_counts, maxf, minf
 
 
+def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=1.0, gamma=0.0):
+    param_keys = get_param_keys(static_info)
+    # count the flops in the past n seconds.
+    flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, flop_window)
+    scores = {}
+
+    # now calculate the scores.
     for key, data in thresh_df.groupby('key'):
         if key not in param_keys:
             continue
         try:
-            lf = data.tail(1)['last_cmp_flop'][0]
+            index = data.index.asof(time)
+            lf = data.loc[index, 'last_cmp_flop']
             tdelta = (time - lf).total_seconds()
         except TypeError:
             tdelta = 9999.9
-        print static_info[key]['source'], tdelta
 
-
-
-
+        s1 = np.power(tdelta, alpha)
+        fc = flop_counts[key]
+        if fc == 0:
+            fc = maxf
+        s2 = np.power(((fc + 1.0) / (maxf + 1.0)), beta)
+        s3 = np.power(static_info[key]['distance'], gamma)
+        print s1, s2, s3
+        scores[key] = s1 * s2
+    return scores
 
 
 def get_advance_results(mark,  thresh_df, static_info, time_limit=3.0,):
@@ -100,6 +115,54 @@ def get_advance_results(mark,  thresh_df, static_info, time_limit=3.0,):
                 graph.thresh = graph_data['thresh'].values
                 results.append(one_result)
         return results
+
+def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=1.0, gamma=0.0):
+        param_keys = get_param_keys(static_info)
+        flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, flop_window)
+        results = []
+        if len(thresh_df) == 0:
+            print 'empty data set'
+            return results
+        # get max and min values
+        maxes = thresh_df.groupby('key').max()
+        mins = thresh_df.groupby('key').min()
+        # loop through all of the data points.
+        for key, data in thresh_df.groupby('key'):
+            if key not in param_keys:
+                continue
+            calc_data = data.between_time(time - datetime.timedelta(seconds=flop_window), time)
+            thresh_information = static_info[key]
+            maxval = max(maxes.loc[key, 'thresh'], maxes.loc[key, 'cmp'])
+            minval = min(mins.loc[key, 'thresh'], mins.loc[key, 'cmp'])
+            cseries = calc_data['cmp']
+            const = calc_data['thresh']
+            if np.isnan(maxval) or np.isnan(minval):
+                print 'NANNNANANANANANAN!'
+                score = 9999.9
+            elif maxval - minval == 0:
+                score = 9999.9
+            else:
+                cseries = (cseries - minval) / (maxval - minval)
+                const = (const - minval) / (maxval - minval)
+                if len(cseries) == 0:
+                    print 'no data in window'
+                    score = 9999.9
+                else:
+                    dist = cseries - const
+                    dist = np.sqrt(dist * dist).mean()
+
+                    # TODO Take into account other thresholds?
+                    # calculate the number of different values on each of the other thresholds.
+                    num_comparisions = float(thresh_information['other_thresholds'])
+                    if num_comparisions == 0:
+                        num_comparisions = 1
+
+                    distance = thresh_information['distance']
+                    maxdistance = get_max_distance(static_info)
+                    s1 = dist * alpha
+                    s2 = flop_counts[key] / maxf
+                    s3 = distance / maxdistance
+                    score = s1
 
 
 def get_no_advance_results(mark, thresh_df, static_info, time_limit=5.0, graph_limit=10.0):

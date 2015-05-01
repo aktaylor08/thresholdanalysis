@@ -22,7 +22,6 @@ class ThresholdNode(object):
     """Node that controls all threshold stuff"""
 
     def __init__(self, live):
-        print "Are we doing it live?", live
         if live:
             if not ros:
                 print "NO ROS"
@@ -197,7 +196,6 @@ class ThresholdNode(object):
 
     # IMPORT
     def import_bag_file(self, bag_file, ns=None, nst=None):
-        print ns, nst
         if not os.path.exists(bag_file):
             print "Error bag file doesn't exist"
             return
@@ -217,7 +215,6 @@ class ThresholdNode(object):
             thresh = bag_df['threshold_information__data'].dropna()
         else:
             thresh = bag_df[nst + '_threshold_information__data'].dropna()
-        print len(thresh)
 
         for i in thresh.values:
             if csv:
