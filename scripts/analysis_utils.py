@@ -50,8 +50,7 @@ def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0,
             fc = maxf
         s2 = np.power(((fc + 1.0) / (maxf + 1.0)), beta)
         s3 = np.power(static_info[key]['distance'], gamma)
-        print s1, s2, s3
-        scores[key] = s1 * s2
+        scores[key] = s1 * s2 * s3
     return scores
 
 
@@ -116,10 +115,11 @@ def get_advance_results(mark,  thresh_df, static_info, time_limit=3.0,):
                 results.append(one_result)
         return results
 
+
 def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=1.0, gamma=0.0):
         param_keys = get_param_keys(static_info)
         flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, flop_window)
-        results = []
+        results = {}
         if len(thresh_df) == 0:
             print 'empty data set'
             return results
@@ -136,6 +136,7 @@ def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1
             minval = min(mins.loc[key, 'thresh'], mins.loc[key, 'cmp'])
             cseries = calc_data['cmp']
             const = calc_data['thresh']
+            score = 9999.9
             if np.isnan(maxval) or np.isnan(minval):
                 print 'NANNNANANANANANAN!'
                 score = 9999.9
@@ -145,7 +146,6 @@ def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1
                 cseries = (cseries - minval) / (maxval - minval)
                 const = (const - minval) / (maxval - minval)
                 if len(cseries) == 0:
-                    print 'no data in window'
                     score = 9999.9
                 else:
                     dist = cseries - const
@@ -159,10 +159,12 @@ def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1
 
                     distance = thresh_information['distance']
                     maxdistance = get_max_distance(static_info)
-                    s1 = dist * alpha
-                    s2 = flop_counts[key] / maxf
-                    s3 = distance / maxdistance
-                    score = s1
+                    s1 = np.power(dist * alpha, alpha)
+                    s2 = np.power(flop_counts[key]+1, beta)
+                    s3 = np.power(distance / maxdistance, gamma)
+                    score = s1 * s2 * s3
+            results[key] = score
+        return results
 
 
 def get_no_advance_results(mark, thresh_df, static_info, time_limit=5.0, graph_limit=10.0):
