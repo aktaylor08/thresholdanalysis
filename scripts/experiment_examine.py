@@ -1,6 +1,7 @@
 import argparse
 from collections import defaultdict
 import os
+import datetime
 import pandas as pd
 import threshold_node
 import matplotlib.pyplot as plt
@@ -29,8 +30,8 @@ def get_marks(bagfilename, number=3):
     no_action = 'mark_no_action'
     othersa = ['marks{:d}_mark_action'.format(i) for i in range(number)]
     othersn = ['marks{:d}_mark_no_action'.format(i) for i in range(number)]
-    actions['ctrl'] = get_times(df, action)
-    no_actions['ctrl'] = get_times(df, no_action)
+    # actions['ctrl'] = get_times(df, action)
+    # no_actions['ctrl'] = get_times(df, no_action)
     for idx, i in enumerate(othersa):
         actions[idx] = get_times(df, i)
     for idx, i in enumerate(othersn):
@@ -57,32 +58,32 @@ def get_times(df, start_str):
 
 
 def main_experiment(params_df, info, actions, no_actions, advance_scores, no_adv_scores):
-    print '{:25s}{:25s}{:10s}{:10s}{:10s}'.format("Source", "File", "lineno", "Comparisons", "Flops")
-    for key, group in params_df.groupby('key'):
-        f = info[key]['file'][info[key]['file'].rindex('/')+1:]
-        print '{:25s}{:25s}{:10d}{:10d}{:10d}'.format(
-            info[key]['source'],
-            f,
-            info[key]['lineno'],
-            len(group),
-            len(group[group['flop']]),
-        )
-
-    print "Actions:"
-
-    ax =[]
-    for i in actions:
-        for j in actions[i]:
-            ax.append(j)
-            scores = analysis_utils.get_advance_scores(j, params_df, info)
-            scores = [(k, v) for k, v in scores.iteritems()]
-            scores = sorted(scores, key=lambda x: x[1])
-            scores = [(info[x[0]]['source'], x[1], x[0]) for x in scores]
-            print len(scores)
-            print 'User: ', i
-            print '{:20s}{:10s}'.format('Source', 'Score')
-            for score in scores:
-                print '{:20s}{:10.3f}{:10.3f}'.format(score[0], score[1], advance_scores.loc[advance_scores.index.asof(j),score[2]])
+    # print '{:25s}{:25s}{:10s}{:10s}{:10s}'.format("Source", "File", "lineno", "Comparisons", "Flops")
+    # for key, group in params_df.groupby('key'):
+    #     f = info[key]['file'][info[key]['file'].rindex('/')+1:]
+    #     print '{:25s}{:25s}{:10d}{:10d}{:10d}'.format(
+    #         info[key]['source'],
+    #         f,
+    #         info[key]['lineno'],
+    #         len(group),
+    #         len(group[group['flop']]),
+    #     )
+    #
+    # print "Actions:"
+    #
+    # ax =[]
+    # for i in actions:
+    #     for j in actions[i]:
+    #         ax.append(j)
+    #         scores = analysis_utils.get_advance_scores(j, params_df, info)
+    #         scores = [(k, v) for k, v in scores.iteritems()]
+    #         scores = sorted(scores, key=lambda x: x[1])
+    #         scores = [(info[x[0]]['source'], x[1], x[0]) for x in scores]
+    #         print len(scores)
+    #         print 'User: ', i
+    #         print '{:20s}{:10s}'.format('Source', 'Score')
+    #         for score in scores:
+    #             print '{:20s}{:10.3f}{:10.3f}'.format(score[0], score[1], advance_scores.loc[advance_scores.index.asof(j),score[2]])
 
 
     print 'No Actions'
@@ -90,30 +91,30 @@ def main_experiment(params_df, info, actions, no_actions, advance_scores, no_adv
     for i in no_actions:
         for j in no_actions[i]:
             anx.append(j)
+            print j - datetime.timedelta(0, 1)
+
             scores = analysis_utils.get_no_advance_scores(j, params_df, info)
             scores = [(k, v) for k, v in scores.iteritems()]
             scores = sorted(scores, key=lambda x: x[1])
             scores = [(info[x[0]]['source'], x[1], x[0]) for x in scores]
-            print len(scores)
-            print 'User: ', i
             print '{:20s}{:10s}'.format('Source', 'Score')
             for score in scores:
-                print '{:20s}{:10.3f}{:10.3f}'.format(score[0], score[1], no_adv_scores.loc[advance_scores.index.asof(j),score[2]])
+                print '{:20s}{:10.3f}{:10.3f}'.format(score[0], score[1], 0)#no_adv_scores.loc[advance_scores.index.asof(j),score[2]])
 
-    for i in no_adv_scores.columns:
-        val = no_adv_scores[no_adv_scores[i] != 9999.9][i]
-        print i
-        print info[i]['source']
-        if len(val > 0):
-            val.plot()
-            params_df[params_df['key'] == i]['cmp'].plot()
-            params_df[params_df['key'] == i]['thresh'].plot()
-            y1, y2 = plt.ylim()
-            yns = [(y1+y2) / 2.0 for _ in anx]
-            ys = [(y1+y2) / 2.0 for _ in ax]
-            plt.scatter(ax, ys, c='b')
-            plt.scatter(anx, yns, c='r')
-            plt.show()
+    # for i in no_adv_scores.columns:
+    #     val = no_adv_scores[no_adv_scores[i] != 9999.9][i]
+    #     print i
+    #     print info[i]['source']
+    #     if len(val > 0):
+    #         val.plot()
+    #         params_df[params_df['key'] == i]['cmp'].plot()
+    #         params_df[params_df['key'] == i]['thresh'].plot()
+    #         y1, y2 = plt.ylim()
+    #         yns = [(y1+y2) / 2.0 for _ in anx]
+    #         ys = [(y1+y2) / 2.0 for _ in ax]
+    #         plt.scatter(ax, ys, c='b')
+    #         plt.scatter(anx, yns, c='r')
+    #         plt.show()
 
 
 
@@ -166,6 +167,7 @@ def main():
     parser.add_argument('--namespace_thresh', )
     args = parser.parse_args()
 
+    print args.bag_record
     thresh_df = get_thresh_df(args.bag_record, args.namespace, args.namespace_thresh)
     info = get_info(args.info_directory)
     param_keys = analysis_utils.get_param_keys(info)
@@ -176,8 +178,10 @@ def main():
     if args.create_scores:
         produce_score_array_sampled(params_only, info, b)
     else:
-        advance_scores = pd.read_csv(b + '_advance_scores.csv', index_col=0, parse_dates=True)
-        no_advance_scores = pd.read_csv(b + '_no_advance_scores.csv', index_col=0, parse_dates=True)
+        #advance_scores = pd.read_csv(b + '_advance_scores.csv', index_col=0, parse_dates=True)
+        #no_advance_scores = pd.read_csv(b + '_no_advance_scores.csv', index_col=0, parse_dates=True)
+        advance_scores = pd.DataFrame()
+        no_advance_scores = pd.DataFrame()
         main_experiment(params_only, info, actions, no_actions, advance_scores, no_advance_scores)
 
 

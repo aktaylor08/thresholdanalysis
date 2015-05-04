@@ -11,7 +11,10 @@ def get_param_keys(static_info):
 def get_flops(thresh_df, time, static_info, flop_window=5.0, ):
     flop_counts = {}
     param_keys = get_param_keys(static_info)
-    st = time - datetime.timedelta(seconds=flop_window)
+    if flop_window is not None:
+        st = time - datetime.timedelta(seconds=flop_window)
+    else:
+        st = thresh_df.index[0]
     maxf, minf = 0, 99999
     # get a count for the number of flops in the last n seconds
     for key, data in thresh_df.groupby('key'):
@@ -27,10 +30,10 @@ def get_flops(thresh_df, time, static_info, flop_window=5.0, ):
     return flop_counts, maxf, minf
 
 
-def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=1.0, gamma=0.0):
+def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=0.6, gamma=0.0):
     param_keys = get_param_keys(static_info)
     # count the flops in the past n seconds.
-    flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, flop_window)
+    flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, None)
     scores = {}
 
     # now calculate the scores.
@@ -45,10 +48,8 @@ def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0,
             tdelta = 9999.9
 
         s1 = np.power(tdelta, alpha)
-        fc = flop_counts[key]
-        if fc == 0:
-            fc = maxf
-        s2 = np.power(((fc + 1.0) / (maxf + 1.0)), beta)
+        fc = flop_counts[key] + 1
+        s2 = np.power(fc, beta)
         s3 = np.power(static_info[key]['distance'], gamma)
         scores[key] = s1 * s2 * s3
     return scores
@@ -116,7 +117,7 @@ def get_advance_results(mark,  thresh_df, static_info, time_limit=3.0,):
         return results
 
 
-def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=1.0, gamma=0.0):
+def get_no_advance_scores(time, thresh_df, static_info, flop_window=12.0, alpha=1.0, beta=1.0, gamma=0.0, delta=0.0):
         param_keys = get_param_keys(static_info)
         flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, flop_window)
         results = {}
@@ -138,7 +139,6 @@ def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1
             const = calc_data['thresh']
             score = 9999.9
             if np.isnan(maxval) or np.isnan(minval):
-                print 'NANNNANANANANANAN!'
                 score = 9999.9
             elif maxval - minval == 0:
                 score = 9999.9
@@ -151,6 +151,7 @@ def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1
                     dist = cseries - const
                     dist = np.sqrt(dist * dist).mean()
 
+                    same_count = len(calc_data[((calc_data['cmp'] - calc_data['thresh']).apply(np.abs)) > .0001])
                     # TODO Take into account other thresholds?
                     # calculate the number of different values on each of the other thresholds.
                     num_comparisions = float(thresh_information['other_thresholds'])
@@ -159,10 +160,19 @@ def get_no_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1
 
                     distance = thresh_information['distance']
                     maxdistance = get_max_distance(static_info)
-                    s1 = np.power(dist * alpha, alpha)
-                    s2 = np.power(flop_counts[key]+1, beta)
-                    s3 = np.power(distance / maxdistance, gamma)
-                    score = s1 * s2 * s3
+                    s1 = np.power(dist, alpha)
+                    fc = 1
+                    if flop_counts[key] == 0:
+                        fc = 1
+                    else:
+                        fc = flop_counts[key]
+                    s2 = np.power(fc, beta)
+                    if same_count == 0:
+                        s3 = 1
+                    else:
+                        s3 = np.power(same_count, gamma)
+                    s4 = np.power(distance / maxdistance, delta)
+                    score = s1 * s2 * s3 * s4
             results[key] = score
         return results
 
