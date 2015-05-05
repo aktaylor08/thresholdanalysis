@@ -1,6 +1,8 @@
 import argparse
+
 from collections import defaultdict
 import os
+import numpy as np
 import pandas as pd
 import threshold_node
 import matplotlib.pyplot as plt
@@ -19,6 +21,33 @@ def get_info(directory):
             for v in vals:
                 info[v] = vals[v]
     return info
+
+def calculate_ranking(score_df, zero_bad=False):
+    cols = score_df.columns
+    num = len(cols)
+    col_map = {v: k for k,v in enumerate(cols)}
+    idxes = []
+    store = np.zeros((len(score_df), len(cols)))
+    print store.shape
+    rc = 0
+    for idx, row in score_df.iterrows():
+        idxes.append(idx)
+        row.sort()
+        count = 0
+        for name, val in row.iteritems():
+            col = col_map[name]
+            if zero_bad:
+                if val < 9999:
+                    store[rc, col] = 1 - ((float(count)) / num)
+                    count += 1
+            else:
+                store[rc, col] = 1 - ((float(count)) / num)
+                count += 1
+        rc += 1
+    return pd.DataFrame(data=store, index=idxes, columns=cols)
+
+
+
 
 
 
