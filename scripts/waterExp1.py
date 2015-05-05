@@ -7,28 +7,6 @@ import experiment_examine
 
 FIG_DIR = '/Users/ataylor/Research/thesis/myFigures/'
 
-
-def fix_and_plot(score, collapse):
-    # get rankings
-    ranking = sumerize_vals.calculate_ranking(score, collapse)
-    # determine where a ranking changed by shifting the value to the left and right
-    rank_change = (ranking == ranking.shift(1)).apply(lambda row: not row.all(), axis=1)
-    for idx in ranking[rank_change].index:
-        new_idx = idx - datetime.timedelta(0,.01)
-        ranking.loc[new_idx, :] = np.nan
-    fig, ax = plt.subplots()
-    for col in ranking.columns:
-        if col == mod_key:
-            pass
-        else:
-            ranking[col].plot(linewidth=3, ax=ax, c='b')
-    ranking[mod_key].plot(linewidth=3, ax=ax, c='r')
-    ax.set_ylabel('Rank Score', fontsize=20)
-    ax.set_xlabel('Time', fontsize=20)
-    ax.set_ylim(-.05, 1.05)
-    return fig, ax
-
-
 info_dir = '../test_data/water_sampler/static_info/'
 experiment = '../test_data/water_sampler/dynamic/all_info/experiment1_2015-04-30-15-52-51.csv'
 info = sumerize_vals.get_info(info_dir)
