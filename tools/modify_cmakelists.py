@@ -9,7 +9,7 @@ import re
 import shutil
 from wx._windows_ import DirDialog_GetPath
 
-INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm_src/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
+INSTRUMENT_FILE_LOCATION = "/home/ataylor/llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
 # INSTRUMENT_FILE_LOCATION = "/Users/ataylor/Research/llvm_src/plugin_llvm/llvm/lib/Transforms/RosThresholds/instruments/instrument.cpp"
 
 
@@ -88,6 +88,7 @@ def get_groups(lines):
 
 
 def do_work(directory_start):
+    errs = []
     for dir_path, names, files in os.walk(directory_start):
         # if we have a cmakelists and package.xml than we are in a thing to modify
         if "CMakeLists.txt" in files and "package.xml" in files:
@@ -209,8 +210,7 @@ def do_work(directory_start):
             if changed:
                 # cmake_args.insert(2, ('set', ["CMAKE_CXX_COMPILER", "clang++"]))
                 # back up old CMakeLists.txt
-                if not os.path.exists(dir_path + '/CMakeLists.txt_backup'):
-                    shutil.copy(dir_path + '/CMakeLists.txt', dir_path + '/CMakeLists.txt_backup')
+                if not os.path.exists(dir_path + '/CMakeLists.txt_backup'): shutil.copy(dir_path + '/CMakeLists.txt', dir_path + '/CMakeLists.txt_backup')
 
                 # write out the new file
                 with open(dir_path + '/CMakeLists.txt', 'w') as outf:
@@ -229,7 +229,14 @@ def do_work(directory_start):
 
                 # copy the file over now
                 for destination in copy_locs:
-                    shutil.copy(INSTRUMENT_FILE_LOCATION, destination)
+                    try:
+                        shutil.copy(INSTRUMENT_FILE_LOCATION, destination)
+                    except:
+                        errs.append("Problem copying instrument file to {:s}".format(destination))
+    print '\n\n Errors:'
+    for i in errs:
+        print i
+
 
 
 def restore(directory_start):
@@ -258,6 +265,6 @@ if __name__ == '__main__':
     else:
         if not os.path.exists(INSTRUMENT_FILE_LOCATION):
             print("INSTRUMENTATION FILE DOES NOT EXIST WOAH")
-            sys.exit(-1)
+            sys.exit(-1)/home/ataylor/ros_ws/thresholds/src/thresholdanalysis
         do_work(directory)
 
