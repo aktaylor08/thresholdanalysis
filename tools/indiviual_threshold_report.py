@@ -143,6 +143,7 @@ if __name__ == '__main__':
     param = sorted(param, key=lambda x: x['distance'])
     num = sorted(num, key=lambda x: x['distance'])
     code = sorted(code, key=lambda x: x['distance'])
+    file_grouped = sorted(param, key=lambda x: x['file'])
 
     print '\n'
     print '{:15s}{:10s}{:30s}{:10s}{:s}'.format('Type', "Distance", "Source",  "Line No.", "File",)
@@ -154,7 +155,7 @@ if __name__ == '__main__':
             i['lineno'],
             i['file'],
         )
-    print '-----'
+    print '-----\n'
     for i in num:
         print '{:15s}{:<10d}{:30s}{:<10d}{:s}'.format(
             i['type'],
@@ -163,8 +164,17 @@ if __name__ == '__main__':
             i['lineno'],
             i['file'],
         )
-    print '-----'
+    print '-----\n'
     for i in code:
+        print '{:15s}{:<10d}{:30s}{:<10d}{:s}'.format(
+            i['type'],
+            i['distance'],
+            i['source'],
+            i['lineno'],
+            i['file'],
+        )
+    print '-----\n'
+    for i in file_grouped:
         print '{:15s}{:<10d}{:30s}{:<10d}{:s}'.format(
             i['type'],
             i['distance'],
