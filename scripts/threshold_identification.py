@@ -18,6 +18,29 @@ import networkx as nx
 from matplotlib.pyplot import show
 
 
+class ParamCounterVisitor(ast.NodeVisitor):
+
+    def __init__(self):
+        self.count = 0
+
+    def generic_visit(self, node):
+        if self.is_paramcall(node):
+            self.count += 1
+        ast.NodeVisitor.generic_visit(self, node)
+
+
+    @staticmethod
+    def is_paramcall(node):
+        try:
+            if isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name):
+                    if node.func.value.id == 'rospy' and node.func.attr == 'get_param':
+                        return True
+            return False
+        except:
+            return False
+
+
 class AnalysisGraph(object):
     """"Graph which contains links to all of the classes
     in a file that have been analyzed using the program
@@ -560,7 +583,7 @@ class TestInfoVisitor(ast.NodeVisitor):
         return v.found
 
 
-def main(file_name):
+def main():
     parser = argparse.ArgumentParser(description=("This is a program to find"
                                                   " constant thresholds in a python program"))
     parser.add_argument('file', help='path to file')
@@ -568,18 +591,24 @@ def main(file_name):
                         action='store_true', )
     parser.add_argument('-g', '--graph', help='Graph the thresholds and stuff',
                         action='store_true', )
+    parser.add_argument("-i", "--info_out", help='File Name to output threshold information to')
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
     with open(args.file) as openf:
         code = openf.read()
         split_code = code.split('\n')
         tree = ast.parse(code)
+
+        pc = ParamCounterVisitor()
+        pc.visit(tree)
+        num_params = pc.count
+
         cfgvisit = BuildAllCFG(False, code=code.split('\n'))
         cfgvisit.visit(tree)
         rd = ReachingDefinition(tree, cfgvisit.store)
         rd.compute()
 
-        ag = AnalysisGraph(file_name)
+        ag = AnalysisGraph(args.file)
         ag.import_cfg(cfgvisit.store)
         ag.import_rd(rd.rds_in)
 
@@ -589,6 +618,7 @@ def main(file_name):
             ag.add_constant_ctrl(key, values)
 
         pubs = get_pub_srv_calls(tree, code)
+        num_pubs = len(pubs)
         for i in pubs:
             ag.add_pub_srv(i)
 
@@ -645,12 +675,18 @@ def main(file_name):
                 source = source.lstrip().strip()
                 local_info = dict(key=key, file=file_name, name=name, lineno=lineno, source_code=source_code,
                                   topic=topic, type=ttype, source=source, distance=distance,
-                                  other_thresholds=other_thresholds, relation=relation)
+                                  other_thresholds=other_thresholds, relation=relation, param_reads=num_params,
+                                  publishes=num_pubs)
                 infomation[key] = local_info 
             keys[thresh] = cur_keys
 
         fname, _ = os.path.splitext(args.file)
+        if args.info_out:
+            fname = args.info_out
         f = fname + '_thresh_info.json'
+        print f
+        print num_params
+        print num_pubs
         with open(f, 'w') as json_out:
             json.dump(infomation, json_out, indent=1)
 
@@ -658,5 +694,4 @@ def main(file_name):
             instrument_thresholds(tree, thresholds, keys, args.file, code.split('\n'), False, args.rest)
 
 if __name__ == "__main__":
-    fname = sys.argv[1]
-    main(fname)
+    main()

@@ -588,9 +588,13 @@ class PublishFinderVisitor(BasicVisitor):
             if func.attr == 'publish':
                 to = TreeObject(self.current_class, self.current_function, self.current_expr, node)
                 self.publish_calls.append(to)
-                faa = FindAssignment(self.current_class, node.func.value.attr)
-                faa.visit(self.current_class)
-                self.topics.append(faa.topic)
+                try:
+                    faa = FindAssignment(self.current_class, node.func.value.attr)
+                    faa.visit(self.current_class)
+                    self.topics.append(faa.topic)
+                # i'm a bad person for doing this...
+                except:
+                    self.topics.append('')
 
 
 class FindAssignment(BasicVisitor):

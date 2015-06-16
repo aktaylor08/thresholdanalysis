@@ -22,7 +22,6 @@ class ThresholdNode(object):
     """Node that controls all threshold stuff"""
 
     def __init__(self, live):
-        print "Are we doing it live?", live
         if live:
             if not ros:
                 print "NO ROS"
@@ -51,7 +50,7 @@ class ThresholdNode(object):
         self.handle_mark(msg.data.secs, msg.data.nsecs, True)
 
     def mark_no_action_callback(self, msg):
-        self.handle_mark(msg.data.secs, msg.data.nsecs, True)
+        self.handle_mark(msg.data.secs, msg.data.nsecs, False)
 
     def thresh_callback(self, msg):
         self.handle_thresh_string(msg.data)
@@ -196,7 +195,7 @@ class ThresholdNode(object):
         return pd.DataFrame.copy(self._data)
 
     # IMPORT
-    def import_bag_file(self, bag_file, ns=None):
+    def import_bag_file(self, bag_file, ns=None, nst=None):
         if not os.path.exists(bag_file):
             print "Error bag file doesn't exist"
             return
@@ -210,21 +209,22 @@ class ThresholdNode(object):
                 print "No rosbag pandas cannot read bag!"
 
         elif ext == '.csv':
-            bag_df = pd.read_csv(bag_file, parse_dates=True, index_col=0)
+            bag_df = pd.read_csv(bag_file, parse_dates=True, index_col=0, quotechar='"')
             csv = True
-        if ns is None:
+        if nst is None:
             thresh = bag_df['threshold_information__data'].dropna()
         else:
-            thresh = bag_df[ns + '_threshold_information__data'].dropna()
+            thresh = bag_df[nst + '_threshold_information__data'].dropna()
+
         for i in thresh.values:
             if csv:
                 i = i.replace('\t', ',')
             self.handle_thresh_string(i)
-        self.handle_mark_df(bag_df)
+        self.handle_mark_df(bag_df, ns)
 
     def import_thresh_file(self, thresh_file):
         """Import a previously parsed threshold file"""
-        df = pd.read_csv(thresh_file, parse_dates=True, index_col=0)
+        df = pd.read_csv(thresh_file, parse_dates=True, index_col=0, quotechar='"')
         columns = df.columns
         for time, values in zip(df.index, df.values):
             self.times.add(time)
@@ -232,7 +232,7 @@ class ThresholdNode(object):
                 if key != 'file_name' and key != 'line_number':
                     self.add_to_data(key, time, val)
 
-    def import_mark_file(self, fname):
+    def import_mark_file(self, fname, namespace=None):
         """import the mark file"""
         if not os.path.exists(fname):
             print "Error mark file doesn't exist"
@@ -251,26 +251,36 @@ class ThresholdNode(object):
                 print "No rosbag pandas cannot read bag!"
 
         elif ext == '.csv':
-            bag_df = pd.read_csv(fname, parse_dates=True, index_col=0)
+            bag_df = pd.read_csv(fname, parse_dates=True, index_col=0, quotechar='"')
 
         else:
             print "Unknown File type ", fname
         self.handle_mark_df(bag_df)
 
-    def handle_mark_df(self, bag_df):
+    def handle_mark_df(self, bag_df, namespace=None):
         # handle all of the marks
+        if namespace is None:
+            no_sec = 'mark_no_action__data_secs'
+            no_nsec = 'mark_no_action__data_nsecs'
+            a_sec = 'mark_action__data_secs'
+            a_nsec = 'mark_action__data_nsecs'
+        else:
+            no_sec = namespace + '_mark_no_action__data_secs'
+            no_nsec = namespace + '_mark_no_action__data_nsecs'
+            a_sec = namespace + '_mark_action__data_secs'
+            a_nsec = namespace + '_mark_action__data_nsecs'
         if bag_df is not None:
-            if 'mark_no_action__data_nsecs' in bag_df.columns:
-                idx = bag_df.mark_no_action__data_nsecs.dropna().index
-                vals = bag_df.loc[idx, ['mark_no_action__data_secs', 'mark_no_action__data_nsecs']]
+            if no_nsec in bag_df.columns:
+                idx = bag_df[no_nsec].dropna().index
+                vals = bag_df.loc[idx, [no_sec, no_nsec]]
                 for _, data in vals.iterrows():
-                    s = data['mark_no_action__data_secs']
-                    ns = data['mark_no_action__data_nsecs']
+                    s = data[no_sec]
+                    ns = data[no_nsec]
                     self.handle_mark(s, ns, False)
-            if 'mark_action__data_nsecs' in bag_df.columns:
-                idx = bag_df.mark_action__data_nsecs.dropna().index
-                vals = bag_df.loc[idx, ['mark_action__data_secs', 'mark_action__data_nsecs']]
+            if a_nsec in bag_df.columns:
+                idx = bag_df[a_nsec].dropna().index
+                vals = bag_df.loc[idx, [a_sec, a_nsec]]
                 for _, data in vals.iterrows():
-                    s = data['mark_action__data_secs']
-                    ns = data['mark_action__data_nsecs']
+                    s = data[a_sec]
+                    ns = data[a_nsec]
                     self.handle_mark(s, ns, True)

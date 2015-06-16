@@ -1,0 +1,31 @@
+shcunk modular
+cob_driver
+careobot people preception
+careobot object perception
+IPA Canopen
+Move it stack
+Another bwi thing..
+Carl Ros Stack
+Hector Localization
+Hector quad
+Jaco Ros clone from texas
+jsk_common
+Ocoros kinematics
+segbot arm
+sr interface
+sr teleop
+sr ronex
+kn_msgs
+pr2_dashboard
+pr2_gripper_sensor
+pr2_object_manipulation
+pr2_plugs
+pr2/pr2_power_drivers
+pr2_sith
+pr2_robot
+pr2_mechanism
+Move it stack
+pr2_ethercat_drivers
+roseus_robot
+ardrone autonomy
+pr2_controllers

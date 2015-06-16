@@ -1,0 +1,5 @@
+<launch>
+    <node name="camera" pkg="usb_cam" type="usb_cam_node" />
+    <node name="keyboard" pkg="keyboard" type="keyboard" />
+    <node name="markers" pkg="thresholdanalysis" type="keyboard_tool.py" />
+</launch>

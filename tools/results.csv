@@ -1,0 +1,138 @@
+pass unit tests,21.777645,30.320550,11,11,0,11,11,11,9
+asctec base,126.471501,170.649604,57,35,22,46,49,38,12
+water sampler,24.079946,28.217933,30,0,30,28,9,9,7
+crop surveying,128.636264,167.229834,3,3,0,3,3,3,3
+cob external,18.468470,19.707007,0,0,0,0,0,0,0
+cob common,27.343586,29.254620,0,0,0,0,0,0,0
+shcunk modular,fail
+cob_driver,fail
+cob_robots,14.152649,14.897653,0,0,0,0,0,0,0
+Cob Environments,13.647345,13.716767,0,0,0,0,0,0,0
+Cob Command Tools,34.523436,72.550985,151,142,9,37,142,28,6
+Cob calibration data,2.103955,2.084709,0,0,0,0,0,0,0
+Cob substitute,14.071307,13.676311,0,0,0,0,0,0,0
+careobot contro,fail
+careobot people preception,fail
+careobot manipulation,57.307514,151.151091,6,0,6,4,0,0,1
+careobot perception,53.813839,66.623939,0,0,0,0,0,0,0
+careobot evnironment perception,0.686382,0.615728,0,0,0,0,0,0,0
+careobot navigation perception,fail
+careobot object perception,fail
+navigation stack,206.376721,401.775574,46,45,1,26,45,25,9
+Baxter Robot,31.162505,31.697058,13,0,13,7,0,0,4
+Realtime tools,5.181355,5.598865,0,0,0,0,0,0,0
+Control Toolbox,7.994683,12.262826,2,0,2,2,0,0,1
+Ros Control,40.923623,50.616606,0,0,0,0,0,0,0
+Ros Controllers,45.841077,87.544193,10,10,0,6,10,6,3
+IPA Canopen,fail
+Move it stack,timeout
+BWI from Texas,253.230090,215.993576,8,0,8,6,0,0,2
+AR Tracking,75.897745,99.425505,0,0,0,0,0,0,0
+AprilTags Tracking,32.469349,39.387755,0,0,0,0,0,0,0
+Airbotix ros package,16.837557,17.002489,3,0,3,3,2,2,3
+Asctec Mav Pacakge,fail
+Calvin Ros Stack,fail
+Carl Ros Stack,fail
+CrazyFlie Ros Stack,15.780604,15.636985,32,0,32,19,1,1,5
+Ros Concert,103.431795,112.350224,3,0,3,2,0,0,2
+ROS Create Driver,17.527178,17.573742,38,0,38,26,15,6,2
+Move it stack,timeout
+ROS Darwin,19.088113,28.045159,0,0,0,0,0,0,0
+ROS Descartes,118.049471,117.893690,0,0,0,0,0,0,0
+Func Maninulators,64.561320,45.638753,0,0,0,0,0,0,0
+ros filter library,8.721073,12.982386,0,0,0,0,0,0,0
+graft,23.759606,38.359098,0,0,0,0,0,0,0
+Rail Pick and place library,120.089802,823.364249,0,0,0,0,0,0,0
+Grizzly robot,36.971942,29.657242,0,0,0,0,0,0,0
+Hector Slam,49.747627,93.314009,12,12,0,11,12,11,2
+Hector Localization,fail
+Hector Arm,19.613031,21.883574,0,0,0,0,0,0,0
+Hector quad,fail
+Hector navigation,62.999070,89.566879,15,15,0,13,15,13,2
+Hector diagnostics,64.272314,84.646069,15,15,0,13,15,13,2
+Hector turtlebot,16.255655,17.918464,0,0,0,0,0,0,0
+Husky Ros,16.716761,15.803655,0,0,0,0,0,0,0
+ICART MINI,36.055063,50.277007,0,0,0,0,0,0,0
+innok_heros,2.579270,2.526280,0,0,0,0,0,0,0
+Jaco Robot Arm,36.380261,125.982355,10,10,0,3,10,3,2
+Calibration,60.887882,95.310224,0,0,0,0,0,0,0
+jsk_common,fail
+jsk_db,26.663541,12.847376,0,0,0,0,0,0,0
+jsk smart apps,12.492046,12.584679,0,0,0,0,0,0,0
+jsk_recognition,2.089118,1.632425,0,0,0,0,0,0,0
+jsk_vis,12.690087,12.517226,0,0,0,0,0,0,0
+jsk_control,78.095886,58.196968,53,0,53,30,4,1,12
+jsk_planning,14.916519,12.594534,0,0,0,0,0,0,0
+jsk_roseus,12.742365,12.500369,0,0,0,0,0,0,0
+jsk_travis,2.343544,2.259599,0,0,0,0,0,0,0
+kobuki,52.830037,70.469259,19,0,19,18,0,0,6
+kobuki_soft,21.513182,24.632562,1,1,0,1,1,1,1
+Mav Ros,104.863912,502.741238,7,7,0,4,7,4,4
+Maxwell,13.538541,13.389067,4,0,4,4,0,0,1
+Motoman,52.093219,83.320496,0,0,0,0,0,0,0
+NAO Ros,19.240616,22.738574,1,0,1,1,0,0,1
+NAO Extras,24.125463,67.218467,26,26,0,17,26,17,2
+NAO interaction,17.280201,17.330867,0,0,0,0,0,0,0
+Naopi bridge,40.232868,40.879860,0,0,0,0,0,0,0
+nao camera,3.163738,3.109762,6,0,6,2,0,0,1
+nao virtual,12.982514,12.850764,0,0,0,0,0,0,0
+nao viz,13.285249,13.135483,0,0,0,0,0,0,0
+nao sensors,fail
+Nav2 platform,18.702211,20.644811,0,0,0,0,0,0,0
+neo robot,37.826756,51.263676,3,3,0,3,3,3,3
+next stage,15.008434,14.573800,0,0,0,0,0,0,0
+novatel_spann,16.235233,16.317677,2,0,2,2,2,2,1
+Ocoros kinematics,fail
+p2 os robot,30.590314,65.792524,18,0,0,14,18,14,2
+robot rescue,31.013704,53.506943,0,0,0,0,0,0,0
+People tracking ros,61.127093,135.023284,24,24,0,8,24,8,3
+Pepper robot for stuff,13.733483,13.323457,0,0,0,0,0,0,0
+rail_segmentation,fail
+rail ceiling,12.052430,18.772972,1,1,0,1,1,1,1
+robitician ric,26.105360,30.122816,16,0,16,13,0,0,2
+segbot,26.850163,29.554239,1,0,1,1,0,0,1
+segbot arm,fail
+segbot apps,fail
+turtlebot apps,fail
+turtlebot interactions,17.203168,17.774434,0,0,0,0,0,0,0
+turtlebot,16.850111,17.893713,0,0,0,0,0,0,0
+turtlebot create,17.375635,17.592639,38,0,38,26,15,6,2
+turtlebot arm,49.690651,162.338694,0,0,0,0,0,0,0
+ros universial robot ,23.691182,28.896441,0,0,0,0,0,0,0
+ocs library,66.572421,111.073342,13,3,10,8,3,3,5
+sr interface,fail
+sr utils,fail
+sr teleop,fail
+sr manipulation,0.710210,0.712106,1,0,1,1,0,0,1
+sr demo,0.611571,0.616489,9,0,9,3,9,3,1
+sr ronex,fail
+app_manager,7.874652,7.721677,1,0,1,1,0,0,1
+arm_nav,15.090206,15.313309,0,0,0,0,0,0,0
+kn_msgs,fail
+pr futre,0.621591,0.631689,0,0,0,0,0,0,0
+pre2 apps,31.684651,641.368447,27,27,0,13,27,13,2
+pr2_colibraiton,fail
+/pr2_common,18.993733,18.744972,0,0,0,0,0,0,0
+pr2_common_actions,31.364893,53.316629,0,0,0,0,0,0,0
+pr2_delivery,3.554367,3.370227,0,0,0,0,0,0,0
+pr2_developer_key,12.857416,12.692217,0,0,0,0,0,0,0
+pr2_doors,fail
+pr2_ethercat_drivers,timeout
+pr2_gripper_sensor,fail
+pr2_kinematics,46.825279,54.045827,0,0,0,0,0,0,0
+pr2_mechanism,timeout
+pr2_mechanism_msgs,12.869094,15.291180,0,0,0,0,0,0,0
+pr2_navigation,137.083775,183.366028,7,7,0,4,7,4,3
+pr2_navigation_apps,0.733899,0.676438,0,0,0,0,0,0,0
+pr2_object_manipulation,fail
+pr2_pbd,0.691056,0.684142,0,0,0,0,0,0,0
+pr2_plugs,fail
+pr2_precise_trajectory,fail
+pr2_robot,timeout
+pr2_self_test,134.485115,155.570614,1,1,0,1,1,1,1
+pr2_sheild_telop,5.695726,5.825902,0,0,0,0,0,0,0
+pr2_sith,fail
+pr2_surrogate,33.979492,60.108064,3,3,0,2,3,2,2
+rqt_pr2_dashboard,6.076043,6.079357,0,0,0,0,0,0,0
+willow_maps,5.860809,5.782706,0,0,0,0,0,0,0
+roseus_robot,timeout
