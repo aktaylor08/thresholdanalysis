@@ -2,14 +2,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-from thresholdanalysis.analysis import experiment_examine, get_total_time
+from thresholdanalysis.analysis import experiment_examine, summerization_tools
 
 FIG_DIR = '/Users/ataylor/Research/thesis/myFigures/'
 
 info_dir = '../test_data/water_sampler/static_info/'
 experiment = '../test_data/water_sampler/dynamic/all_info/experiment1_2015-04-30-15-52-51.csv'
-info = get_total_time.get_info(info_dir)
-thresh_df = get_total_time.get_df(experiment, info)
+info = summerization_tools.get_info(info_dir)
+thresh_df = summerization_tools.get_df(experiment, info)
 df = pd.read_csv(experiment, parse_dates=True, index_col=0)
 action, no_actions = experiment_examine.get_marks(experiment)
 no_adv_score = pd.read_csv('../test_data/water_sampler/dynamic/all_info/no_advance/experiment1_2015-04-30-15-52-51_no_advance_scores.csv', parse_dates=True, index_col=0)

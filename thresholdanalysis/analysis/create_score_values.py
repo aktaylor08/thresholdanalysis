@@ -11,15 +11,6 @@ from thresholdanalysis.runtime import threshold_node
 from thresholdanalysis.analysis import analysis_utils
 
 
-def get_info(directory):
-    info = {}
-    for i in glob.glob(directory + "/*.json"):
-        with open(i) as f:
-            vals = json.load(f)
-            for v in vals:
-                info[v] = vals[v]
-    return info
-
 def produce_score_array_sampled(params_df, info, ):
     a = params_df.index
     time_index = pd.date_range(a[0], a[-1], freq='100L')
@@ -66,7 +57,7 @@ def main():
     direct = args.directory
     if direct[-1] != '/':
         direct += '/'
-    info = get_info(args.info_directory)
+    info = analysis_utils.get_info(args.info_directory)
     print os.listdir(direct)
     for f in glob.glob(direct + '*.csv'):
         fbase, _ = os.path.splitext(f)
@@ -79,10 +70,6 @@ def main():
             os.mkdir(direct + 'no_advance/')
         adv.to_csv(direct + 'advance/' + fbase + '_advance_scores.csv')
         no_adv.to_csv(direct + 'no_advance/' + fbase + '_no_advance_scores.csv')
-
-
-
-
 
 
 if __name__ == '__main__':

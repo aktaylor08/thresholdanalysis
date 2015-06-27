@@ -1,30 +1,30 @@
 
 # coding: utf-8
 
-# In[183]:
+# In[67]:
 
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-from thresholdanalysis.analysis import experiment_examine, get_total_time
+from thresholdanalysis.analysis import experiment_examine, summerization_tools
 
 get_ipython().magic(u'matplotlib inline')
 
 
-# In[255]:
+# In[68]:
 
 info_dir = '../test_data/water_sampler/static_info/'
-experiment = '../test_data/water_sampler/dynamic/all_info/experiment2_2015-04-30-15-54-45.csv'
-info = get_total_time.get_info(info_dir)
-thresh_df = get_total_time.get_df(experiment, info)
+experiment = '../test_data/water_sampler/dynamic/all_info/experiment3_2015-04-30-15-57-33.csv'
+info = summerization_tools.get_info(info_dir)
+thresh_df = summerization_tools.get_df(experiment, info)
 df = pd.read_csv(experiment, parse_dates=True, index_col=0)
 action, no_actions = experiment_examine.get_marks(experiment)
-no_adv_score = pd.read_csv('../test_data/water_sampler/dynamic/all_info/no_advance/experiment2_2015-04-30-15-54-45_no_advance_scores.csv', parse_dates=True, index_col=0)
-adv_score = pd.read_csv('../test_data/water_sampler/dynamic/all_info/advance/experiment2_2015-04-30-15-54-45_advance_scores.csv', parse_dates=True, index_col=0)
+no_adv_score = pd.read_csv('../test_data/water_sampler/dynamic/all_info/no_advance/experiment3_2015-04-30-15-57-33_no_advance_scores.csv', parse_dates=True, index_col=0)
+adv_score = pd.read_csv('../test_data/water_sampler/dynamic/all_info/advance/experiment3_2015-04-30-15-57-33_advance_scores.csv', parse_dates=True, index_col=0)
 
 
-# In[256]:
+# In[70]:
 
 act = []
 for k,x in action.iteritems():
@@ -40,7 +40,7 @@ print act
 print noact
 
 
-# In[257]:
+# In[73]:
 
 for i in act:
     idx = adv_score.index.asof(i)
@@ -51,11 +51,18 @@ for i in noact:
     idx = no_adv_score.index.asof(i)
     res = no_adv_score.loc[idx, :]
     res.sort()
+    print i
     print res
-    
+    print '\n\n'
 
 
-# In[187]:
+# In[83]:
+
+print info['d4a8c703-b0b9-49d4-aae0-d531c47e2d8a']
+print info['0c95250a-abf7-48bc-bff8-4b7193913af1']
+
+
+# In[75]:
 
 fig, axes = plt.subplots(2, 1, sharex=True)
 ax = axes[0]
@@ -77,7 +84,6 @@ lims = ax.get_ylim()
 pairs = [(x,(lims[0] + lims[1]) /2) for x in act]
 nopairs = [(x,(lims[0] + lims[1]) /2) for x in noact]
 #print zip(*pairs)
-print nopairs
 #ax.scatter(zip(*pairs)[0], zip(*pairs)[1], c='r',marker='x', s=200)
 ax.scatter(zip(*nopairs)[0], zip(*nopairs)[1], c='g', marker='x', s=200)
 ax.set_ylabel('X Location (m)', fontsize=20)
@@ -85,76 +91,75 @@ ax.set_xlabel('Time', fontsize=20)
 
 
 
-fig.savefig('../../thesis/myFigures/waterMission2.png')
+fig.savefig('../../thesis/myFigures/waterMission3.png')
 
 
-# In[188]:
+# In[76]:
 
 vals = df[df.a_subject_pose__translation_x < -2]
 
 
-# In[189]:
+# In[77]:
 
 at_loc = vals.index[0]
 
 
-# In[190]:
+# In[78]:
 
-noact[0] - at_loc
+print noact[0] - at_loc
+print noact[1] - at_loc
+print noact[2] - at_loc
 
 
-# In[191]:
+# In[79]:
 
 thresh_df.key.unique()
 
 
-# In[192]:
+# In[80]:
 
-key = '/home/ataylor/water_sampler_experiment/src/h2o_sampling/script_utils/FlyToObject.py:41:0'
+key = '/home/ataylor/water_sampler_experiment/src/h2o_sampling/script_utils/FlyToObject_mod.py:41:0'
 
 
-# In[193]:
+# In[81]:
 
 changed_only = thresh_df[thresh_df['key'] == key]
 
 
-# In[194]:
+# In[44]:
 
 changed_only
 
 
-# In[258]:
+# In[45]:
 
-thresh_df[thresh_df.flop]
-
-
-# In[259]:
-
-idx = ft.index[0]
-info['0c95250a-abf7-48bc-bff8-4b7193913af1']
+ft = changed_only[changed_only['flop']]
 
 
-# In[197]:
+# In[48]:
 
-for i in noact:
-   print i - idx
+print ft
+if len(ft) > 0:
+    idx = ft[0]
+
+
+# In[49]:
+
+
+
+
+# In[51]:
+
 for i in act:
-    print i -idx
-
-
-# In[211]:
-
-for i in noact:
     idx = adv_score.index.asof(i)
     res = adv_score.loc[idx, :]
     res.sort()
     print res[0], res.index[0]
 
 
-# In[212]:
+# In[53]:
 
 for i in noact:
-
     idx = no_adv_score.index.asof(i)
     res = no_adv_score.loc[idx, :]
     res.sort()
@@ -165,12 +170,12 @@ for i in noact:
     
 
 
-# In[200]:
+# In[62]:
 
-no_adv_score[adv_score[key] != 9999.9][key].plot()
+no_adv_score[no_adv_score[key] != 9999.9][key].plot()
 
 
-# In[244]:
+# In[63]:
 
 for i in noact:
     idx = adv_score.index.asof(i)
@@ -180,43 +185,30 @@ for i in noact:
     print info[res.index[0]]['source']
 
 
-# In[248]:
+# In[65]:
 
-fig, ax = plt.subplots()
-fig.set_size_inches(11,8.5)
+ax = no_adv_score.min(axis=1).plot(figsize=(11 ,8.5), linewidth=3)
 ax.scatter(no_adv_score[key].index, no_adv_score[key], marker='x', c='r')
-xlims = ax.get_xlim()
-no_adv_score.min(axis=1).plot(figsize=(11 ,8.5), linewidth=3, ax=ax)
 ax.set_ylim(0,2)
 
 
-# In[254]:
-
-fig, ax = plt.subplots()
-fig.set_size_inches(11,8)
-for i in no_adv_score.columns:
-    data = no_adv_score[no_adv_score[i] != 9999.9]
-    if len(data) > 1:
-        data[i].plot()
-
-
-# In[203]:
+# In[82]:
 
 no_max = no_adv_score.min(axis=1) < 9999
 no_oob = no_adv_score[no_max]
 
 
-# In[204]:
+# In[66]:
 
 a = no_oob.idxmin(axis=1).value_counts() / len(no_oob)
 
 
-# In[205]:
+# In[84]:
 
 type(a)
 
 
-# In[206]:
+# In[85]:
 
 times = {}
 last = None
@@ -240,7 +232,7 @@ for t, v in no_oob.idxmin(axis=1).iteritems():
         
 
 
-# In[207]:
+# In[89]:
 
 print times
 vals = []
@@ -250,67 +242,45 @@ for i, dom_times in times.iteritems():
     
 
 
-# In[208]:
+# In[88]:
 
 np.mean(vals)
 
 
-# In[209]:
-
-for i in thresh_df
-
-
-# In[ ]:
-
-a = thresh_df[thresh_df.key == 'd4a8c703-b0b9-49d4-aae0-d531c47e2d8a']
-
-
-# In[ ]:
-
-a.cmp.plot()
-print info['d4a8c703-b0b9-49d4-aae0-d531c47e2d8a']['file']
-print info['d4a8c703-b0b9-49d4-aae0-d531c47e2d8a']['lineno']
-print info['d4a8c703-b0b9-49d4-aae0-d531c47e2d8a']['source']
+# In[88]:
 
 
 
 
-# In[ ]:
+# In[59]:
 
-a.thresh.plot()
-
-
-# In[ ]:
-
-df.a_distance_to_task_pose__dist.dropna().plot()
+no_adv_score[key]
 
 
-# In[ ]:
+# In[84]:
 
-df.a_subject_pose__translation_x.dropna().plot()
-
-
-# In[ ]:
-
-for i,d in thresh_df.groupby('key'):
-    ax =  d.thresh.plot(linewidth=4)
-ax.set_ylim(-1,2)
+k1 = 'd4a8c703-b0b9-49d4-aae0-d531c47e2d8a'
+k2 = '0c95250a-abf7-48bc-bff8-4b7193913af1'
 
 
-# In[182]:
+# In[86]:
 
-for i in info:
-    print i
-
-
-# In[214]:
-
-df.a_distance_to_task_pose__dist.dropna().plot()
+no_adv_score[no_adv_score[k1] < 9999][k1].plot()
 
 
-# In[225]:
+# In[88]:
 
-thresh_df[thresh_df['key'] == key].plot()
+no_adv_score[no_adv_score[k2] < 9999][k2].plot()
+
+
+# In[89]:
+
+k3 = '/home/ataylor/water_sampler_experiment/src/h2o_sampling/h2o_safety/h2o_safety.py:119:0'
+
+
+# In[90]:
+
+no_adv_score[no_adv_score[k3] < 9999][k3].plot()
 
 
 # In[ ]:

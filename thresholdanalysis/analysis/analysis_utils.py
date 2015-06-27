@@ -1,8 +1,12 @@
 import datetime
+import glob
+import json
 import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
+from thresholdanalysis.runtime import threshold_node
+
 
 def get_param_keys(static_info):
     params = {x: y for x, y in static_info.iteritems() if y['type'] == 'Parameter'}
@@ -334,3 +338,51 @@ class GraphStorage(object):
         self.thresh = []
         self.name = ''
         self.suggestion = ''
+
+
+def get_info(directory):
+    info = {}
+    for i in glob.glob(directory + "/*.json"):
+        with open(i) as f:
+            vals = json.load(f)
+            for v in vals:
+                info[v] = vals[v]
+    return info
+
+
+def calculate_ranking(score_df, zero_bad=False):
+    cols = score_df.columns
+    num = len(cols)
+    col_map = {v: k for k,v in enumerate(cols)}
+    idxes = []
+    store = np.zeros((len(score_df), len(cols)))
+    print store.shape
+    rc = 0
+    for idx, row in score_df.iterrows():
+        idxes.append(idx)
+        row.sort()
+        count = 0
+        for name, val in row.iteritems():
+            col = col_map[name]
+            if zero_bad:
+                if val < 9999:
+                    store[rc, col] = 1 - ((float(count)) / num)
+                    count += 1
+            else:
+                store[rc, col] = 1 - ((float(count)) / num)
+                count += 1
+        rc += 1
+    return pd.DataFrame(data=store, index=idxes, columns=cols)
+
+
+def get_df(bag_f, info, parsed=True):
+    if not parsed:
+        print 'Loading file {:s}'.format(bag_f)
+        node = threshold_node.ThresholdNode(False)
+        node.import_bag_file(bag_f,)
+        thresh_df = node.get_new_threshold_data()
+    else:
+        thresh_df = pd.read_csv(bag_f, index_col=0, parse_dates=True)
+    param_keys = get_param_keys(info)
+    params_only = thresh_df[thresh_df['key'].apply(lambda param: param in param_keys)]
+    return params_only

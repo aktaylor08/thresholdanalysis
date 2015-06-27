@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-from thresholdanalysis.analysis import experiment_examine, get_total_time
+from thresholdanalysis.analysis import experiment_examine, summerization_tools
 
 FIG_DIR = '/Users/ataylor/Research/thesis/myFigures/'
 mod_key = '/home/ataylor/water_sampler_experiment/src/h2o_sampling/h2o_safety/h2o_safety.py:119:0'
@@ -14,7 +14,7 @@ mod_key = '/home/ataylor/water_sampler_experiment/src/h2o_sampling/h2o_safety/h2
 
 def fix_and_plot(score, collapse):
     # get rankings
-    ranking = get_total_time.calculate_ranking(score, collapse)
+    ranking = summerization_tools.calculate_ranking(score, collapse)
     # determine where a ranking changed by shifting the value to the left and right
     rank_change = (ranking == ranking.shift(1)).apply(lambda row: not row.all(), axis=1)
     for idx in ranking[rank_change].index:
@@ -37,7 +37,7 @@ def fix_and_plot(score, collapse):
 
 def fix_and_plot_num(score, collapse, n):
     # get rankings
-    ranking = get_total_time.calculate_ranking(score, collapse)
+    ranking = summerization_tools.calculate_ranking(score, collapse)
     # determine where a ranking changed by shifting the value to the left and right
     val = pd.DatetimeIndex([ranking.index[0]])
     # take care of rankings...
@@ -80,7 +80,7 @@ def fix_and_plot_num(score, collapse, n):
 
 def fix_and_plot_connected(score, collapse):
     # get rankings
-    ranking = get_total_time.calculate_ranking(score, collapse)
+    ranking = summerization_tools.calculate_ranking(score, collapse)
     # get the location of all zeros and replace them with NaN
     zero_row = (ranking == 0).any(axis=1)
     zero_series = zero_row.apply(lambda x: 0 if x else np.NaN)
@@ -103,7 +103,7 @@ def fix_and_plot_connected(score, collapse):
 def fix_and_plot_connectedcolor(score, collapse):
     # get rankings
     cmap = colormaps.get_cmap('winter')
-    ranking = get_total_time.calculate_ranking(score, collapse)
+    ranking = summerization_tools.calculate_ranking(score, collapse)
     levels = {}
     for num, val in enumerate(ranking.columns):
         levels[val] = float(num) / len(ranking.columns)
@@ -130,7 +130,7 @@ def fix_and_plot_connectedcolor(score, collapse):
 
 def fix_and_plot_arrows(score, collapse):
     # get rankings
-    ranking = get_total_time.calculate_ranking(score, collapse)
+    ranking = summerization_tools.calculate_ranking(score, collapse)
     rank_change = ranking != ranking.shift(1)
     arrows = {}
 
@@ -184,10 +184,10 @@ def fix_and_plot_arrows(score, collapse):
 
 def fix_and_plot_arrows_color(score, collapse):
     # get rankings
-    ranking = get_total_time.calculate_ranking(score, collapse)
+    ranking = summerization_tools.calculate_ranking(score, collapse)
     rank_change = ranking != ranking.shift(1)
 
-    ranking = get_total_time.calculate_ranking(score, collapse)
+    ranking = summerization_tools.calculate_ranking(score, collapse)
 
     arrows = {}
     last_idx = None
@@ -253,8 +253,8 @@ def fix_and_plot_arrows_color(score, collapse):
 if __name__ == '__main__':
     info_dir = '../test_data/water_sampler/static_info/'
     experiment = '../test_data/water_sampler/dynamic/all_info/experiment1_2015-04-30-15-52-51.csv'
-    info = get_total_time.get_info(info_dir)
-    thresh_df = get_total_time.get_df(experiment, info)
+    info = summerization_tools.get_info(info_dir)
+    thresh_df = summerization_tools.get_df(experiment, info)
     df = pd.read_csv(experiment, parse_dates=True, index_col=0)
     action, no_actions = experiment_examine.get_marks(experiment)
     no_adv_score = pd.read_csv('../test_data/water_sampler/dynamic/all_info/no_advance/experiment1_2015-04-30-15-52-51_no_advance_scores.csv', parse_dates=True, index_col=0)
