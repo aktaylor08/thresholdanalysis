@@ -21,7 +21,7 @@ if __name__ == '__main__':
     # parse args
     parser = argparse.ArgumentParser(
         description=("Read in information and report information about"
-                     "thresholds found during compilation in a ros package"))
+                     "thresholds found during compilation in a runtime package"))
     parser.add_argument('-d', '--directory', help="Directory to process", required=False)
     args = parser.parse_args()
     if args.directory is not None:

@@ -18,7 +18,7 @@ def do_work(directory, output_base):
                     out_name = out_name[1:]
                 out_name = output_base + out_name
                 # run threshold identification provide output directory and no execution
-                command = ['/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/scripts/threshold_identification.py',
+                command = ['/home/ataylor/ros_ws/thresholds/src/thresholdanalysis/thresholdanalysis/threshold_identification.py',
                            pyfile, '-i', out_name, '-n']
                 subprocess.call(command)
 
