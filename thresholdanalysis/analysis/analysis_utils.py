@@ -1,8 +1,11 @@
+from collections import defaultdict
 import datetime
 import glob
 import json
+from sys import stdout
 import numpy as np
 import pandas as pd
+import csv
 
 import matplotlib.pyplot as plt
 from thresholdanalysis.runtime import threshold_node
@@ -39,16 +42,23 @@ def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0,
     # count the flops in the past n seconds.
     flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, None)
     scores = {}
+    error_count = 0
+    total_count = 0
 
     # now calculate the scores.
     for key, data in thresh_df.groupby('key'):
         if key not in param_keys:
             continue
         try:
+            total_count += 1
             index = data.index.asof(time)
             lf = data.loc[index, 'last_cmp_flop']
             tdelta = (time - lf).total_seconds()
         except TypeError:
+            error_count += 1
+            tdelta = 9999.9
+        except ValueError:
+            error_count += 1
             tdelta = 9999.9
 
         s1 = np.power(tdelta, alpha)
@@ -356,7 +366,6 @@ def calculate_ranking(score_df, zero_bad=False):
     col_map = {v: k for k,v in enumerate(cols)}
     idxes = []
     store = np.zeros((len(score_df), len(cols)))
-    print store.shape
     rc = 0
     for idx, row in score_df.iterrows():
         idxes.append(idx)
@@ -386,3 +395,71 @@ def get_df(bag_f, info, parsed=True):
     param_keys = get_param_keys(info)
     params_only = thresh_df[thresh_df['key'].apply(lambda param: param in param_keys)]
     return params_only
+
+def to_latex(df, fout):
+        idx = [x.replace('_', '\_') for x in df.index]
+        df.index = idx
+        df.to_csv(fout, sep='&', line_terminator='\\\\\n',
+                        float_format='%.1f', quoting=csv.QUOTE_NONE,
+                        escapechar=' ', index_label='Paramter')
+
+
+
+def get_marks(bagfilename, number=3):
+    df = pd.read_csv(bagfilename, index_col=0, parse_dates=True, quotechar='"')
+    actions = {}
+    no_actions = {}
+    action = 'mark_action'
+    no_action = 'mark_no_action'
+    othersa = ['marks{:d}_mark_action'.format(i) for i in range(number)]
+    othersn = ['marks{:d}_mark_no_action'.format(i) for i in range(number)]
+    actions['ctrl'] = get_times(df, action)
+    no_actions['ctrl'] = get_times(df, no_action)
+    for idx, i in enumerate(othersa):
+        actions[idx] = get_times(df, i)
+    for idx, i in enumerate(othersn):
+        no_actions[idx] = get_times(df, i)
+    return actions, no_actions
+
+
+def get_times(df, start_str):
+    nsecs = start_str + '__data_nsecs'
+    secs = start_str + '__data_secs'
+    ret_val = []
+    if nsecs not in df.columns:
+        return ret_val
+    else:
+        idx = df[secs].dropna().index
+        vals = df.loc[idx, [secs, nsecs]]
+        for _, data in vals.iterrows():
+            s = data[secs]
+            ns = data[nsecs]
+            time = s + ns / 1000000000.0
+            time = pd.to_datetime(time, unit='s')
+            ret_val.append(time)
+    return ret_val
+
+def produce_score_array_sampled(params_df, info, ):
+    a = params_df.index
+    time_index = pd.date_range(a[0], a[-1], freq='100L')
+    adv_data_dict = defaultdict(list)
+    no_adv_data_dict = defaultdict(list)
+    #enumerate through all of the indexs and get the scores.
+    for count, idx in enumerate(time_index):
+        scores = get_advance_scores(idx, params_df, info)
+        noscores = get_no_advance_scores(idx, params_df, info)
+        for s, v in scores.iteritems():
+            adv_data_dict[s].append(v)
+        for s, v in noscores.iteritems():
+            no_adv_data_dict[s].append(v)
+        stdout.write("\rDoing Scores: {:.1%}".format(float(count) / len(time_index)))
+    adv_scores = pd.DataFrame(data=adv_data_dict, index=time_index)
+    no_adv_scores = pd.DataFrame(data=no_adv_data_dict, index=time_index)
+    return adv_scores, no_adv_scores
+
+
+
+def get_score_dfs(bag_f, info):
+    print 'Getting score arrays for {:s}'.format(bag_f)
+    thresh_df = get_df(bag_f, info)
+    return produce_score_array_sampled(thresh_df, info)

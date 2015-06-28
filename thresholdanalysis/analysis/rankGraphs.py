@@ -6,7 +6,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-from thresholdanalysis.analysis import experiment_examine, summerization_tools
+from thresholdanalysis.analysis import summerization_tools, experiment_examine
+from thresholdanalysis.examine_scripts import experiment_examine
 
 FIG_DIR = '/Users/ataylor/Research/thesis/myFigures/'
 mod_key = '/home/ataylor/water_sampler_experiment/src/h2o_sampling/h2o_safety/h2o_safety.py:119:0'
