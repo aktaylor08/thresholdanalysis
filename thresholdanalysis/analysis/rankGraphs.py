@@ -275,7 +275,7 @@ if __name__ == '__main__':
 
     vals = [.4, .6]
     nopoints = zip(noact, vals * (len(noact) / 2))
-    advpoints = zip(act, vals * (len(noact) / 2))
+    advpoints = zip(act, vals * (len(act) / 2))
 
     fig, ax = fix_and_plot(no_adv_score, False)
     for x in noact:
