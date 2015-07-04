@@ -116,6 +116,7 @@ def main():
         falses = len(data) - trues
         tp.append((float(trues) / (trues + falses)) * 100)
         fp.append((float(falses) / (trues + falses)) * 100)
+        print src, set(data['key'].values)
 
     stats_df = pd.DataFrame(index=keys, data={
         'Locations': locations,
@@ -252,21 +253,22 @@ def main():
         print x
         advs = get_partial_match(x, adv_scores)
         nadvs = get_partial_match(x, no_adv_scores)
+        print advs.columns
 
         advpoints = get_partial_match(x, act_marks)
         nopoints = get_partial_match(x, no_act_marks)
         print advpoints, nopoints
 
+        vals = [.4, .6]
         nopoints = zip(nopoints, vals * (len(nopoints) /2))
         advpoints = zip(advpoints, vals * (len(advpoints) /2))
+        print mapping[x]['key']
 
-        vals = [.4, .6]
+        fig, ax = analysis_utils.fix_and_plot_color(nadvs, True, mapping[x]['key'])
+        fig.savefig("/Users/ataylor/Research/thesis/myFigures/" + mapping[x]['name'].replace(' ','_' ) + 'no_adv_rank_graph.png')
 
-
-
-
-
-
+        fig, ax = analysis_utils.fix_and_plot_color(advs, True, mapping[x]['key'])
+        fig.savefig("/Users/ataylor/Research/thesis/myFigures/" + mapping[x]['name'].replace(' ', '_') + 'adv_rank_graph.png')
 
 
 def get_partial_match(key, dicton):
