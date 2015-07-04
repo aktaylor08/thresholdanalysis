@@ -7,6 +7,10 @@ import numpy as np
 import pandas as pd
 import csv
 
+
+
+import matplotlib.dates as mdates
+import matplotlib.cm as colormaps
 import matplotlib.pyplot as plt
 from thresholdanalysis.runtime import threshold_node
 
@@ -463,3 +467,187 @@ def get_score_dfs(bag_f, info):
     print 'Getting score arrays for {:s}'.format(bag_f)
     thresh_df = get_df(bag_f, info)
     return produce_score_array_sampled(thresh_df, info)
+
+
+def calculate_ranking(score_df, zero_bad=False):
+    cols = score_df.columns
+    num = len(cols)
+    col_map = {v: k for k,v in enumerate(cols)}
+    idxes = []
+    store = np.zeros((len(score_df), len(cols)))
+    print store.shape
+    rc = 0
+    for idx, row in score_df.iterrows():
+        idxes.append(idx)
+        row.sort()
+        count = 0
+        for name, val in row.iteritems():
+            col = col_map[name]
+            if zero_bad:
+                if val < 9999:
+                    store[rc, col] = 1 - ((float(count)) / num)
+                    count += 1
+            else:
+                store[rc, col] = 1 - ((float(count)) / num)
+                count += 1
+        rc += 1
+    return pd.DataFrame(data=store, index=idxes, columns=cols)
+
+def create_rank_graph(score, collapse, mod_key):
+    # get rankings
+    ranking = calculate_ranking(score, collapse)
+    # determine where a ranking changed by shifting the value to the left and right
+    rank_change = (ranking == ranking.shift(1)).apply(lambda row: not row.all(), axis=1)
+    for idx in ranking[rank_change].index:
+        new_idx = idx - datetime.timedelta(0,.01)
+        ranking.loc[new_idx, :] = np.nan
+    fig, ax = plt.subplots()
+    count = 1
+    for col in ranking.columns:
+        if col == mod_key:
+            pass
+        else:
+            ranking[col].plot(linewidth=2, ax=ax, c='b',)
+            count += 1
+    print mod_key
+    print ranking.columns
+    print mod_key in ranking.columns
+    if mod_key is not None and mod_key != 'None':
+        ranking[mod_key].plot(linewidth=2, ax=ax, c='r')
+    ax.set_ylabel('Rank Score', fontsize=20)
+    ax.set_xlabel('Time', fontsize=20)
+    ax.set_ylim(-.05, 1.05)
+    return fig, ax
+
+def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None):
+    # get rankings
+    ranking = calculate_ranking(score, collapse)
+    rank_change = ranking != ranking.shift(1)
+    print rank_change
+
+
+    # Create color maps
+    levels = {}
+    cmap = colormaps.get_cmap('winter')
+    for num, val in enumerate(ranking.columns):
+        levels[val] = float(num) / len(ranking.columns)
+    levels = {k: cmap(v) for k, v in levels.iteritems()}
+    levels[mod_key] = 'red'
+
+    ranking[rank_change] = np.NaN
+    # get the location of all zeros and replace them with NaN
+    zero_row = (ranking == 0).any(axis=1)
+    zero_series = zero_row.apply(lambda x: 0 if x else np.NaN)
+    if mod_key in ranking.columns:
+        zero_mod = ranking[ranking[mod_key] == 0][mod_key]
+    else:
+        print "{:s} not in ranking ranks".format(mod_key)
+        zero_mod = None
+    ranking[ranking == 0] = np.NaN
+    fig, ax = plt.subplots()
+    for col in ranking.columns:
+        if col == mod_key:
+            pass
+        else:
+            ranking[col].plot(ax=ax, color=levels[col],linewidth=2)
+    zero_series.plot(linewidth=2, ax=ax, c='black',zorder=100)
+    if zero_mod is not None:
+        zero_mod.plot(linewidth=2, ax=ax, c='r', zorder=100)
+    if mod_key in ranking.columns:
+        ranking[mod_key].plot(linewidth=2, ax=ax, c='r')
+
+    # for i in arrows:
+    #     color = levels[i]
+    #     for val in arrows[i]:
+    #         zorder = 30
+    #         if i == mod_key:
+    #             zorder = 35
+    #         arr_width = 1e-6
+    #         ax.arrow(val[0], val[1], val[2], val[3],
+    #                  width=arr_width,
+    #                  head_width=10 * arr_width,
+    #                  head_length = 15000 * arr_width,
+    #                  length_includes_head=True,
+    #                  shape='right',
+    #                  fc=color,
+    #                  ec=color,
+    #                  zorder=zorder,
+    #                  )
+    ax.set_ylabel('Rank Score', fontsize=20)
+    ax.set_xlabel('Time', fontsize=20)
+    ax.set_ylim(-.05, 1.05)
+    return fig, ax
+
+def fix_and_plot_arrows_color(score, collapse, mod_key):
+    # get rankings
+    ranking = calculate_ranking(score, collapse)
+    rank_change = ranking != ranking.shift(1)
+
+    ranking = calculate_ranking(score, collapse)
+
+    arrows = {}
+    last_idx = None
+    for idx, row in rank_change.iterrows():
+        if row.any():
+            for c in row[row].index:
+                if last_idx is not None:
+                    if c in arrows:
+                        lid = mdates.date2num(last_idx)
+                        diff = mdates.date2num(idx) - lid
+                        arrows[c].append((lid, ranking.loc[last_idx,c], diff, ranking.loc[idx,c] - ranking.loc[last_idx, c]))
+                    else:
+                        lid = mdates.date2num(last_idx)
+                        diff = mdates.date2num(idx)
+                        arrows[c] = [(lid, ranking.loc[last_idx,c], diff, ranking.loc[idx,c])]
+        last_idx = idx
+    levels = {}
+
+    cmap = colormaps.get_cmap('winter')
+    for num, val in enumerate(ranking.columns):
+        levels[val] = float(num) / len(ranking.columns)
+    levels = {k: cmap(v) for k, v in levels.iteritems()}
+    levels[mod_key] = 'red'
+
+    ranking[rank_change] = np.NaN
+    # get the location of all zeros and replace them with NaN
+    zero_row = (ranking == 0).any(axis=1)
+    zero_series = zero_row.apply(lambda x: 0 if x else np.NaN)
+    if mod_key in ranking.columns:
+        zero_mod = ranking[ranking[mod_key] == 0][mod_key]
+    else:
+        print "{:s} not in ranking ranks".format(mod_key)
+        zero_mod = None
+    ranking[ranking == 0] = np.NaN
+    fig, ax = plt.subplots()
+    for col in ranking.columns:
+        if col == mod_key:
+            pass
+        else:
+            ranking[col].plot(ax=ax, color=levels[col],linewidth=2)
+    zero_series.plot(linewidth=2, ax=ax, c='black',zorder=100)
+    if zero_mod is not None:
+        zero_mod.plot(linewidth=2, ax=ax, c='r', zorder=100)
+    if mod_key in ranking.columns:
+        ranking[mod_key].plot(linewidth=2, ax=ax, c='r')
+
+    for i in arrows:
+        color = levels[i]
+        for val in arrows[i]:
+            zorder = 30
+            if i == mod_key:
+                zorder = 35
+            arr_width = 1e-6
+            ax.arrow(val[0], val[1], val[2], val[3],
+                     width=arr_width,
+                     head_width=10 * arr_width,
+                     head_length = 15000 * arr_width,
+                     length_includes_head=True,
+                     shape='right',
+                     fc=color,
+                     ec=color,
+                     zorder=zorder,
+                     )
+    ax.set_ylabel('Rank Score', fontsize=20)
+    ax.set_xlabel('Time', fontsize=20)
+    ax.set_ylim(-.05, 1.05)
+    return fig, ax
