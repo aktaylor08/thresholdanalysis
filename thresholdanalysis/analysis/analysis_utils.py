@@ -493,12 +493,11 @@ def calculate_ranking(score_df, zero_bad=False):
         rc += 1
     return pd.DataFrame(data=store, index=idxes, columns=cols)
 
-def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=5):
+def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=2):
     # get rankings
     ranking = calculate_ranking(score, collapse)
-    print ranking
-
     # Gather zero
+
     zero_row = (ranking == 0).any(axis=1)
     zero_series = zero_row.apply(lambda x: 0 if x else np.NaN)
 
@@ -524,13 +523,14 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=5):
     ranks = []
     li = 0
     for i in indexes:
-        print '\n'
-        print li, i
-        slice = ranking[li:i+1]
+        slice = ranking.iloc[li:i+1, :].copy()
         ranks.append(slice)
         li = i
-    print li
     ranks.append(ranking[li:])
+    for i in ranks:
+        # get errors here...
+        i.iloc[-1,:] = i.iloc[0, :]
+
 
     # Create color maps
     levels = {}
@@ -554,15 +554,15 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=5):
         else:
             for rv in ranks:
                 if len(rv) > 0:
-                    rv[col].plot(ax=ax, color=levels[col],linewidth=width)
+                    rv[col].plot(ax=ax, color=levels[col],linewidth=width, aa=False)
     # plot zeros
-    zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width)
+    zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width, aa=False)
     if zero_mod is not None:
-        zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width)
+        zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width, aa=False)
     if mod_key in ranking.columns:
         for rv in ranks:
             if len(rv) > 0:
-                rv[mod_key].plot(ax=ax, c='r', linewidth=width)
+                rv[mod_key].plot(ax=ax, c='r', linewidth=width, aa=False)
 
     ax.set_ylabel('Rank Score', fontsize=20)
     ax.set_xlabel('Time', fontsize=20)
@@ -573,8 +573,12 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=5):
 def main():
     s1 = [9999] * 13
     s2 = [9999, 9999, .1, .1, .1, .2, .3 , .3 ,.3 ,.3 ,.3 ,.3, .3]
-    s3 = [9999, 9999, .5, .5, .5, .5, .5 , .5 ,.5 ,.5 ,.5 , .29, .29]
+    s3 = [.5, .5, .5, .5, .5, .5, .5 , .5 ,.5 ,.5 ,.5 , .29, .29]
     s4 = [9999, 9999, .2, .2, .2, .2, .2 , .1 ,.1 ,.1 ,.6 ,.7, .7]
+    s1 = s1 * 10
+    s2 = s2 * 10
+    s3 = s3 * 10
+    s4 = s4 * 10
     data = {'s1' : s1, 's2' : s2, 's3' : s3, 's4' : s4}
 
     idx = [x for x in range(len(s1))]
