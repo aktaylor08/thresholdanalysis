@@ -493,9 +493,10 @@ def calculate_ranking(score_df, zero_bad=False):
         rc += 1
     return pd.DataFrame(data=store, index=idxes, columns=cols)
 
-def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=3):
+def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=5):
     # get rankings
     ranking = calculate_ranking(score, collapse)
+    print ranking
 
     # Gather zero
     zero_row = (ranking == 0).any(axis=1)
@@ -509,27 +510,31 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=3):
         print "{:s} not in ranking ranks".format(mod_key)
         zero_mod = None
 
-    rank_change = ranking != ranking.shift(1)
     have_vals = ranking != 0
     have_vals = have_vals.any()[have_vals.any()]
     have_vals = have_vals.index
     # get rid of crap that doesn't exist
     ranking = ranking[have_vals]
 
-
+    rank_change = ranking != ranking.shift(1)
     ac = rank_change.any(axis=1)
     rc_index = ac[ac]
+    rc_index = rc_index[1:]
     indexes = [ranking.index.get_loc(x) for x in rc_index.index]
     ranks = []
     li = 0
     for i in indexes:
-        ranks.append(ranking[li:i])
+        print '\n'
+        print li, i
+        slice = ranking[li:i+1]
+        ranks.append(slice)
         li = i
+    print li
     ranks.append(ranking[li:])
 
     # Create color maps
     levels = {}
-    cmap = colormaps.get_cmap('winter')
+    cmap = colormaps.get_cmap('terrain')
     for num, val in enumerate(have_vals):
         levels[val] = float(num) / len(have_vals)
     levels = {k: cmap(v) for k, v in levels.iteritems()}
@@ -564,74 +569,20 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=3):
     ax.set_ylim(-.05, 1.05)
     return fig, ax
 
-def fix_and_plot_arrows_color(score, collapse, mod_key):
-    # get rankings
-    ranking = calculate_ranking(score, collapse)
-    rank_change = ranking != ranking.shift(1)
 
-    arrows = {}
-    last_idx = None
-    for idx, row in rank_change.iterrows():
-        if row.any():
-            for c in row[row].index:
-                if last_idx is not None:
-                    if c in arrows:
-                        lid = mdates.date2num(last_idx)
-                        diff = mdates.date2num(idx) - lid
-                        arrows[c].append((lid, ranking.loc[last_idx,c], diff, ranking.loc[idx,c] - ranking.loc[last_idx, c]))
-                    else:
-                        lid = mdates.date2num(last_idx)
-                        diff = mdates.date2num(idx)
-                        arrows[c] = [(lid, ranking.loc[last_idx,c], diff, ranking.loc[idx,c])]
-        last_idx = idx
-    levels = {}
+def main():
+    s1 = [9999] * 13
+    s2 = [9999, 9999, .1, .1, .1, .2, .3 , .3 ,.3 ,.3 ,.3 ,.3, .3]
+    s3 = [9999, 9999, .5, .5, .5, .5, .5 , .5 ,.5 ,.5 ,.5 , .29, .29]
+    s4 = [9999, 9999, .2, .2, .2, .2, .2 , .1 ,.1 ,.1 ,.6 ,.7, .7]
+    data = {'s1' : s1, 's2' : s2, 's3' : s3, 's4' : s4}
 
-    cmap = colormaps.get_cmap('winter')
-    for num, val in enumerate(ranking.columns):
-        levels[val] = float(num) / len(ranking.columns)
-    levels = {k: cmap(v) for k, v in levels.iteritems()}
-    levels[mod_key] = 'red'
+    idx = [x for x in range(len(s1))]
+    df = pd.DataFrame(data=data, index=idx)
+    print df
+    fig, ax = fix_and_plot_color(df, True, 's2')
+    plt.show()
 
-    ranking[rank_change] = np.NaN
-    # get the location of all zeros and replace them with NaN
-    zero_row = (ranking == 0).any(axis=1)
-    zero_series = zero_row.apply(lambda x: 0 if x else np.NaN)
-    if mod_key in ranking.columns:
-        zero_mod = ranking[ranking[mod_key] == 0][mod_key]
-    else:
-        print "{:s} not in ranking ranks".format(mod_key)
-        zero_mod = None
-    ranking[ranking == 0] = np.NaN
-    fig, ax = plt.subplots()
-    for col in ranking.columns:
-        if col == mod_key:
-            pass
-        else:
-            ranking[col].plot(ax=ax, color=levels[col],linewidth=2)
-    zero_series.plot(linewidth=2, ax=ax, c='black',zorder=100)
-    if zero_mod is not None:
-        zero_mod.plot(linewidth=2, ax=ax, c='r', zorder=100)
-    if mod_key in ranking.columns:
-        ranking[mod_key].plot(linewidth=2, ax=ax, c='r')
 
-    for i in arrows:
-        color = levels[i]
-        for val in arrows[i]:
-            zorder = 30
-            if i == mod_key:
-                zorder = 35
-            arr_width = 1e-6
-            ax.arrow(val[0], val[1], val[2], val[3],
-                     width=arr_width,
-                     head_width=10 * arr_width,
-                     head_length = 15000 * arr_width,
-                     length_includes_head=True,
-                     shape='right',
-                     fc=color,
-                     ec=color,
-                     zorder=zorder,
-                     )
-    ax.set_ylabel('Rank Score', fontsize=20)
-    ax.set_xlabel('Time', fontsize=20)
-    ax.set_ylim(-.05, 1.05)
-    return fig, ax
+if __name__ == '__main__':
+    main()
