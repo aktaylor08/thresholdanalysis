@@ -143,7 +143,7 @@ class ThresholdNode(object):
             self.last_total_flop[thresh_key] = None
 
         self.last_total_results[thresh_key] = result
-        self.add_to_data('last_total_flop', time, None)
+        self.add_to_data('last_total_flop', time, self.last_total_flop[thresh_key])
 
         # local results
         local_flop = False

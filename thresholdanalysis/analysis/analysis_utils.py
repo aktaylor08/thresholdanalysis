@@ -46,23 +46,19 @@ def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0,
     # count the flops in the past n seconds.
     flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, None)
     scores = {}
-    error_count = 0
-    total_count = 0
 
     # now calculate the scores.
     for key, data in thresh_df.groupby('key'):
         if key not in param_keys:
+            print key
             continue
         try:
-            total_count += 1
             index = data.index.asof(time)
             lf = data.loc[index, 'last_cmp_flop']
             tdelta = (time - lf).total_seconds()
         except TypeError:
-            error_count += 1
             tdelta = 9999.9
         except ValueError:
-            error_count += 1
             tdelta = 9999.9
 
         s1 = np.power(tdelta, alpha)
@@ -70,6 +66,7 @@ def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0,
         s2 = np.power(fc, beta)
         s3 = np.power(static_info[key]['distance'], gamma)
         scores[key] = s1 * s2 * s3
+    print '\n'
     return scores
 
 
@@ -446,6 +443,7 @@ def get_times(df, start_str):
 def produce_score_array_sampled(params_df, info, ):
     a = params_df.index
     time_index = pd.date_range(a[0], a[-1], freq='100L')
+
     adv_data_dict = defaultdict(list)
     no_adv_data_dict = defaultdict(list)
     #enumerate through all of the indexs and get the scores.
