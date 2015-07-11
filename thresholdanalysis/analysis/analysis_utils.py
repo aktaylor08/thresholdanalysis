@@ -52,21 +52,22 @@ def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0,
         if key not in param_keys:
             print key
             continue
-        try:
-            index = data.index.asof(time)
+        index = data.index.asof(time)
+        if isinstance(index, float) and np.isnan(index):
+            tdelta = 9999.9
+        else:
             lf = data.loc[index, 'last_cmp_flop']
-            tdelta = (time - lf).total_seconds()
-        except TypeError:
-            tdelta = 9999.9
-        except ValueError:
-            tdelta = 9999.9
-
+            if isinstance(lf, float) and np.isnan(lf):
+                tdelta = 9999.9
+            else:
+                if isinstance(lf, str):
+                    lf = pd.Timestamp(lf)
+                tdelta = (time - lf).total_seconds()
         s1 = np.power(tdelta, alpha)
         fc = flop_counts[key] + 1
         s2 = np.power(fc, beta)
         s3 = np.power(static_info[key]['distance'], gamma)
         scores[key] = s1 * s2 * s3
-    print '\n'
     return scores
 
 
@@ -491,7 +492,7 @@ def calculate_ranking(score_df, zero_bad=False):
         rc += 1
     return pd.DataFrame(data=store, index=idxes, columns=cols)
 
-def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=2):
+def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4):
     # get rankings
     ranking = calculate_ranking(score, collapse)
     # Gather zero
@@ -532,7 +533,7 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=2):
 
     # Create color maps
     levels = {}
-    cmap = colormaps.get_cmap('terrain')
+    cmap = colormaps.get_cmap('ocean')
     for num, val in enumerate(have_vals):
         levels[val] = float(num) / len(have_vals)
     levels = {k: cmap(v) for k, v in levels.iteritems()}
@@ -552,39 +553,81 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=2):
         else:
             for rv in ranks:
                 if len(rv) > 0:
-                    rv[col].plot(ax=ax, color=levels[col],linewidth=width, aa=False)
+                    rv[col].plot(ax=ax, color=levels[col],linewidth=width, )
     # plot zeros
-    zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width, aa=False)
+    zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width,)
     if zero_mod is not None:
-        zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width, aa=False)
+        zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width, )
     if mod_key in ranking.columns:
         for rv in ranks:
             if len(rv) > 0:
-                rv[mod_key].plot(ax=ax, c='r', linewidth=width, aa=False)
+                rv[mod_key].plot(ax=ax, c='r', linewidth=width, )
 
     ax.set_ylabel('Rank Score', fontsize=20)
     ax.set_xlabel('Time', fontsize=20)
     ax.set_ylim(-.05, 1.05)
     return fig, ax
 
+def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None):
+
+        fig, ax = fix_and_plot_color(data, True, param, fig=fig, ax=ax)
+        add_user_marks(advpoints, nopoints, fig=fig, ax=ax)
+
+        return fig, ax
+
+def add_user_marks(advpoints, nopoints, fig=None, ax=None, vals=[.4, .6]):
+    if ax is None:
+        if fig is None:
+            ax, fig = plt.subplots(1,1)
+        else:
+            ax = fig.add_subplot()
+    nopoints = sorted(nopoints)
+    advpoints = sorted(advpoints)
+    nopoints = zip(nopoints, vals * (len(nopoints) /2))
+    advpoints = zip(advpoints, vals * (len(advpoints) /2))
+    if len(nopoints) > 0:
+        for x in nopoints:
+            ax.axvline(x[0], c='g', zorder=0)
+        ax.scatter(zip(*nopoints)[0], zip(*nopoints)[1], marker='x', c='g', s=320, zorder=0)
+
+    if len(advpoints) > 0:
+        for x in advpoints:
+            ax.axvline(x[0], c='b', zorder=0)
+        ax.scatter(zip(*advpoints)[0], zip(*advpoints)[1], marker='x', c='b', s=320, zorder=0)
+
 
 def main():
     s1 = [9999] * 13
-    s2 = [9999, 9999, .1, .1, .1, .2, .3 , .3 ,.3 ,.3 ,.3 ,.3, .3]
+    s2 = [.8, .9, .1, .1, .1, .2, .3 , .3 ,.3 ,.3 ,.3 ,.3, .3]
     s3 = [.5, .5, .5, .5, .5, .5, .5 , .5 ,.5 ,.5 ,.5 , .29, .29]
-    s4 = [9999, 9999, .2, .2, .2, .2, .2 , .1 ,.1 ,.1 ,.6 ,.7, .7]
+    s4 = [.7 ,.2, .2, .2, .2, .2, .2 , .1 ,.1 ,.1 ,.6 ,.7, .7]
     s1 = s1 * 10
     s2 = s2 * 10
     s3 = s3 * 10
     s4 = s4 * 10
     data = {'s1' : s1, 's2' : s2, 's3' : s3, 's4' : s4}
+    marks = [20, 30]
+    no_makrs = [45, 60]
 
     idx = [x for x in range(len(s1))]
     df = pd.DataFrame(data=data, index=idx)
     print df
-    fig, ax = fix_and_plot_color(df, True, 's2')
+    fig, ax = create_ranking_graph(df, 's2', marks, no_makrs)
     plt.show()
 
 
 if __name__ == '__main__':
     main()
+
+
+def get_partial_match(key, dicton):
+    for k,v in dicton.iteritems():
+        if key in k:
+            print 'matches', k
+            return v
+
+
+def key_from_file(file, diction):
+    for k, v in diction.iteritems():
+        if k in file:
+            return v

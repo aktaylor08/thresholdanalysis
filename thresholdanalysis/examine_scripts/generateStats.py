@@ -1,13 +1,17 @@
 from collections import defaultdict
+import sys
+import glob
+import os
+import argparse
+
 import pandas as pd
 import matplotlib.pyplot as plt
-import sys
-from thresholdanalysis.analysis import analysis_utils
-import glob
 import yaml
-import os
 
-import argparse
+from thresholdanalysis.analysis import analysis_utils
+from thresholdanalysis.analysis.analysis_utils import get_partial_match
+import thresholdanalysis.config as config
+
 
 def get_name(f, mapping):
     for k in mapping.iterkeys():
@@ -156,7 +160,7 @@ def main():
         stats_df.loc['\\textbf{sum}', col] = sums[col]
     # print stats_df
 
-    analysis_utils.to_latex(stats_df, '/Users/ataylor/Research/thesis/data/' + output + '_gen_results.csv')
+    analysis_utils.to_latex(stats_df, config.TABLE_DIR + output + '_gen_results.csv')
 
     print "Frequencies: "
     print stats_df_clean.Frequency
@@ -166,7 +170,7 @@ def main():
     x = [x-.5 for x in range(len(stats_df_clean.Frequency))]
     y = stats_df_clean.Frequency.index.values
     plt.xticks(x, y, rotation=60)
-    plt.savefig("/Users/ataylor/Research/thesis/myFigures/" + output + '_freq_graph.png')
+    plt.savefig(config.FIGURE_DIR + output + '_freq_graph.png')
     plt.cla()
 
     rtp = stats_df_clean['Runtime \%'].copy()
@@ -181,7 +185,7 @@ def main():
     tick = [x + .5 for x in tick]
     ax.set_xticks(tick)
     plt.tight_layout()
-    plt.savefig("/Users/ataylor/Research/thesis/myFigures/" + output + '_runtime_percentage.png')
+    plt.savefig(config.FIGURE_DIR + output + '_runtime_percentage.png')
     plt.cla()
 
     # rtp = stats_df_clean['True \%'].copy()
@@ -226,7 +230,7 @@ def main():
         print 'Advance Marks', len(act)
     mark_df = pd.DataFrame(data=data, index=index)
     mark_df = mark_df.sort_index()
-    analysis_utils.to_latex(mark_df, "/Users/ataylor/Research/thesis/data/" + output + '_marks.csv')
+    analysis_utils.to_latex(mark_df, config.TABLE_DIR + output + '_marks.csv')
 
 
     # Make some wicked graphs.
@@ -247,7 +251,6 @@ def main():
         no_adv_scores[f] = pd.read_csv(f,parse_dates=True, index_col=0)
         print f
 
-
     # now build the images.
     for x in mapping:
         print x
@@ -258,24 +261,11 @@ def main():
         advpoints = get_partial_match(x, act_marks)
         nopoints = get_partial_match(x, no_act_marks)
         print advpoints, nopoints
+        fig, ax = analysis_utils.create_ranking_graph(nadvs, mapping[x]['key'], advpoints, nopoints)
+        fig.savefig(config.FIGURE_DIR + output + '_' +  mapping[x]['name'].replace(' ','_' ) + 'no_adv_rank_graph.png')
 
-        vals = [.4, .6]
-        nopoints = zip(nopoints, vals * (len(nopoints) /2))
-        advpoints = zip(advpoints, vals * (len(advpoints) /2))
-        print mapping[x]['key']
-
-        fig, ax = analysis_utils.fix_and_plot_color(nadvs, True, mapping[x]['key'])
-        fig.savefig("/Users/ataylor/Research/thesis/myFigures/" + mapping[x]['name'].replace(' ','_' ) + 'no_adv_rank_graph.png')
-
-        fig, ax = analysis_utils.fix_and_plot_color(advs, True, mapping[x]['key'])
-        fig.savefig("/Users/ataylor/Research/thesis/myFigures/" + mapping[x]['name'].replace(' ', '_') + 'adv_rank_graph.png')
-
-
-def get_partial_match(key, dicton):
-    for k,v in dicton.iteritems():
-        if key in k:
-            print 'matches', k
-            return v
+        fig, ax = analysis_utils.create_ranking_graph(advs, mapping[x]['key'], advpoints, nopoints)
+        fig.savefig(config.FIGURE_DIR +output + '_' +  mapping[x]['name'].replace(' ', '_') + 'adv_rank_graph.png')
 
 
 if __name__ == '__main__':

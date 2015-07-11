@@ -43,12 +43,17 @@ def main():
         df['file'] = df['key'].apply(lambda x: info[x]['file'])
         df['lineno'] = df['key'].apply(lambda x: info[x]['lineno'])
 
-    for i in all_dfs:
+    print '\n'
+    keys = sorted(all_dfs.keys())
+    for i in keys:
         print i
         for k, v in all_dfs[i].groupby('source'):
             if k == 'altitude_abort_level' or k == 'xy_error_allowed':
                 print '\t', k,  v['thresh'][1]
-                print '\t', v['key'][1]
+                print '\t\t', v['key'][1]
+
+        print '\n'
+        print '\n'
 
 if __name__ == '__main__':
     main()
