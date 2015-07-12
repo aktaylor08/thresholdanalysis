@@ -3,6 +3,7 @@ import datetime
 import glob
 import json
 from sys import stdout
+from IPython import embed
 import numpy as np
 import pandas as pd
 import csv
@@ -41,7 +42,7 @@ def get_flops(thresh_df, time, static_info, flop_window=5.0, ):
     return flop_counts, maxf, minf
 
 
-def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=0.6, gamma=0.0):
+def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0, beta=1.0, gamma=0.0):
     param_keys = get_param_keys(static_info)
     # count the flops in the past n seconds.
     flop_counts, minf, maxf = get_flops(thresh_df, time, static_info, None)
@@ -474,7 +475,6 @@ def calculate_ranking(score_df, zero_bad=False):
     col_map = {v: k for k,v in enumerate(cols)}
     idxes = []
     store = np.zeros((len(score_df), len(cols)))
-    print store.shape
     rc = 0
     for idx, row in score_df.iterrows():
         idxes.append(idx)
@@ -492,10 +492,12 @@ def calculate_ranking(score_df, zero_bad=False):
         rc += 1
     return pd.DataFrame(data=store, index=idxes, columns=cols)
 
-def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4):
+def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, start_time=None):
     # get rankings
     ranking = calculate_ranking(score, collapse)
+    val = index_to_float(ranking.index, start_time)
     # Gather zero
+    time_index = pd.Series(data=val, index=ranking.index)
 
     zero_row = (ranking == 0).any(axis=1)
     zero_series = zero_row.apply(lambda x: 0 if x else np.NaN)
@@ -553,24 +555,28 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4):
         else:
             for rv in ranks:
                 if len(rv) > 0:
-                    rv[col].plot(ax=ax, color=levels[col],linewidth=width, )
+                    ax.plot(time_index[rv[col].index], rv[col].values, color=levels[col], linewidth=width)
+                    # rv[col].plot(ax=ax, color=levels[col],linewidth=width, )
     # plot zeros
-    zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width,)
+    ax.plot(time_index[zero_series.index], zero_series.values, c='black', zorder=100, linewidth=width)
+    # zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width,)
     if zero_mod is not None:
-        zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width, )
+        ax.plot(time_index[zero_mod.index],zero_mod.values, c='r', zorder=100, linewidth=width)
+        # zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width, )
     if mod_key in ranking.columns:
         for rv in ranks:
             if len(rv) > 0:
-                rv[mod_key].plot(ax=ax, c='r', linewidth=width, )
-
+                ax.plot(time_index[rv[mod_key].index], rv[mod_key].values, c='r', linewidth=width)
+                # rv[mod_key].plot(ax=ax, c='r', linewidth=width, )
     ax.set_ylabel('Rank Score', fontsize=20)
     ax.set_xlabel('Time', fontsize=20)
     ax.set_ylim(-.05, 1.05)
+    ax.set_xlim(left=time_index.values[0], right=time_index.values[-1])
     return fig, ax
 
-def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None):
+def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None, start_time=None):
 
-        fig, ax = fix_and_plot_color(data, True, param, fig=fig, ax=ax)
+        fig, ax = fix_and_plot_color(data, True, param, fig=fig, ax=ax, start_time=start_time)
         add_user_marks(advpoints, nopoints, fig=fig, ax=ax)
 
         return fig, ax
@@ -616,8 +622,6 @@ def main():
     plt.show()
 
 
-if __name__ == '__main__':
-    main()
 
 
 def get_partial_match(key, dicton):
@@ -631,3 +635,25 @@ def key_from_file(file, diction):
     for k, v in diction.iteritems():
         if k in file:
             return v
+
+
+def index_to_float(idx, first):
+    try:
+        idx = pd.to_datetime(idx)
+        dates = idx.to_series()
+        idx = dates.apply(lambda x: (x - first).total_seconds())
+        vals = idx.values
+        return vals
+    except Exception as e:
+        print e
+        return idx
+
+
+def time_to_float(actions, first):
+    vals = []
+    for i in actions:
+        vals.append((i - first).total_seconds())
+    return vals
+
+if __name__ == '__main__':
+    main()

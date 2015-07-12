@@ -188,18 +188,6 @@ def main():
     plt.savefig(config.FIGURE_DIR + output + '_runtime_percentage.png')
     plt.cla()
 
-    # rtp = stats_df_clean['True \%'].copy()
-    # rtp.sort()
-    # ax = rtp.plot(kind='bar', y='True %', figsize=(11, 8.5), fontsize=10)
-    # ax = ax.get_axes()
-    # ax.yaxis.set_label('True \%')
-    # plt.show()
-
-    # x = stats_df_clean['Flops']
-    # y = stats_df_clean['Runtime \%']
-    #
-    # plt.scatter(x, stats_df_clean.Frequency)
-    # plt.show()
 
     # Now do user stuff...
     mark_frames = {}
@@ -207,8 +195,12 @@ def main():
     index = []
     act_marks = {}
     no_act_marks = {}
+    starts = {}
 
     for f in glob.glob(csv_dir + "*.csv"):
+        df = pd.read_csv(f, parse_dates=True, index_col=0)
+        start = pd.to_datetime(df.index[0])
+        starts[f] = start
         actions, no_actions = analysis_utils.get_marks(f, 4)
         act = []
         noact = []
@@ -221,8 +213,8 @@ def main():
             if isinstance(k,int):
                 for y in x:
                     noact.append(y)
-        act_marks[f] = act
-        no_act_marks[f] = noact
+        act_marks[f] = analysis_utils.time_to_float(act, start)
+        no_act_marks[f] = analysis_utils.time_to_float(noact, start)
         data['Advance Marks'].append(len(act))
         data['No Advance Marks'].append(len(noact))
         index.append(get_name(f, mapping))
@@ -253,18 +245,19 @@ def main():
 
     # now build the images.
     for x in mapping:
-        print x
         advs = get_partial_match(x, adv_scores)
         nadvs = get_partial_match(x, no_adv_scores)
-        print advs.columns
+        start = get_partial_match(x, starts)
+        print start
 
         advpoints = get_partial_match(x, act_marks)
         nopoints = get_partial_match(x, no_act_marks)
-        print advpoints, nopoints
-        fig, ax = analysis_utils.create_ranking_graph(nadvs, mapping[x]['key'], advpoints, nopoints)
+        # nadvs.index = analysis_utils.index_to_float(nadvs.index, start)
+        # advs.index = analysis_utils.index_to_float(advs.index, start)
+        fig, ax = analysis_utils.create_ranking_graph(nadvs, mapping[x]['key'], advpoints, nopoints, start_time=start)
         fig.savefig(config.FIGURE_DIR + output + '_' +  mapping[x]['name'].replace(' ','_' ) + 'no_adv_rank_graph.png')
 
-        fig, ax = analysis_utils.create_ranking_graph(advs, mapping[x]['key'], advpoints, nopoints)
+        fig, ax = analysis_utils.create_ranking_graph(advs, mapping[x]['key'], advpoints, nopoints, start_time=start)
         fig.savefig(config.FIGURE_DIR +output + '_' +  mapping[x]['name'].replace(' ', '_') + 'adv_rank_graph.png')
 
 
