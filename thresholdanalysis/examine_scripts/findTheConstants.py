@@ -46,14 +46,35 @@ def main():
     print '\n'
     keys = sorted(all_dfs.keys())
     for i in keys:
-        print i
         for k, v in all_dfs[i].groupby('source'):
-            if k == 'altitude_abort_level' or k == 'xy_error_allowed':
-                print '\t', k,  v['thresh'][1]
-                print '\t\t', v['key'].unique()
-
-        print '\n'
-        print '\n'
+            otras = defaultdict(list)
+            other_files = defaultdict(list)
+            things = None
+            myval = 0
+            for j in keys:
+                for ok, ov in all_dfs[j].groupby('source'):
+                    if ok == k:
+                        if ov['thresh'][0] != v['thresh'][0]:
+                            otras[k].append(ov['thresh'][0])
+                            other_files[k].append(j)
+                            myval = v['thresh'][0]
+                            things = v['key'].unique()
+                            # print i
+                            # print '\t', k,  v['thresh'][0]
+                            # print j
+                            # print '\t', ok,  ov['thresh'][0]
+                            # print '\t\t', v['key'].unique()
+                            # print '=========================='
+                            # print '\n'
+                            # print '\n'
+                            # break
+            if len(otras) > 0:
+                print i
+                print myval
+                print otras
+                print other_files
+                print things
+                print '\n'
 
 if __name__ == '__main__':
     main()

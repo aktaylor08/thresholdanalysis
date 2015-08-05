@@ -11,11 +11,7 @@ from thresholdanalysis.analysis.analysis_utils import index_to_float, time_to_fl
 
 
 def main():
-    parser = argparse.ArgumentParser('Making water graphs')
-    parser.add_argument('directory')
-    parser.add_argument('--output-prefix')
-    args = parser.parse_args()
-    directory = args.directory
+    directory = '/Users/ataylor/Research/thesis_data/nav_experiment/'
     if directory[-1] != '/':
         directory += '/'
     thresh_dir = directory + 'thresh_dfs/' #args.thresh_dir
@@ -24,11 +20,7 @@ def main():
     mapping = {}
     with open(directory + 'mapping.yml') as f:
         mapping = yaml.safe_load(f)
-    output = args.output_prefix
-    if output is not None:
-        print "Outputting with prefix", output
-    else:
-        output = 'water_'
+    output = 'navigation'
     if thresh_dir[-1] != '/':
         thresh_dir += '/'
     if info_dir[-1] != '/':
@@ -53,25 +45,28 @@ def main():
                     noact.append(y)
         act = time_to_float(act, first)
         noact = time_to_float(noact, first)
+        print f
+        print len(act)
+        print len(noact)
 
 
         # Graph!
         fig, axes = plt.subplots(2, 1, sharex=True)
-        x = df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_x'].dropna()
-        z = df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_z'].dropna()
+        x = df['amcl_pose__pose_pose_position_x'].dropna()
+        z = df['amcl_pose__pose_pose_position_y'].dropna()
         idx = index_to_float(x.index, first)
         axes[0].plot(idx,  x, linewidth=3)
         axes[0].set_ylabel("X Position (m)", fontsize=15)
         axes[1].plot(idx, z, linewidth=3)
         axes[1].set_xlabel("Elapsed Time (s)", fontsize=15)
-        axes[1].set_ylabel("Height (m)", fontsize=15)
+        axes[1].set_ylabel("Y Position (m)", fontsize=15)
         axes[0].set_xlim(left=0, right=idx[-1])
         analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[0], vals=[1.0, 1.1])
         analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[1])
 
         a = analysis_utils.key_from_file(f,mapping)
         name = a['name'].replace(' ', '_')
-        plt.savefig(config.FIGURE_DIR + 'water_' + name + ".png")
+        plt.savefig(config.FIGURE_DIR + output + '_' + name + ".png")
 
 
 if __name__ == '__main__':

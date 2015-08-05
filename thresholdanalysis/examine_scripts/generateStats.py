@@ -18,6 +18,11 @@ def get_name(f, mapping):
         if k in f:
             return mapping[k]['name']
 
+def get_name_text(f, mapping):
+    for k in mapping.iterkeys():
+        if k in f:
+            return mapping[k]['name_text']
+
 
 def main():
     parser = argparse.ArgumentParser('Create general statistics here')
@@ -217,12 +222,29 @@ def main():
         no_act_marks[f] = analysis_utils.time_to_float(noact, start)
         data['Advance Marks'].append(len(act))
         data['No Advance Marks'].append(len(noact))
-        index.append(get_name(f, mapping))
+        index.append(get_name_text(f, mapping))
         print 'No advance marks',  len(noact)
         print 'Advance Marks', len(act)
     mark_df = pd.DataFrame(data=data, index=index)
     mark_df = mark_df.sort_index()
-    analysis_utils.to_latex(mark_df, config.TABLE_DIR + output + '_marks.csv')
+
+    out_mark = mark_df.copy()
+    out_mark['Total Marks'] = out_mark['Advance Marks'] + out_mark['No Advance Marks']
+    out_mark.columns = ['Type I Marks', 'Type II Marks', 'Total Marks']
+    sums = out_mark.sum()
+    medians = out_mark.median()
+    means = out_mark.mean()
+    stds = out_mark.std()
+    mins = out_mark.min()
+    maxs = out_mark.max()
+    for col in out_mark.columns:
+        out_mark.loc['\\textbf{mean}', col] = means[col]
+        out_mark.loc['\\textbf{median}', col] = medians[col]
+        out_mark.loc['\\textbf{std}', col] = stds[col]
+        out_mark.loc['\\textbf{minimum}', col] = mins[col]
+        out_mark.loc['\\textbf{maximum}', col] = maxs[col]
+        out_mark.loc['\\textbf{sum}', col] = sums[col]
+    analysis_utils.to_latex(out_mark, config.TABLE_DIR + output + '_marks.csv')
 
 
     # Make some wicked graphs.
@@ -243,15 +265,23 @@ def main():
         no_adv_scores[f] = pd.read_csv(f,parse_dates=True, index_col=0)
         print f
 
+
+    type_i_scores = {}
+    type_ii_scores = {}
     # now build the images.
     for x in mapping:
         advs = get_partial_match(x, adv_scores)
         nadvs = get_partial_match(x, no_adv_scores)
         start = get_partial_match(x, starts)
-        print start
-
         advpoints = get_partial_match(x, act_marks)
         nopoints = get_partial_match(x, no_act_marks)
+        for i in advpoints:
+            print i
+
+        for i in nopoints:
+            print i
+
+
         # nadvs.index = analysis_utils.index_to_float(nadvs.index, start)
         # advs.index = analysis_utils.index_to_float(advs.index, start)
         fig, ax = analysis_utils.create_ranking_graph(nadvs, mapping[x]['key'], advpoints, nopoints, start_time=start)
