@@ -24,6 +24,18 @@ def get_name_text(f, mapping):
             return mapping[k]['name_text']
 
 
+def get_scores(t,key, scores):
+    print 'hi there: ', key
+    row = scores.loc[scores.index.asof(t), :]
+    raw = row[key]
+    rank = 0
+    if raw < 9999:
+        sorted_scores = sorted(row.values)
+        rank = 1 - (sorted_scores.index(raw) / float(len(scores)))
+    print raw, rank
+    return raw, rank
+
+
 def main():
     parser = argparse.ArgumentParser('Create general statistics here')
     parser.add_argument('directory')
@@ -42,10 +54,6 @@ def main():
     mapping = {}
     with open(directory + 'mapping.yml') as f:
         mapping = yaml.safe_load(f)
-    print mapping
-    print thresh_dir
-    print csv_dir
-    print info_dir
     output = args.output_prefix
     if output is not None:
         print "Outputting with prefix", output
@@ -195,12 +203,14 @@ def main():
 
 
     # Now do user stuff...
-    mark_frames = {}
     data = defaultdict(list)
     index = []
     act_marks = {}
     no_act_marks = {}
     starts = {}
+
+    act_dt = {}
+    no_act_dt = {}
 
     for f in glob.glob(csv_dir + "*.csv"):
         df = pd.read_csv(f, parse_dates=True, index_col=0)
@@ -218,6 +228,10 @@ def main():
             if isinstance(k,int):
                 for y in x:
                     noact.append(y)
+        # store non translated
+        act_dt[f] = act
+        no_act_dt[f] = noact
+        # Also store translated
         act_marks[f] = analysis_utils.time_to_float(act, start)
         no_act_marks[f] = analysis_utils.time_to_float(noact, start)
         data['Advance Marks'].append(len(act))
@@ -258,28 +272,35 @@ def main():
     adv_scores = {}
     no_adv_scores = {}
     for f in glob.glob(thresh_dir + "/advance/*.csv"):
-        print f
         adv_scores[f] = pd.read_csv(f,parse_dates=True, index_col=0)
 
     for f in glob.glob(thresh_dir + "/no_advance/*.csv"):
         no_adv_scores[f] = pd.read_csv(f,parse_dates=True, index_col=0)
-        print f
 
 
     type_i_scores = {}
     type_ii_scores = {}
     # now build the images.
     for x in mapping:
+        id_for_thresh = mapping[x]['key']
+
         advs = get_partial_match(x, adv_scores)
         nadvs = get_partial_match(x, no_adv_scores)
         start = get_partial_match(x, starts)
+        adv_times = get_partial_match(x, act_dt)
+        no_adv_times = get_partial_match(x, no_act_dt)
         advpoints = get_partial_match(x, act_marks)
         nopoints = get_partial_match(x, no_act_marks)
-        for i in advpoints:
-            print i
+        print adv_times
 
-        for i in nopoints:
-            print i
+        if id_for_thresh is not None:
+            print id_for_thresh
+            for i in adv_times:
+                # Get raw score
+                raw, rank = get_scores(i,id_for_thresh,advs)
+
+            for i in no_adv_times:
+                raw, rank = get_scores(i,id_for_thresh,nadvs)
 
 
         # nadvs.index = analysis_utils.index_to_float(nadvs.index, start)
