@@ -466,6 +466,7 @@ def produce_score_array_sampled(params_df, info, ):
 def get_score_dfs(bag_f, info):
     print 'Getting score arrays for {:s}'.format(bag_f)
     thresh_df = get_df(bag_f, info)
+    print info
     return produce_score_array_sampled(thresh_df, info)
 
 
@@ -492,7 +493,7 @@ def calculate_ranking(score_df, zero_bad=False):
         rc += 1
     return pd.DataFrame(data=store, index=idxes, columns=cols)
 
-def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, start_time=None):
+def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, start_time=None, include_labels=True):
     # get rankings
     ranking = calculate_ranking(score, collapse)
     val = index_to_float(ranking.index, start_time)
@@ -568,13 +569,14 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, sta
             if len(rv) > 0:
                 ax.plot(time_index[rv[mod_key].index], rv[mod_key].values, c='r', linewidth=width)
                 # rv[mod_key].plot(ax=ax, c='r', linewidth=width, )
-    ax.set_ylabel('Rank Score', fontsize=20)
-    ax.set_xlabel('Time', fontsize=20)
+    if include_labels:
+        ax.set_ylabel('Rank Score', fontsize=20)
+        ax.set_xlabel('Time', fontsize=20)
     ax.set_ylim(-.05, 1.05)
     ax.set_xlim(left=time_index.values[0], right=time_index.values[-1])
     return fig, ax
 
-def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None, start_time=None):
+def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None, start_time=None, add_labels=True):
 
         fig, ax = fix_and_plot_color(data, True, param, fig=fig, ax=ax, start_time=start_time)
         add_user_marks(advpoints, nopoints, fig=fig, ax=ax)
@@ -617,7 +619,6 @@ def main():
 
     idx = [x for x in range(len(s1))]
     df = pd.DataFrame(data=data, index=idx)
-    print df
     fig, ax = create_ranking_graph(df, 's2', marks, no_makrs)
     plt.show()
 
@@ -627,7 +628,6 @@ def main():
 def get_partial_match(key, dicton):
     for k,v in dicton.iteritems():
         if key in k:
-            print 'matches', k
             return v
 
 
@@ -652,7 +652,10 @@ def index_to_float(idx, first):
 def time_to_float(actions, first):
     vals = []
     for i in actions:
-        vals.append((i - first).total_seconds())
+        try:
+            vals.append((i - first).total_seconds())
+        except:
+            print 'Error'
     return vals
 
 if __name__ == '__main__':

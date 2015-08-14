@@ -11,7 +11,7 @@ from thresholdanalysis.analysis.analysis_utils import index_to_float, time_to_fl
 
 
 def main():
-    directory = '/Users/ataylor/Research/thesis_data/nav_experiment/'
+    directory = '/Users/ataylor/Reserch/thesis_data/nav_experiment/'
     if directory[-1] != '/':
         directory += '/'
     thresh_dir = directory + 'thresh_dfs/' #args.thresh_dir

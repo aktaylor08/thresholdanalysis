@@ -25,14 +25,12 @@ def get_name_text(f, mapping):
 
 
 def get_scores(t,key, scores):
-    print 'hi there: ', key
     row = scores.loc[scores.index.asof(t), :]
     raw = row[key]
     rank = 0
     if raw < 9999:
         sorted_scores = sorted(row.values)
-        rank = 1 - (sorted_scores.index(raw) / float(len(scores)))
-    print raw, rank
+        rank = 1 - (sorted_scores.index(raw) / float(len(row)))
     return raw, rank
 
 
@@ -69,14 +67,17 @@ def main():
     all_dfs = {}
     for f in glob.glob(thresh_dir + '*.csv'):
         df = analysis_utils.get_df(f, info)
+        print(len(df))
         all_dfs[get_name(f, mapping)] = df
-    print len(all_dfs)
+    print(info)
 
     # add some information
     for f, df in all_dfs.iteritems():
         df['source'] = df['key'].apply(lambda x: info[x]['source'])
         df['file'] = df['key'].apply(lambda x: info[x]['file'])
         df['lineno'] = df['key'].apply(lambda x: info[x]['lineno'])
+        df.to_csv('/Users/ataylor/' + f + 'res.csv')
+
 
     # get the total runtime for experiments
     tt = 0
@@ -92,7 +93,7 @@ def main():
     for df in all_dfs.itervalues():
         big_df = big_df.append(df)
 
-    # how many comparisions where there
+    # how many row comparisions where there
     print "Total Comparisions: ", len(big_df)
 
     # How many per second?
@@ -147,9 +148,8 @@ def main():
     },
                             columns=[
                                 'Locations',
-                                'Comparisions',
+                                'Comparisons',
                                 'Frequency',
-                                # 'Seconds Present',
                                 'Runtime \%',
                                 'Flops',
                                 'True \%',
@@ -171,7 +171,7 @@ def main():
         stats_df.loc['\\textbf{minimum}', col] = mins[col]
         stats_df.loc['\\textbf{maximum}', col] = maxs[col]
         stats_df.loc['\\textbf{sum}', col] = sums[col]
-    # print stats_df
+    print stats_df
 
     analysis_utils.to_latex(stats_df, config.TABLE_DIR + output + '_gen_results.csv')
 
@@ -212,6 +212,8 @@ def main():
     act_dt = {}
     no_act_dt = {}
 
+    other_data = defaultdict(list)
+
     for f in glob.glob(csv_dir + "*.csv"):
         df = pd.read_csv(f, parse_dates=True, index_col=0)
         start = pd.to_datetime(df.index[0])
@@ -224,10 +226,12 @@ def main():
             if isinstance(k, int):
                 for y in x:
                     act.append(y)
+                other_data[str(k) + '_act'].append(len(x))
         for k,x in no_actions.iteritems():
             if isinstance(k,int):
                 for y in x:
                     noact.append(y)
+                other_data[str(k) + 'no_act_'].append(len(x))
         # store non translated
         act_dt[f] = act
         no_act_dt[f] = noact
@@ -241,6 +245,24 @@ def main():
         print 'Advance Marks', len(act)
     mark_df = pd.DataFrame(data=data, index=index)
     mark_df = mark_df.sort_index()
+
+    other_df = pd.DataFrame(data=other_data, index=index)
+    other_df = other_df.sort_index()
+    sums = other_df.sum()
+    medians = other_df.median()
+    means = other_df.mean()
+    stds = other_df.std()
+    mins = other_df.min()
+    maxs = other_df.max()
+    for col in other_df.columns:
+        other_df.loc['\\textbf{mean}', col] = means[col]
+        other_df.loc['\\textbf{median}', col] = medians[col]
+        other_df.loc['\\textbf{std}', col] = stds[col]
+        other_df.loc['\\textbf{minimum}', col] = mins[col]
+        other_df.loc['\\textbf{maximum}', col] = maxs[col]
+        other_df.loc['\\textbf{sum}', col] = sums[col]
+    other_df.to_csv('/Users/ataylor/mark_data.csv')
+
 
     out_mark = mark_df.copy()
     out_mark['Total Marks'] = out_mark['Advance Marks'] + out_mark['No Advance Marks']
@@ -278,8 +300,8 @@ def main():
         no_adv_scores[f] = pd.read_csv(f,parse_dates=True, index_col=0)
 
 
-    type_i_scores = {}
-    type_ii_scores = {}
+    ranking_data = defaultdict(list)
+    score_idx = []
     # now build the images.
     for x in mapping:
         id_for_thresh = mapping[x]['key']
@@ -293,23 +315,64 @@ def main():
         nopoints = get_partial_match(x, no_act_marks)
         print adv_times
 
-        if id_for_thresh is not None:
-            print id_for_thresh
+        if id_for_thresh is not None and id_for_thresh != 'None':
+            t1 = 0
+            t2 = 0
+            count = 0
+            print id_for_thresh, 'Advances'
             for i in adv_times:
                 # Get raw score
                 raw, rank = get_scores(i,id_for_thresh,advs)
+                print raw, rank
+                t1 += raw
+                t2 += rank
+                count += 1
+            if count > 0:
+                count = float(count)
+                ranking_data['Type I Score'].append(t1/count)
+                ranking_data['Type I Rank'].append(t2/count)
+            else:
+                ranking_data['Type I Score'].append(9999)
+                ranking_data['Type I Rank'].append(0)
 
+            t1 = 0
+            t2 = 0
+            count = 0
+            print "No Advances"
             for i in no_adv_times:
                 raw, rank = get_scores(i,id_for_thresh,nadvs)
+                print raw, rank
+                t1 += raw
+                t2 += rank
+                count += 1
+            if count > 0:
+                count = float(count)
+                ranking_data['Type II Score'].append(t1/count)
+                ranking_data['Type II Rank'].append(t2/count)
+            else:
+                ranking_data['Type II Score'].append(9999)
+                ranking_data['Type II Rank'].append(0)
+            score_idx.append(mapping[x]['name_text'])
+
 
 
         # nadvs.index = analysis_utils.index_to_float(nadvs.index, start)
         # advs.index = analysis_utils.index_to_float(advs.index, start)
-        fig, ax = analysis_utils.create_ranking_graph(nadvs, mapping[x]['key'], advpoints, nopoints, start_time=start)
-        fig.savefig(config.FIGURE_DIR + output + '_' +  mapping[x]['name'].replace(' ','_' ) + 'no_adv_rank_graph.png')
+        fig,axes = plt.subplots(2,1, sharex=True)
+        fig, ax1 = analysis_utils.create_ranking_graph(advs, mapping[x]['key'], advpoints, nopoints, fig=fig,
+                                                       ax=axes[0], start_time=start, add_labels=False)
+        fig, ax2 = analysis_utils.create_ranking_graph(nadvs, mapping[x]['key'], advpoints, nopoints, fig=fig,
+                                                       ax=axes[1], start_time=start, add_labels=False)
+        #fig.savefig(config.FIGURE_DIR + output + '_' + mapping[x]['name'].replace(' ','_' ) + 'no_adv_rank_graph.png')
+        ax2.set_xlabel("Elapsed Time (s)")
+        ax1.set_ylabel('Type I Ranking')
+        ax2.set_ylabel('Type II Ranking')
 
-        fig, ax = analysis_utils.create_ranking_graph(advs, mapping[x]['key'], advpoints, nopoints, start_time=start)
-        fig.savefig(config.FIGURE_DIR +output + '_' +  mapping[x]['name'].replace(' ', '_') + 'adv_rank_graph.png')
+        fig.savefig(config.FIGURE_DIR +output + '_' + mapping[x]['name'].replace(' ', '_') + 'rankng_graphs.png')
+
+    rank_df = pd.DataFrame(index=score_idx, data=ranking_data)
+    rank_df.sort_index(inplace=True)
+    analysis_utils.to_latex(rank_df, config.TABLE_DIR + output + '_scores.csv')
 
 
 if __name__ == '__main__':
