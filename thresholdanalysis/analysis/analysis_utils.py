@@ -652,10 +652,7 @@ def index_to_float(idx, first):
 def time_to_float(actions, first):
     vals = []
     for i in actions:
-        try:
-            vals.append((i - first).total_seconds())
-        except:
-            print 'Error'
+        vals.append((i - first).total_seconds())
     return vals
 
 if __name__ == '__main__':
