@@ -9,32 +9,9 @@ import matplotlib.pyplot as plt
 import yaml
 
 from thresholdanalysis.analysis import analysis_utils
-from thresholdanalysis.analysis.analysis_utils import get_partial_match
+from thresholdanalysis.analysis.analysis_utils import get_partial_match, get_threshdf_from_other_file, get_threshold_dfs, \
+    get_name_text
 import thresholdanalysis.config as config
-
-
-def get_name(f, mapping):
-    for k in mapping.iterkeys():
-        if k in f:
-            return mapping[k]['name']
-
-
-def get_name_text(f, mapping):
-    for k in mapping.iterkeys():
-        if k in f:
-            return mapping[k]['name_text']
-
-def get_threshdf_from_other_file(fname, mapping, other_dict):
-    for i in mapping.iterkeys():
-        if i in fname:
-            thing = i
-            print 'match'
-            print i, fname
-            break
-    name = mapping[thing]['name']
-    print name
-    return other_dict[name]
-
 
 
 def get_scores(t, key, scores):
@@ -164,24 +141,6 @@ def plot_frequencies(stats_df_clean, output):
     plt.xticks(x, y, rotation=60)
     plt.savefig(config.FIGURE_DIR + output + '_freq_graph.png')
     plt.cla()
-
-
-def get_threshold_dfs(thresh_dir, info, mapping):
-    threshold_data_dfs = {}
-    for f in glob.glob(thresh_dir + '*.csv'):
-        thresh_df  = analysis_utils.get_df(f, info)
-        threshold_data_dfs[get_name(f, mapping)] = thresh_df
-    # add some information to each of the dataframes
-    for f, df in threshold_data_dfs.iteritems():
-        df['source'] = df['key'].apply(lambda x: info[x]['source'])
-        df['file'] = df['key'].apply(lambda x: info[x]['file'])
-        df['lineno'] = df['key'].apply(lambda x: info[x]['lineno'])
-        df.to_csv('/Users/ataylor/' + f + 'res.csv')
-    # create a big composite data frame
-    big_df = pd.DataFrame()
-    for df in threshold_data_dfs.itervalues():
-        big_df = big_df.append(df)
-    return threshold_data_dfs, big_df
 
 
 def main():
