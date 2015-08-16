@@ -69,13 +69,10 @@ def main():
         axes[0].plot(idx,  x, linewidth=3)
         axes[0].set_ylabel("X Position (m)", fontsize=15)
         axes[1].plot(idx, z, linewidth=3)
-        #axes[1].set_xlabel("Elapsed Time (s)", fontsize=15)
         axes[1].set_ylabel("Y Position (m)", fontsize=15)
         axes[0].set_xlim(left=0, right=idx[-1])
         analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[0], vals=[1.0, 1.1])
         analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[1])
-        axes[0].set_xlim(0, (last-first).total_seconds())
-        axes[1].set_xlim(0, (last -first).total_seconds())
 
         a = analysis_utils.key_from_file(f,mapping)
         name = a['name'].replace(' ', '_')
@@ -88,21 +85,26 @@ def main():
         z = np.append(z, [z[-1]])
         idx = index_to_float(df['tank__left'].dropna().index, first)
         idx = np.append(idx, [(last-first).total_seconds()])
-        axes[2].plot(idx,  x, linewidth=3)
+        axes[2].plot(idx,  x, linewidth=2)
         axes[2].set_ylabel("Left ``Tank'' Command", fontsize=15)
-        axes[3].plot(idx, z, linewidth=3)
+        axes[3].plot(idx, z, linewidth=2)
         axes[3].set_xlabel("Elapsed Time (s)", fontsize=15)
         axes[2].set_ylabel("Right ``Tank'' Command", fontsize=15)
         axes[3].set_xlim(left=0, right=idx[-1])
-        analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[0], vals=[1.0, 1.1])
-        analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[1])
+        analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[2], vals=[1.0, 1.1])
+        analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[3])
 
-        axes[0].set_xlim(0, (last - first).total_seconds())
-        axes[1].set_xlim(0, (last -first).total_seconds())
+        axes[2].set_ylim(-600,600)
+        axes[3].set_ylim(-600,600)
 
         a = analysis_utils.key_from_file(f,mapping)
         name = a['name'].replace(' ', '_')
-        plt.savefig(config.FIGURE_DIR + output + '_' + name + "tank_.png")
+        axes[0].set_xlim(0, (last-first).total_seconds())
+        axes[1].set_xlim(0, (last -first).total_seconds())
+        axes[0].set_xlim(0, (last - first).total_seconds())
+        axes[1].set_xlim(0, (last -first).total_seconds())
+        plt.savefig(config.FIGURE_DIR + output + '_' + name + ".png")
+
 
 
 if __name__ == '__main__':

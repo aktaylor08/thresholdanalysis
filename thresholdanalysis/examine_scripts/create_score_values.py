@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--namespace', )
     parser.add_argument('--namespace_thresh', )
     args = parser.parse_args()
+    no_overwrite = True
 
     direct = args.directory
     if direct[-1] != '/':
@@ -29,14 +30,18 @@ def main():
     for f in glob.glob(direct + '*.csv'):
         fbase, _ = os.path.splitext(f)
         fbase = fbase[fbase.rindex('/') + 1 :]
-        print direct + 'no_advance/' + fbase + 'no_advance_scores.csv'
+        adv_name = direct + 'advance/' + fbase + '_advance_scores.csv'
+        no_adv_name = direct + 'no_advance/' + fbase + '_no_advance_scores.csv'
+        if os.path.exists(adv_name) and os.path.exists(no_adv_name) and no_overwrite:
+            print 'Scores for ', f, 'already exit continuing'
+            continue
         adv, no_adv = analysis_utils.get_score_dfs(f, info)
         if not os.path.exists(direct + 'advance/'):
             os.mkdir(direct + 'advance/')
         if not os.path.exists(direct + 'no_advance/'):
             os.mkdir(direct + 'no_advance/')
-        adv.to_csv(direct + 'advance/' + fbase + '_advance_scores.csv')
-        no_adv.to_csv(direct + 'no_advance/' + fbase + '_no_advance_scores.csv')
+        adv.to_csv(adv_name)
+        no_adv.to_csv(no_adv_name)
 
 
 if __name__ == '__main__':
