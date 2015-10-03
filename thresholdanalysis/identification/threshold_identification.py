@@ -668,10 +668,11 @@ def main():
                     print 'ERROR SOURCE???'
                     print val
                 source = val[0]
-                print source
                 ttype, source = source.split()
                 ttype = ttype.lstrip().strip()[:-1]
                 source = source.lstrip().strip()
+                if ttype == 'Parameter':
+                    print lineno, source
                 local_info = dict(key=key, file=file_name, name=name, lineno=lineno, source_code=source_code,
                                   topic=topic, type=ttype, source=source, distance=distance,
                                   other_thresholds=other_thresholds, relation=relation, param_reads=num_params,
@@ -683,9 +684,9 @@ def main():
         if args.info_out:
             fname = args.info_out
         f = fname + '_thresh_info.json'
-        print f
-        print num_params
-        print num_pubs
+        # print f
+        # print num_params
+        # print num_pubs
         with open(f, 'w') as json_out:
             json.dump(infomation, json_out, indent=1)
 

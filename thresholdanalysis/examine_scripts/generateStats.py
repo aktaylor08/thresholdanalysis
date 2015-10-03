@@ -148,6 +148,8 @@ def main():
     parser = argparse.ArgumentParser('Create general statistics here')
     parser.add_argument('directory')
     parser.add_argument('--output-prefix')
+    parser.add_argument('--low')
+    parser.add_argument('--high')
     args = parser.parse_args()
     directory = args.directory
     if directory[-1] != '/':
@@ -157,6 +159,12 @@ def main():
     info_dir = directory + 'static_info/'
     with open(directory + 'mapping.yml') as f:
         mapping = yaml.safe_load(f)
+    low_val = args.low
+    high_val = args.high
+    if low_val is None:
+        low_val = 0.4
+    if high_val is None:
+        high_val = 0.6
     output = args.output_prefix
     if output is not None:
         print "Outputting with prefix", output
@@ -302,18 +310,18 @@ def main():
             t1 = 0
             t2 = 0
             count = 0
-            print id_for_thresh, 'Advances'
+            print 'ADVANCES'
             for i in adv_times:
                 # Get raw score
                 raw, rank = get_scores(i, id_for_thresh, advs)
-                print raw, rank
+                print '\t', raw, rank
                 t1 += raw
                 t2 += rank
                 count += 1
             if count > 0:
                 count = float(count)
-                ranking_data['Type I Score'].append(t1 / count)
-                ranking_data['Type I Rank'].append(t2 / count)
+                ranking_data['Type I Score'].append(t1 /  float(count))
+                ranking_data['Type I Rank'].append(t2 / float(count))
             else:
                 ranking_data['Type I Score'].append(9999)
                 ranking_data['Type I Rank'].append(0)
@@ -324,28 +332,27 @@ def main():
             print "No Advances"
             for i in no_adv_times:
                 raw, rank = get_scores(i, id_for_thresh, nadvs)
-                print raw, rank
+                print '\t', raw, rank
                 t1 += raw
                 t2 += rank
                 count += 1
             if count > 0:
                 count = float(count)
-                ranking_data['Type II Score'].append(t1 / count)
-                ranking_data['Type II Rank'].append(t2 / count)
+                ranking_data['Type II Score'].append(t1 / float(count))
+                ranking_data['Type II Rank'].append(t2 / float(count))
             else:
                 ranking_data['Type II Score'].append(9999)
                 ranking_data['Type II Rank'].append(0)
             score_idx.append(mapping[x]['name_text'])
 
 
-
         # nadvs.index = analysis_utils.index_to_float(nadvs.index, start)
         # advs.index = analysis_utils.index_to_float(advs.index, start)
         fig, axes = plt.subplots(2, 1, sharex=True)
         fig, ax1 = analysis_utils.create_ranking_graph(advs, mapping[x]['key'], advpoints, nopoints, fig=fig,
-                                                       ax=axes[0], start_time=start, add_labels=False)
+                                                       ax=axes[0], start_time=start, add_labels=False, mark_loc=[low_val, high_val])
         fig, ax2 = analysis_utils.create_ranking_graph(nadvs, mapping[x]['key'], advpoints, nopoints, fig=fig,
-                                                       ax=axes[1], start_time=start, add_labels=False)
+                                                       ax=axes[1], start_time=start, add_labels=False, mark_loc=[low_val, high_val])
         # fig.savefig(config.FIGURE_DIR + output + '_' + mapping[x]['name'].replace(' ','_' ) + 'no_adv_rank_graph.png')
         ax2.set_xlabel("Elapsed Time (s)")
         ax1.set_ylabel('Type I Ranking')
@@ -353,6 +360,8 @@ def main():
 
         fig.savefig(config.FIGURE_DIR + output + '_' + mapping[x]['name'].replace(' ', '_') + 'rankng_graphs.png')
 
+    print ranking_data
+    print score_idx
     rank_df = pd.DataFrame(index=score_idx, data=ranking_data)
     rank_df.sort_index(inplace=True)
     analysis_utils.to_latex(rank_df, config.TABLE_DIR + output + '_scores.csv')

@@ -3,14 +3,11 @@ import datetime
 import glob
 import json
 from sys import stdout
-from IPython import embed
 import numpy as np
 import pandas as pd
 import csv
 
 
-
-import matplotlib.dates as mdates
 import matplotlib.cm as colormaps
 import matplotlib.pyplot as plt
 from thresholdanalysis.runtime import threshold_node
@@ -403,7 +400,7 @@ def to_latex(df, fout):
         idx = [x.replace('_', '\_') for x in df.index]
         df.index = idx
         df.to_csv(fout, sep='&', line_terminator='\\\\\n',
-                        float_format='%.1f', quoting=csv.QUOTE_NONE,
+                        float_format='%.2f', quoting=csv.QUOTE_NONE,
                         escapechar=' ', index_label='Paramter')
 
 
@@ -576,10 +573,11 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, sta
     ax.set_xlim(left=time_index.values[0], right=time_index.values[-1])
     return fig, ax
 
-def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None, start_time=None, add_labels=True):
+def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None, start_time=None, add_labels=True,
+                         mark_loc=[.4,.6]):
 
         fig, ax = fix_and_plot_color(data, True, param, fig=fig, ax=ax, start_time=start_time)
-        add_user_marks(advpoints, nopoints, fig=fig, ax=ax)
+        add_user_marks(advpoints, nopoints, fig=fig, ax=ax, vals=mark_loc)
 
         return fig, ax
 
@@ -663,11 +661,9 @@ def get_threshdf_from_other_file(fname, mapping, other_dict):
     for i in mapping.iterkeys():
         if i in fname:
             thing = i
-            print 'match'
             print i, fname
             break
     name = mapping[thing]['name']
-    print name
     return other_dict[name]
 
 
