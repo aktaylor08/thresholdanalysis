@@ -50,7 +50,10 @@ def print_total_data(big_df, total_time):
     # Print unique predicate on comparisions
     print "Unique locations compared", len(big_df['key'].unique())
     print "Unique \"Sources\" compared", len(big_df['source'].unique())
-    print "Again unique sources", big_df.source.unique()
+    #print "Again unique sources", big_df.source.unique()
+    print 'Unique flopers ', len(big_df[big_df.flop == True]['source'].unique())
+    print 'Unique flopers %', len(big_df[big_df.flop == True]['source'].unique()) / float(len(big_df['source'].unique())) * 100
+
 
 
 def create_stats_dataframe(big_df, total_time, output):
@@ -113,7 +116,7 @@ def create_stats_dataframe(big_df, total_time, output):
         stats_df.loc['\\textbf{minimum}', col] = mins[col]
         stats_df.loc['\\textbf{maximum}', col] = maxs[col]
         stats_df.loc['\\textbf{sum}', col] = sums[col]
-    stats_df.to_csv("/Users/ataylor/stats.csv")
+    stats_df.to_csv(config.RANDOM_OUT_DIR +output + "_stats.csv")
     analysis_utils.to_latex(stats_df, config.TABLE_DIR + output + '_gen_results.csv')
     return stats_df_clean
 
@@ -203,8 +206,6 @@ def main():
         print f
         tdf = get_threshdf_from_other_file(f, mapping, threshold_data_dfs)
         start = pd.to_datetime(tdf.index[0])
-        print 'STart time: ', start
-        print start
         starts[f] = start
         actions, no_actions = analysis_utils.get_marks(f, 4)
         act = []
@@ -243,10 +244,10 @@ def main():
     mins = other_df.min()
     maxs = other_df.max()
 
-    other_df.to_csv('/Users/ataylor/raw_mark_data.csv')
-    other_df[['0_act', '1_act', '2_act', '3_act']].to_csv('/Users/ataylor/mark_only.csv')
+    other_df.to_csv(config.RANDOM_OUT_DIR + output + '_raw_mark_data.csv')
+    other_df[['0_act', '1_act', '2_act', '3_act']].to_csv(config.RANDOM_OUT_DIR + output + '_mark_only.csv')
     asdf = other_df.drop(['0_act', '1_act', '2_act', '3_act'], axis=1)
-    asdf.to_csv('/Users/ataylor/no_mark_only.csv')
+    asdf.to_csv(config.RANDOM_OUT_DIR + output + '_no_mark_only.csv')
     for col in other_df.columns:
         other_df.loc['\\textbf{mean}', col] = means[col]
         other_df.loc['\\textbf{median}', col] = medians[col]
@@ -254,7 +255,7 @@ def main():
         other_df.loc['\\textbf{minimum}', col] = mins[col]
         other_df.loc['\\textbf{maximum}', col] = maxs[col]
         other_df.loc['\\textbf{sum}', col] = sums[col]
-    other_df.to_csv('/Users/ataylor/mark_data.csv')
+    other_df.to_csv(config.RANDOM_OUT_DIR + output + '_mark_data.csv')
 
     out_mark = mark_df.copy()
     out_mark['Total Marks'] = out_mark['Advance Marks'] + out_mark['No Advance Marks']

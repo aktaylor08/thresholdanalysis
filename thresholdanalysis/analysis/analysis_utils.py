@@ -11,6 +11,8 @@ import csv
 import matplotlib.cm as colormaps
 import matplotlib.pyplot as plt
 from thresholdanalysis.runtime import threshold_node
+import thresholdanalysis.config as config
+
 
 
 def get_param_keys(static_info):
@@ -559,12 +561,12 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, sta
     ax.plot(time_index[zero_series.index], zero_series.values, c='black', zorder=100, linewidth=width)
     # zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width,)
     if zero_mod is not None:
-        ax.plot(time_index[zero_mod.index],zero_mod.values, c='r', zorder=100, linewidth=width)
+        ax.plot(time_index[zero_mod.index],zero_mod.values, c='r', zorder=100, linewidth=width, marker='x')
         # zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width, )
     if mod_key in ranking.columns:
         for rv in ranks:
             if len(rv) > 0:
-                ax.plot(time_index[rv[mod_key].index], rv[mod_key].values, c='r', linewidth=width)
+                ax.plot(time_index[rv[mod_key].index], rv[mod_key].values, c='r', linewidth=width, marker='x')
                 # rv[mod_key].plot(ax=ax, c='r', linewidth=width, )
     if include_labels:
         ax.set_ylabel('Rank Score', fontsize=20)
@@ -653,8 +655,6 @@ def time_to_float(actions, first):
         vals.append((i - first).total_seconds())
     return vals
 
-if __name__ == '__main__':
-    main()
 
 
 def get_threshdf_from_other_file(fname, mapping, other_dict):
@@ -671,13 +671,15 @@ def get_threshold_dfs(thresh_dir, info, mapping):
     threshold_data_dfs = {}
     for f in glob.glob(thresh_dir + '*.csv'):
         thresh_df  = get_df(f, info)
+        print f, get_name(f, mapping)
         threshold_data_dfs[get_name(f, mapping)] = thresh_df
+    print len(threshold_data_dfs)
     # add some information to each of the dataframes
     for f, df in threshold_data_dfs.iteritems():
         df['source'] = df['key'].apply(lambda x: info[x]['source'])
         df['file'] = df['key'].apply(lambda x: info[x]['file'])
         df['lineno'] = df['key'].apply(lambda x: info[x]['lineno'])
-        df.to_csv('/Users/ataylor/' + f + 'res.csv')
+        df.to_csv(config.RANDOM_OUT_DIR + f + 'res.csv')
     # create a big composite data frame
     big_df = pd.DataFrame()
     for df in threshold_data_dfs.itervalues():
@@ -695,3 +697,6 @@ def get_name_text(f, mapping):
     for k in mapping.iterkeys():
         if k in f:
             return mapping[k]['name_text']
+
+if __name__ == '__main__':
+    main()
