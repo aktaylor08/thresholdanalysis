@@ -60,17 +60,20 @@ def main():
         fig, axes = plt.subplots(4, 1, sharex=True)
         print(df.columns)
 
-        x = df['amcl_pose__pose_pose_position_x'].dropna().values
-        z = df['amcl_pose__pose_pose_position_y'].dropna().values
-        x = np.append(x, [x[-1]])
-        z = np.append(z, [z[-1]])
-        idx = index_to_float(df['amcl_pose__pose_pose_position_y'].dropna().index, first)
-        idx = np.append(idx, [(last-first).total_seconds()])
-        axes[0].plot(idx,  x, linewidth=2)
-        axes[0].set_ylabel("X Pos (m)", )
-        axes[1].plot(idx, z, linewidth=2)
-        axes[1].set_ylabel("Y Pos (m)" )
-        axes[0].set_xlim(left=0, right=idx[-1])
+        try:
+            x = df['amcl_pose__pose_pose_position_x'].dropna().values
+            z = df['amcl_pose__pose_pose_position_y'].dropna().values
+            x = np.append(x, [x[-1]])
+            z = np.append(z, [z[-1]])
+            idx = index_to_float(df['amcl_pose__pose_pose_position_y'].dropna().index, first)
+            idx = np.append(idx, [(last-first).total_seconds()])
+            axes[0].plot(idx,  x, linewidth=2)
+            axes[0].set_ylabel("X Pos (m)", )
+            axes[1].plot(idx, z, linewidth=2)
+            axes[1].set_ylabel("Y Pos (m)" )
+            axes[0].set_xlim(left=0, right=idx[-1])
+        except Exception as e:
+            print 'no acmsl? ' + e.message
         analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[0], vals=[1.0, 1.1])
         analysis_utils.add_user_marks(act, noact, fig=fig, ax=axes[1])
 

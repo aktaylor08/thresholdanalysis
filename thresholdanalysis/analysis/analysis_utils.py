@@ -50,7 +50,7 @@ def get_advance_scores(time, thresh_df, static_info, flop_window=5.0, alpha=1.0,
     # now calculate the scores.
     for key, data in thresh_df.groupby('key'):
         if key not in param_keys:
-            print key
+            print 'missing key!', key
             continue
         index = data.index.asof(time)
         if isinstance(index, float) and np.isnan(index):
@@ -388,7 +388,6 @@ def calculate_ranking(score_df, zero_bad=False):
 
 def get_df(bag_f, info, parsed=True):
     if not parsed:
-        print 'Loading file {:s}'.format(bag_f)
         node = threshold_node.ThresholdNode(False)
         node.import_bag_file(bag_f,)
         thresh_df = node.get_new_threshold_data()
@@ -398,12 +397,12 @@ def get_df(bag_f, info, parsed=True):
     params_only = thresh_df[thresh_df['key'].apply(lambda param: param in param_keys)]
     return params_only
 
-def to_latex(df, fout):
+def to_latex(df, fout, header=True, index_label=''):
         idx = [x.replace('_', '\_') for x in df.index]
         df.index = idx
         df.to_csv(fout, sep='&', line_terminator='\\\\\n',
                         float_format='%.2f', quoting=csv.QUOTE_NONE,
-                        escapechar=' ', index_label='Paramter')
+                        escapechar=' ', index_label=index_label, header=header)
 
 
 
@@ -463,9 +462,7 @@ def produce_score_array_sampled(params_df, info, ):
 
 
 def get_score_dfs(bag_f, info):
-    print 'Getting score arrays for {:s}'.format(bag_f)
     thresh_df = get_df(bag_f, info)
-    print info
     return produce_score_array_sampled(thresh_df, info)
 
 
@@ -492,8 +489,12 @@ def calculate_ranking(score_df, zero_bad=False):
         rc += 1
     return pd.DataFrame(data=store, index=idxes, columns=cols)
 
-def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, start_time=None, include_labels=True):
+def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=3, start_time=None, include_labels=True):
     # get rankings
+
+    xes = []
+    yes = []
+
     ranking = calculate_ranking(score, collapse)
     val = index_to_float(ranking.index, start_time)
     # Gather zero
@@ -507,7 +508,10 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, sta
         zero_mod = ranking[mod_key].copy()
         zero_mod[zero_mod != 0] = np.NaN
     else:
-        print "{:s} not in ranking ranks".format(mod_key)
+        if mod_key is not None and mod_key != 'None':
+            print type(mod_key)
+            print '.' + mod_key + '.'
+            print "{:s} not in ranking ranks".format(mod_key)
         zero_mod = None
 
     have_vals = ranking != 0
@@ -561,18 +565,29 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=4, sta
     ax.plot(time_index[zero_series.index], zero_series.values, c='black', zorder=100, linewidth=width)
     # zero_series.plot(ax=ax, c='black',zorder=100, linewidth=width,)
     if zero_mod is not None:
-        ax.plot(time_index[zero_mod.index],zero_mod.values, c='r', zorder=100, linewidth=width, marker='x')
+        ax.plot(time_index[zero_mod.index],zero_mod.values, c='r', zorder=100, linewidth=width, )
+        x = time_index[zero_mod.index]
+        y = zero_mod.values
+        print type(x)
+        xes += x.values.tolist()
+        yes += y.tolist()
         # zero_mod.plot(ax=ax, c='r', zorder=100, linewidth=width, )
     if mod_key in ranking.columns:
         for rv in ranks:
             if len(rv) > 0:
-                ax.plot(time_index[rv[mod_key].index], rv[mod_key].values, c='r', linewidth=width, marker='x')
+                x =time_index[rv[mod_key].index]
+                y = rv[mod_key].values
+                xes += x.values.tolist()
+                yes += y.tolist()
+                ax.plot(time_index[rv[mod_key].index], rv[mod_key].values, c='r', linewidth=width, )
+                # ax.scatter(x[::22],y[::25], marker='x', c='r',s=100)
                 # rv[mod_key].plot(ax=ax, c='r', linewidth=width, )
     if include_labels:
         ax.set_ylabel('Rank Score', fontsize=20)
         ax.set_xlabel('Time', fontsize=20)
     ax.set_ylim(-.05, 1.05)
     ax.set_xlim(left=time_index.values[0], right=time_index.values[-1])
+    ax.scatter(xes[::25],yes[::25], marker='x', c='r',s=100)
     return fig, ax
 
 def create_ranking_graph(data, param, advpoints, nopoints, fig=None, ax=None, start_time=None, add_labels=True,
@@ -661,7 +676,6 @@ def get_threshdf_from_other_file(fname, mapping, other_dict):
     for i in mapping.iterkeys():
         if i in fname:
             thing = i
-            print i, fname
             break
     name = mapping[thing]['name']
     return other_dict[name]
@@ -671,9 +685,7 @@ def get_threshold_dfs(thresh_dir, info, mapping):
     threshold_data_dfs = {}
     for f in glob.glob(thresh_dir + '*.csv'):
         thresh_df  = get_df(f, info)
-        print f, get_name(f, mapping)
         threshold_data_dfs[get_name(f, mapping)] = thresh_df
-    print len(threshold_data_dfs)
     # add some information to each of the dataframes
     for f, df in threshold_data_dfs.iteritems():
         df['source'] = df['key'].apply(lambda x: info[x]['source'])

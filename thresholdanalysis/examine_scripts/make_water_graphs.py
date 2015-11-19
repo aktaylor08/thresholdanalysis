@@ -62,13 +62,24 @@ def main():
 
         # Graph!
         fig, axes = plt.subplots(2, 1, sharex=True)
-        df = pd.read_csv(f + '_back', parse_dates=True, index_col=0)
-        x = df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_x'].dropna().values
-        z = df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_z'].dropna().values
+        df = pd.read_csv(f  , parse_dates=True, index_col=0)
+        print f
+        try:
+            x = df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_x'].dropna().values
+            z = df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_z'].dropna().values
+            idx = index_to_float(df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_x'].dropna().index, first)
+            idx = np.append(idx, [(last-first).total_seconds()])
+        except:
+            try:
+                x = df['a_subject_pose__translation_x'].dropna().values
+                z = df['a_subject_pose__translation_z'].dropna().values
+                idx = index_to_float(df['a_subject_pose__translation_x'].dropna().index, first)
+                idx = np.append(idx, [(last-first).total_seconds()])
+            except:
+                print df.columns
+                continue
         x = np.append(x, [x[-1]])
         z = np.append(z, [z[-1]])
-        idx = index_to_float(df['vicon_DEMO_WATER_DEMO_WATER__transform_translation_x'].dropna().index, first)
-        idx = np.append(idx, [(last-first).total_seconds()])
         axes[0].plot(idx,  x, linewidth=3)
         axes[0].set_ylabel("X Position (m)", fontsize=15)
         axes[1].plot(idx, z, linewidth=3)

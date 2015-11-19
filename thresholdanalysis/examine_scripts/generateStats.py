@@ -109,6 +109,11 @@ def create_stats_dataframe(big_df, total_time, output):
     mins = stats_df.min()
     maxs = stats_df.max()
     stats_df_clean = stats_df.copy()
+    try:
+        print 'freq max', maxs['Frequency']
+        print 'freq min', mins['Frequency']
+    except:
+        pass
     for col in stats_df.columns:
         stats_df.loc['\\textbf{mean}', col] = means[col]
         stats_df.loc['\\textbf{median}', col] = medians[col]
@@ -203,7 +208,7 @@ def main():
     other_data = defaultdict(list)
 
     for f in glob.glob(csv_dir + "*.csv"):
-        print f
+        print '\n\n', f
         tdf = get_threshdf_from_other_file(f, mapping, threshold_data_dfs)
         start = pd.to_datetime(tdf.index[0])
         starts[f] = start
@@ -230,13 +235,34 @@ def main():
         data['Advance Marks'].append(len(act))
         data['No Advance Marks'].append(len(noact))
         index.append(get_name_text(f, mapping))
-        print 'No advance marks', len(noact)
-        print 'Advance Marks', len(act)
+        print '\tNo advance marks', len(noact)
+        print '\tAdvance Marks', len(act)
     mark_df = pd.DataFrame(data=data, index=index)
     mark_df = mark_df.sort_index()
 
+    t1 = {'t1': 0, 't2': 0}
+    t2 = {'t1': 0, 't2': 0}
+    for i, r in mark_df.iterrows():
+        if 'Treatment 1' in i:
+            t1['t1'] += r['Advance Marks']
+            t1['t2'] += r['No Advance Marks']
+        if 'Treatment 2' in i:
+            t2['t1'] += r['Advance Marks']
+            t2['t2'] += r['No Advance Marks']
+    print t1, t2
+    data = [[t1['t1'], t1['t2']], [t2['t1'], t2['t2']]]
+    idx = ['Treatment Type I', 'Treatment Type II']
+    cols = ['Type I Marks', 'Type II Marks']
+    conf_df = pd.DataFrame(data=data, index=idx, columns=cols)
+    conf_df.to_csv(config.RANDOM_OUT_DIR + output + '_raw_conf_matrix.csv')
+    analysis_utils.to_latex(conf_df, config.TABLE_DIR + output + '_confusion_matrix.csv')
+
+
     other_df = pd.DataFrame(data=other_data, index=index)
     other_df = other_df.sort_index()
+    other_df['total_act'] = other_df[['0_act', '1_act', '2_act', '3_act']].sum(axis=1)
+    other_df['total_no_act'] = other_df[['0no_act_', '1no_act_', '2no_act_', '3no_act_']].sum(axis=1)
+
     sums = other_df.sum()
     medians = other_df.median()
     means = other_df.mean()
@@ -256,6 +282,7 @@ def main():
         other_df.loc['\\textbf{maximum}', col] = maxs[col]
         other_df.loc['\\textbf{sum}', col] = sums[col]
     other_df.to_csv(config.RANDOM_OUT_DIR + output + '_mark_data.csv')
+    analysis_utils.to_latex(other_df, config.TABLE_DIR + output + '_mark_data.csv', header=False)
 
     out_mark = mark_df.copy()
     out_mark['Total Marks'] = out_mark['Advance Marks'] + out_mark['No Advance Marks']
@@ -305,17 +332,14 @@ def main():
         no_adv_times = get_partial_match(x, no_act_dt)
         advpoints = get_partial_match(x, act_marks)
         nopoints = get_partial_match(x, no_act_marks)
-        print adv_times
 
         if id_for_thresh is not None and id_for_thresh != 'None':
             t1 = 0
             t2 = 0
             count = 0
-            print 'ADVANCES'
             for i in adv_times:
                 # Get raw score
                 raw, rank = get_scores(i, id_for_thresh, advs)
-                print '\t', raw, rank
                 t1 += raw
                 t2 += rank
                 count += 1
@@ -330,10 +354,8 @@ def main():
             t1 = 0
             t2 = 0
             count = 0
-            print "No Advances"
             for i in no_adv_times:
                 raw, rank = get_scores(i, id_for_thresh, nadvs)
-                print '\t', raw, rank
                 t1 += raw
                 t2 += rank
                 count += 1
@@ -361,8 +383,6 @@ def main():
 
         fig.savefig(config.FIGURE_DIR + output + '_' + mapping[x]['name'].replace(' ', '_') + 'rankng_graphs.png')
 
-    print ranking_data
-    print score_idx
     rank_df = pd.DataFrame(index=score_idx, data=ranking_data)
     rank_df.sort_index(inplace=True)
     analysis_utils.to_latex(rank_df, config.TABLE_DIR + output + '_scores.csv')
