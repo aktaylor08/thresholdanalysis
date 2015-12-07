@@ -584,7 +584,7 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=3, sta
                 # rv[mod_key].plot(ax=ax, c='r', linewidth=width, )
     if include_labels:
         ax.set_ylabel('Rank Score', fontsize=20)
-        ax.set_xlabel('Time', fontsize=20)
+        #ax.set_xlabel('Time', fontsize=20)
     ax.set_ylim(-.05, 1.05)
     ax.set_xlim(left=time_index.values[0], right=time_index.values[-1])
     ax.scatter(xes[::25],yes[::25], marker='x', c='r',s=100)
@@ -681,11 +681,13 @@ def get_threshdf_from_other_file(fname, mapping, other_dict):
     return other_dict[name]
 
 
-def get_threshold_dfs(thresh_dir, info, mapping):
+def get_threshold_dfs(thresh_dir, info, mapping, fmap=False):
     threshold_data_dfs = {}
+    file_map = {}
     for f in glob.glob(thresh_dir + '*.csv'):
         thresh_df  = get_df(f, info)
         threshold_data_dfs[get_name(f, mapping)] = thresh_df
+        file_map[f] = thresh_df
     # add some information to each of the dataframes
     for f, df in threshold_data_dfs.iteritems():
         df['source'] = df['key'].apply(lambda x: info[x]['source'])
@@ -696,7 +698,10 @@ def get_threshold_dfs(thresh_dir, info, mapping):
     big_df = pd.DataFrame()
     for df in threshold_data_dfs.itervalues():
         big_df = big_df.append(df)
-    return threshold_data_dfs, big_df
+    if fmap:
+        return threshold_data_dfs, file_map, big_df
+    else:
+        return threshold_data_dfs, big_df
 
 
 def get_name(f, mapping):
