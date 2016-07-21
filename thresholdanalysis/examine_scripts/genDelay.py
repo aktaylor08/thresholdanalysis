@@ -273,7 +273,7 @@ def main():
 
             # Do error calcs for all user marks
         plt.cla()
-    with open('/Users/ataylor/Desktop/crap.json', 'w') as fff:
+    with open('~/output.json', 'w') as fff:
         json.dump(v,fff,indent=2)
     dd = pd.DataFrame(cool_data)
     dd = dd.transpose()

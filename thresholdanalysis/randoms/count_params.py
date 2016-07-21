@@ -35,7 +35,7 @@ def get_param_thing(soup):
     if param3 is not None:
         return param3
     else:
-        print 'crap'
+        'no here'
         return None
 
 

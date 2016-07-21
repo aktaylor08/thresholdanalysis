@@ -517,7 +517,7 @@ def fix_and_plot_color(score, collapse, mod_key, fig=None, ax=None, width=3, sta
     have_vals = ranking != 0
     have_vals = have_vals.any()[have_vals.any()]
     have_vals = have_vals.index
-    # get rid of crap that doesn't exist
+    # get rid of stuff that doesn't exist
     ranking = ranking[have_vals]
 
     rank_change = ranking != ranking.shift(1)
